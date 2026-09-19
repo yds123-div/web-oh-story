@@ -18,7 +18,7 @@ import type {
 const GB = 1024 * 1024 * 1024;
 const DEMO_PROJECT_ID = 'proj-nming-muye';
 
-type TaskKind = 'outline' | 'image' | 'episode-split' | 'video' | 'export';
+type TaskKind = 'outline' | 'novel' | 'image' | 'episode-split' | 'video' | 'export' | 'creative-image' | 'creative-video';
 
 type InternalTask = TaskStatus & {
   kind: TaskKind;
@@ -102,6 +102,12 @@ function nmingAssets(projectId: string): Asset[] {
       emoji: null,
       consistencyLocked: true,
       status: 'pending',
+      alts: [
+        { name: '默认形象', imageUrl: '/demo-assets/linwan.png', filter: '' },
+        { name: '和服·雨夜湿发', imageUrl: '/demo-assets/linwan.png', filter: 'brightness(.82) saturate(1.25) hue-rotate(14deg) contrast(1.08)' },
+      ],
+      currentAlt: 0,
+      refs: ['c01 独白', 'c03 走位', 'c05 过肩近景', 'c06 泛红特写'],
     },
     {
       id: `${projectId}-char-itachi`,
@@ -114,6 +120,12 @@ function nmingAssets(projectId: string): Asset[] {
       emoji: null,
       consistencyLocked: true,
       status: 'pending',
+      alts: [
+        { name: '默认形象', imageUrl: '/demo-assets/itachi.png', filter: '' },
+        { name: '任务夜行装', imageUrl: '/demo-assets/itachi.png', filter: 'brightness(.8) contrast(1.25) saturate(.85)' },
+      ],
+      currentAlt: 0,
+      refs: ['c02 衣摆显露', 'c03 阴影走位', 'c04 质问中景', 'c06 悲凉特写'],
     },
     {
       id: `${projectId}-char-shisui`,
@@ -126,6 +138,7 @@ function nmingAssets(projectId: string): Asset[] {
       emoji: '🦋',
       consistencyLocked: false,
       status: 'pending',
+      refs: ['第2集 草稿 预留'],
     },
     {
       id: `${projectId}-char-elder`,
@@ -138,6 +151,7 @@ function nmingAssets(projectId: string): Asset[] {
       emoji: '🧙',
       consistencyLocked: false,
       status: 'pending',
+      refs: ['第2集 草稿 预留'],
     },
     {
       id: `${projectId}-scene-corridor`,
@@ -150,6 +164,7 @@ function nmingAssets(projectId: string): Asset[] {
       emoji: null,
       consistencyLocked: true,
       status: 'pending',
+      refs: ['片段1 全景', '片段2 中景/过肩', '片段3 收暗'],
     },
   ];
 }
@@ -660,10 +675,11 @@ export function listAssetRecords(projectId: string): Asset[] | undefined {
   return assetsForProject(projectId);
 }
 
-export function patchAssetRecord(assetId: string, body: { consistencyLocked: boolean }): Asset | undefined {
+export function patchAssetRecord(assetId: string, body: { consistencyLocked?: boolean; currentAlt?: number }): Asset | undefined {
   const found = assets.get(assetId);
   if (!found) return undefined;
-  found.consistencyLocked = body.consistencyLocked;
+  if (body.consistencyLocked !== undefined) found.consistencyLocked = body.consistencyLocked;
+  if (body.currentAlt !== undefined) found.currentAlt = body.currentAlt;
   return cloneAsset(found);
 }
 
@@ -761,6 +777,11 @@ function finishTask(task: InternalTask): void {
     task.result = { projectId: task.projectId };
     return;
   }
+  if (task.kind === 'novel' && task.projectId) {
+    ensureOutlineAndAssets(task.projectId);
+    task.result = { projectId: task.projectId };
+    return;
+  }
   if (task.kind === 'image' && task.assetId) {
     const asset = assets.get(task.assetId);
     if (asset) {
@@ -797,6 +818,15 @@ function finishTask(task: InternalTask): void {
       downloadUrl: '/demo-assets/clip1.mp4',
       fileName: `${name}_第${epNo}集_720P.mp4`,
     };
+  }
+  if (task.kind === 'creative-image') {
+    const mediaUrl = Math.random() < 0.5 ? '/demo-assets/linwan.png' : '/demo-assets/itachi.png';
+    task.result = { mediaUrl, kind: 'image' };
+    return;
+  }
+  if (task.kind === 'creative-video') {
+    task.result = { mediaUrl: '/demo-assets/clip1.mp4', kind: 'video' };
+    return;
   }
 }
 
@@ -841,6 +871,10 @@ export function createOutlineTask(projectId: string): TaskStatus {
   return createTask('outline', { projectId });
 }
 
+export function createNovelTask(projectId: string): TaskStatus {
+  return createTask('novel', { projectId });
+}
+
 export function createAssetImageTask(assetId: string): TaskStatus | undefined {
   const asset = assets.get(assetId);
   if (!asset) return undefined;
@@ -863,4 +897,8 @@ export function createEpisodeExportTask(episodeId: string): TaskStatus | undefin
   const episode = findEpisode(episodeId);
   if (!episode || episode.status !== 'split') return undefined;
   return createTask('export', { episodeId, projectId: episode.projectId });
+}
+
+export function createCreativeTask(kind: 'creative-image' | 'creative-video'): TaskStatus {
+  return createTask(kind, {});
 }

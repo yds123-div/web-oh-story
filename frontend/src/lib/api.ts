@@ -9,6 +9,7 @@ import type {
   ExportTaskBody,
   ModelListResponse,
   NotificationListResponse,
+  NovelTaskBody,
   Outline,
   OutlineTaskBody,
   PatchSegmentBody,
@@ -46,6 +47,13 @@ export function submitOutlineTask(projectId: string, body: OutlineTaskBody): Pro
   });
 }
 
+export function submitNovelTask(projectId: string, body: NovelTaskBody): Promise<SubmitTaskResponse> {
+  return apiFetch(`/api/projects/${projectId}/novel-tasks`, {
+    method: 'POST',
+    body: JSON.stringify(body),
+  });
+}
+
 export function getTask(taskId: string): Promise<TaskStatus> {
   return apiFetch(`/api/tasks/${taskId}`);
 }
@@ -56,6 +64,13 @@ export function getOutline(projectId: string): Promise<Outline> {
 
 export function finalizeOutline(projectId: string): Promise<WorkflowState> {
   return apiFetch(`/api/projects/${projectId}/outline/finalize`, { method: 'POST' });
+}
+
+export function updateScreenplay(projectId: string, screenplay: string): Promise<Outline> {
+  return apiFetch(`/api/projects/${projectId}/outline/screenplay`, {
+    method: 'PATCH',
+    body: JSON.stringify({ screenplay }),
+  });
 }
 
 export function getWorkflow(projectId: string): Promise<WorkflowState> {
@@ -70,7 +85,7 @@ export function submitAssetImageTask(assetId: string): Promise<SubmitTaskRespons
   return apiFetch(`/api/assets/${assetId}/image-tasks`, { method: 'POST' });
 }
 
-export function patchAsset(assetId: string, body: { consistencyLocked: boolean }): Promise<Asset> {
+export function patchAsset(assetId: string, body: { consistencyLocked?: boolean; currentAlt?: number }): Promise<Asset> {
   return apiFetch(`/api/assets/${assetId}`, { method: 'PATCH', body: JSON.stringify(body) });
 }
 
@@ -122,4 +137,16 @@ export function listTemplates(): Promise<TemplateListResponse> {
 
 export function listNotifications(): Promise<NotificationListResponse> {
   return apiFetch('/api/notifications');
+}
+
+export type CreativeTaskBody = {
+  kind: 'image' | 'video';
+  prompt: string;
+};
+
+export function submitCreativeTask(body: CreativeTaskBody): Promise<SubmitTaskResponse> {
+  return apiFetch('/api/creative-tasks', {
+    method: 'POST',
+    body: JSON.stringify(body),
+  });
 }

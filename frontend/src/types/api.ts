@@ -59,6 +59,12 @@ export type OutlineTaskBody = {
   fileName?: string;
 };
 
+export type NovelTaskBody = {
+  sourceType: 'paste' | 'file';
+  text?: string;
+  fileName?: string;
+};
+
 export type WorkflowStep = 1 | 2 | 3;
 
 export type WorkflowState = {
@@ -85,6 +91,12 @@ export type OutlineSummary = {
 
 export type AssetType = 'character' | 'scene' | 'prop' | 'material';
 
+export type AssetAlt = {
+  name: string;
+  imageUrl: string;
+  filter?: string;
+};
+
 export type Asset = {
   id: string;
   projectId: string;
@@ -96,6 +108,9 @@ export type Asset = {
   emoji: string | null;
   consistencyLocked: boolean;
   status: 'pending' | 'ready';
+  alts?: AssetAlt[];
+  currentAlt?: number;
+  refs?: string[];
 };
 
 export type Outline = {
@@ -190,6 +205,7 @@ export type VideoTaskBody = {
 export type ExportTaskBody = {
   resolution?: string;
   format?: string;
+  watermark?: string;
 };
 
 export type Template = {
@@ -219,3 +235,19 @@ export type AppNotification = {
 export type NotificationListResponse = {
   notifications: AppNotification[];
 };
+
+export type PlazaAssetCategory = 'character' | 'scene' | 'video' | 'material';
+
+export type PlazaAsset = {
+  id: string;
+  category: PlazaAssetCategory;
+  name: string;
+  imageUrl: string | null;
+  videoUrl: string | null;
+  height: number;
+  meta: string;
+  tag: 'ai' | 'upload';
+  filter?: string;
+};
+
+export type PlazaCategory = 'all' | 'character' | 'scene' | 'video' | 'material' | 'upload';
