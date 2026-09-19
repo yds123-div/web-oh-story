@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>STEP2 · 角色、场景和道具 — 逆命木叶</title>
+<link rel="stylesheet" href="shared.css">
+</head>
+<body data-page="assets2">
+<aside id="sideNav">
+  <div class="logo">H</div>
+  <a class="navItem" href="index.html" data-nav="home"><span class="ico">🏠</span>首页</a>
+  <a class="navItem" href="idea.html" data-nav="idea"><span class="ico">💡</span>创意</a>
+  <a class="navItem" href="create.html" data-nav="create"><span class="ico">🎬</span>创作</a>
+  <a class="navItem" href="canvas.html" data-nav="canvas"><span class="ico">🕸</span>画布</a>
+  <a class="navItem" href="asset.html" data-nav="asset"><span class="ico">📁</span>资产</a>
+  <a class="navItem" href="space.html" data-nav="space"><span class="ico">🧊</span>空间</a>
+  <button class="navItem" data-nav="team"><span class="ico">👥</span>团队</button>
+  <div class="spacer"></div>
+</aside>
+<div id="main">
+  <header id="topBar">
+    <div class="brand"><div class="mark">H</div><div><b>Hogee</b><br><span>AI 短剧工坊 · 逆命木叶</span></div></div>
+    <div style="flex:1"></div>
+    <button class="tbBtn" onclick="toast('演示：领取创作者权益（新人 ◆200 积分）')">领取创作者权益</button>
+    <button class="tbBtn" onclick="toast('演示：商务合作对接')">商务合作</button>
+    <button id="themeBtn" title="切换 明亮 / 暗色主题">☀️</button>
+    <button class="tbBtn vip">⚡ 开通会员</button>
+    <div id="creditChip">◆ <span id="creditNum">940</span></div>
+    <button class="bell" onclick="toggleNotif(event)">🔔<i></i></button>
+    <div class="avatar">赵</div>
+  </header>
+
+  <section class="page">
+    <div class="flowHead">
+      <button class="back" onclick="location.href='index.html'">‹</button>
+      <span class="flowTitle">逆命木叶 <span class="tag">资产库</span></span>
+      <div class="steps3">
+        <button class="step3 done" data-step="outline"><span class="n">1</span>剧本大纲</button><span class="stepArr">›</span>
+        <button class="step3 on" data-step="assets"><span class="n">2</span>角色、场景和道具</button><span class="stepArr">›</span>
+        <button class="step3" data-step="episodes"><span class="n">3</span>分集视频</button>
+      </div>
+      <div style="margin-left:auto"><button class="btn ghost sm" onclick="regenAll()">↻ 全部重新生成</button></div>
+    </div>
+    <div class="viewInner">
+      <div class="statRow">
+        <div class="statCard on" data-filter="role" onclick="filterAsset(this)"><div class="nm">👥 全部角色</div><div class="ct"><span id="cntRole">0</span><small> / 4</small></div></div>
+        <div class="statCard" data-filter="scene" onclick="filterAsset(this)"><div class="nm">🏛 全部场景</div><div class="ct"><span id="cntScene">0</span><small> / 1</small></div></div>
+        <div class="statCard" onclick="openLib('道具')"><div class="nm">🗝 全部道具</div><div class="ct"><span id="cntProp">0</span><small> / 0</small></div></div>
+        <div class="statCard" onclick="openLib('素材')"><div class="nm">🖼 全部素材</div><div class="ct"><span id="cntMat">0</span><small> / 0</small></div></div>
+      </div>
+      <div class="assetGrid" id="assetGrid"></div>
+      <div class="noteBar" id="assetNote"><span class="ic">⚡</span><span id="assetNoteTxt">形象资产已触发生成，已提交 <b style="color:#a78bfa">2</b> 个任务</span></div>
+    </div>
+    <div class="flowBar">
+      <span class="msg" id="assetMsg">角色形象生成中，完成后自动进入可用状态…</span>
+      <button class="btn ghost sm" onclick="location.href='outline.html'">上一步</button>
+      <button class="btn white sm" onclick="goNext('episodes.html',28)">下一步：分集拆分 ◆28</button>
+    </div>
+  </section>
+</div>
+<div class="modalMask" id="modalAssetInfo" onclick="if(event.target===this)closeModal('modalAssetInfo')">
+  <div class="modal" style="width:470px">
+    <div class="modalHead"><h3 id="aiName">资产详情</h3><button class="x" onclick="closeModal('modalAssetInfo')">×</button></div>
+    <div id="aiImg" style="border-radius:12px;overflow:hidden;background:var(--panel2);max-height:280px;display:flex;align-items:center;justify-content:center"></div>
+    <div id="aiMeta" style="margin-top:12px;font-size:12px;color:var(--sub);line-height:1.8"></div>
+    <div style="font-size:11px;color:var(--dim);margin:12px 0 4px">被引用分镜（一致性注入点）</div>
+    <div id="aiRefs" style="display:flex;gap:6px;flex-wrap:wrap"></div>
+    <div class="modalFoot"><button class="btn ghost sm" onclick="toast('演示：重新生成形象（新版本 v+1 · 旧版保留可回滚）')">↻ 生成新形象</button><button class="btn ghost sm" onclick="toast('演示：已解除一致性锁定（谨慎：可能引起跨镜头形象漂移）')">🔓 解锁一致性</button><button class="btn acc sm" onclick="closeModal('modalAssetInfo')">完成</button></div>
+  </div>
+</div>
+<div class="modalMask" id="modalLib">
+  <div class="modal">
+    <div class="modalHead"><h3 id="libTitle">道具 / 素材管理</h3><button class="x" onclick="closeModal('modalLib')">×</button></div>
+    <div id="libList" style="min-height:80px"></div>
+    <div class="modalFoot"><button class="btn ghost sm" id="libAdd" onclick="libAdd()">＋</button><button class="btn white sm" onclick="closeModal('modalLib')">关闭</button></div>
+  </div>
+</div>
+<div class="toast" id="toast"></div>
+<script src="shared.js"></script>
+<script>
+document.querySelectorAll(".step3").forEach(s=>s.onclick=()=>location.href=s.dataset.step+".html");
+const ASSETS=[
+ {type:"role",nm:"林晚",tag:"主角",tagCls:"",img:"linwan.png",ds:"现代穿越者，成为木叶孤女，知晓结局试图拯救鼬，却陷入权力漩涡。",ft:"共2个形象 · 4K",refs:["c01 独白","c03 走位","c05 过肩近景","c06 泛红特写"],alts:[{n:"默认形象",img:"linwan.png",f:""},{n:"和服·雨夜湿发",img:"linwan.png",f:"brightness(.82) saturate(1.25) hue-rotate(14deg) contrast(1.08)"}]},
+ {type:"role",nm:"宇智波鼬",tag:"主角",tagCls:"",img:"itachi.png",ds:"背负灭族悲剧的忍者，心思深沉，因任务与宿命被迫推开林晚。",ft:"共2个形象 · 4K",refs:["c02 衣摆显露","c03 阴影走位","c04 质问中景","c06 悲凉特写"],alts:[{n:"默认形象",img:"itachi.png",f:""},{n:"任务夜行装",img:"itachi.png",f:"brightness(.8) contrast(1.25) saturate(.85)"}]},
+ {type:"role",nm:"宇智波止水",tag:"男二",tagCls:"gray",em:"🦋",ds:"温柔守护型的男二，暗中相救林晚，看穿她的心事并默默付出。",ft:"共1个形象",refs:["第2集 草稿 预留"]},
+ {type:"role",nm:"木叶长老",tag:"反派",tagCls:"red",em:"🧙",ds:"反派高层，猜忌宇智波一族，利用林晚作为监视棋子挑起矛盾。",ft:"共1个形象",refs:["第2集 草稿 预留"]},
+ {type:"scene",nm:"木叶长廊-月夜",tag:"场景",tagCls:"gray",img:"corridor.jpg",wide:true,ds:"传统日式木质长廊，冷白月光与拉长的漆黑阴影，林晚与鼬深夜对峙的场所。",ft:"共1个场景 · 16:9",refs:["片段1 全景","片段2 中景/过肩","片段3 收暗"]}
+];
+const LIB={道具:[],素材:[]};
+let curFilter="role",assetsDone=false;
+function renderAssets(){
+  const grid=$("assetGrid");grid.innerHTML="";
+  ASSETS.filter(a=>curFilter==="all"||a.type===curFilter).forEach(a=>{
+    const done=assetsDone;
+    const card=document.createElement("div");card.className="charCard"+(a.wide?" sceneCardW":"");
+    const cur=a._alt||0;
+    const alt=a.alts&&a.alts[cur];
+    const imgHtml=a.img?(alt?`<img src="${alt.img}" style="${alt.f?"filter:"+alt.f:""}" alt="${a.nm}">`:`<img src="${a.img}" alt="${a.nm}">`):`<div class="phEmoji">${a.em}</div>`;
+    const verHtml=done&&a.alts?`<div style="display:flex;gap:5px;margin-top:8px">${a.alts.map((v,i)=>`<button class="miniTag ${i===cur?"":"gray"}" style="border:none;cursor:pointer" onclick="event.stopPropagation();pickAlt('${a.nm}',${i})">${v.n}</button>`).join("")}</div>`:"";
+    card.innerHTML=done
+      ?`<div class="img">${imgHtml}</div>
+        <div class="info"><div class="nm">${a.nm} <span class="miniTag ${a.tagCls}">${a.tag}</span></div>
+        <div class="ds">${a.ds}</div><div class="ft"><span>${a.ft}</span><span style="color:var(--green)">✓ 可用</span></div>${verHtml}</div>`
+      :`<div class="img"><div class="loadingPh"><div class="sp"></div><div class="t">1个形象生成中</div></div></div>
+        <div class="info"><div class="nm">${a.nm} <span class="miniTag ${a.tagCls}">${a.tag}</span></div>
+        <div class="ds">${a.ds}</div><div class="ft"><span>资产占位图</span><span>loading</span></div></div>`;
+    card.onclick=()=>done?openInfo(a):toast("「"+a.nm+"」形象生成中…");
+    grid.appendChild(card);
+  });
+}
+function pickAlt(nm,i){const a=ASSETS.find(x=>x.nm===nm);if(!a)return;a._alt=i;renderAssets();toast("已切换形象：「"+a.alts[i].n+"」· 后续生成将使用该版本")}
+function openInfo(a){
+  $("aiName").textContent="资产详情 · "+a.nm;
+  const cur=a._alt||0,alt=a.alts&&a.alts[cur];
+  $("aiImg").innerHTML=a.img?`<img src="${alt?alt.img:a.img}" style="width:100%;${alt&&alt.f?"filter:"+alt.f:""}" alt="">`:`<div style="font-size:84px;padding:34px">${a.em}</div>`;
+  $("aiMeta").innerHTML=`<b style="color:var(--txt)">${a.nm}</b> <span class="miniTag ${a.tagCls}">${a.tag}</span>${a.alts?` <span class="miniTag">当前形象：${alt.n}</span>`:""}<br>${a.ds}<br><span style="color:var(--dim);font-size:10.5px">${a.ft} ｜ 🔒 一致性锁定：注入全部引用分镜，防止变脸 / 变装</span>`;
+  $("aiRefs").innerHTML=(a.refs||["暂无引用"]).map(r=>`<span class="miniTag gray">${r}</span>`).join("");
+  openModal("modalAssetInfo");
+}
+function openLib(kind){
+  $("libTitle").textContent=kind+"管理 · 项目资产库";
+  $("libAdd").textContent=kind==="道具"?"＋ 新增道具（占位卡）":"＋ 上传素材";
+  renderLib(kind);openModal("modalLib");
+  $("libAdd").onclick=()=>{
+    if($("libTitle").textContent.startsWith("道具")){
+      LIB.道具.push({nm:"道具 "+(LIB.道具.length+1)+"（占位）",em:"🗝"});
+      $("cntProp").textContent=LIB.道具.length;
+      toast("道具占位卡已创建 · 关键物件可在剧本标注后自动提取");
+    }else{
+      LIB.素材.push({nm:"素材 "+(LIB.素材.length+1)+" · 参考图",img:"corridor.jpg",f:"saturate(1.3) hue-rotate(25deg)"});
+      $("cntMat").textContent=LIB.素材.length;
+      toast("素材参考图已上传（演示）");
+    }
+    renderLib($("libTitle").textContent.slice(0,2));
+  };
+}
+function renderLib(kind){
+  const list=LIB[kind]||[];
+  $("libList").innerHTML=list.length?list.map(x=>`<div class="castItem" style="margin-bottom:8px"><div class="ci">${x.img?`<img src="${x.img}" style="${x.f?"filter:"+x.f:""}">`:x.em}</div><div><div class="nm">${x.nm}</div><div class="ds">项目内 ${kind} · 可在片段提示词中 @ 引用</div></div></div>`).join("")
+    :`<div style="text-align:center;color:var(--dim);font-size:12px;padding:22px 0">暂无${kind} — 本集无关键物件流转，可手动新增占位</div>`;
+}
+function assetsFinish(){
+  assetsDone=true;animateCount("cntRole",4);animateCount("cntScene",1);renderAssets();
+  $("assetNoteTxt").innerHTML='<span style="color:var(--green)">✓</span> 全部形象已生成（4 角色 + 1 场景），资产一致性已锁定';
+  $("assetNote").querySelector(".ic").textContent="✅";
+  $("assetMsg").innerHTML='<span style="color:var(--green)">✓</span> 资产就绪 · 林晚 / 鼬 / 止水 / 长老 形象 + 木叶长廊-月夜 场景可用';
+  toast("形象资产生成完成：4 角色 + 1 场景");
+}
+function animateCount(id,to){const el=$(id);let v=0;const iv=setInterval(()=>{v++;el.textContent=v;if(v>=to)clearInterval(iv)},260)}
+function filterAsset(el){document.querySelectorAll(".statCard").forEach(s=>s.classList.remove("on"));el.classList.add("on");curFilter=el.dataset.filter;renderAssets()}
+function regenAll(){if(!spend(28))return;assetsDone=false;renderAssets();$("cntRole").textContent="0";$("cntScene").textContent="0";$("assetNoteTxt").innerHTML='形象资产已触发生成，已提交 <b style="color:#a78bfa">2</b> 个任务';$("assetNote").querySelector(".ic").textContent="⚡";setTimeout(assetsFinish,2600)}
+renderAssets();setTimeout(assetsFinish,2600);
+</script>
+</body>
+</html>

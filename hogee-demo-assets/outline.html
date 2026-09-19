@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>STEP1 · 剧本大纲 — 逆命木叶</title>
+<link rel="stylesheet" href="shared.css">
+</head>
+<body data-page="outline">
+<aside id="sideNav">
+  <div class="logo">H</div>
+  <a class="navItem" href="index.html" data-nav="home"><span class="ico">🏠</span>首页</a>
+  <a class="navItem" href="idea.html" data-nav="idea"><span class="ico">💡</span>创意</a>
+  <a class="navItem" href="create.html" data-nav="create"><span class="ico">🎬</span>创作</a>
+  <a class="navItem" href="canvas.html" data-nav="canvas"><span class="ico">🕸</span>画布</a>
+  <a class="navItem" href="asset.html" data-nav="asset"><span class="ico">📁</span>资产</a>
+  <a class="navItem" href="space.html" data-nav="space"><span class="ico">🧊</span>空间</a>
+  <button class="navItem" data-nav="team"><span class="ico">👥</span>团队</button>
+  <div class="spacer"></div>
+</aside>
+<div id="main">
+  <header id="topBar">
+    <div class="brand"><div class="mark">H</div><div><b>Hogee</b><br><span>AI 短剧工坊 · 逆命木叶</span></div></div>
+    <div style="flex:1"></div>
+    <button class="tbBtn" onclick="toast('演示：领取创作者权益（新人 ◆200 积分）')">领取创作者权益</button>
+    <button class="tbBtn" onclick="toast('演示：商务合作对接')">商务合作</button>
+    <button id="themeBtn" title="切换 明亮 / 暗色主题">☀️</button>
+    <button class="tbBtn vip">⚡ 开通会员</button>
+    <div id="creditChip">◆ <span id="creditNum">940</span></div>
+    <button class="bell" onclick="toggleNotif(event)">🔔<i></i></button>
+    <div class="avatar">赵</div>
+  </header>
+
+  <section class="page">
+    <div class="flowHead">
+      <button class="back" onclick="location.href='index.html'">‹</button>
+      <span class="flowTitle">逆命木叶 <span class="tag">第1集 · 异世囚笼</span></span>
+      <div class="steps3">
+        <button class="step3 on" data-step="outline"><span class="n">1</span>剧本大纲</button><span class="stepArr">›</span>
+        <button class="step3" data-step="assets"><span class="n">2</span>角色、场景和道具</button><span class="stepArr">›</span>
+        <button class="step3" data-step="episodes"><span class="n">3</span>分集视频</button>
+      </div>
+      <div style="margin-left:auto"><button class="tbBtn" onclick="openModal('modalPrompt')">⚙ 全局设定</button></div>
+    </div>
+    <div class="outlineGrid">
+      <div class="chatPanel">
+        <div class="ph">🎙 智能体剧组 · 创作会议 <span class="live">解读中</span></div>
+        <div id="chatFlow"></div>
+      </div>
+      <div>
+        <div class="docPanel">
+          <h4>🎛 整体设定 <span class="edit" onclick="toast('演示：编辑整体设定')">✎ 编辑</span></h4>
+          <div class="kvRow">
+            <div class="k">视频风格</div><div class="v">赛博朋克电影（冷调月夜 · 高对比光影）</div>
+            <div class="k">画面比例</div><div class="v">9:16 竖屏</div>
+            <div class="k">清晰度</div><div class="v">720P（会员可 1080P / 4K）</div>
+            <div class="k">生成模型</div><div class="v">S 2.0-fast</div>
+          </div>
+        </div>
+        <div class="docPanel">
+          <h4>📋 剧本摘要</h4>
+          <div class="kvRow">
+            <div class="k">主角</div><div class="v">林晚、鼬</div>
+            <div class="k">故事类型</div><div class="v">女频 - 轻小说</div>
+            <div class="k">故事梗概</div><div class="v">现代女孩林晚意外穿越到木叶村，成为一名普通的村落成员。由于知晓宇智波鼬即将背负罪名走向毁灭的悲惨宿命，她试图用自己的预知能力去拯救对方。然而，她的突然出现和反常举动引起了村落高层的怀疑，鼬也用冷漠将她推开。林晚在危机四伏的忍者世界里，不仅要艰难求生，还要寻找打破死局、逆转悲剧的方法。</div>
+            <div class="k">故事背景</div><div class="v">架空的二次元忍者世界，时间线处于木叶村宇智波一族惨案发生前夕。村内暗流涌动，高层与大家族之间充满政治博弈，忍者受制于严苛的村规与宿命。</div>
+            <div class="k">故事设定</div><div class="v">视觉环境以传统日式木质长廊与建筑为主，常伴清冷月光与沉重阴影，角色身着制式素色和服或忍者服；世界观具有强烈宿命论特征，外来穿越者的先知视角与原住民的既定命运相互排斥，泄露未来会被视为危险的情报刺探；核心角色拥有被称为「写轮眼」的血继限界，发动时瞳孔呈红色微光，是力量与家族悲剧的核心视觉象征。</div>
+          </div>
+        </div>
+        <div class="docPanel">
+          <h4>🎭 角色 / 场景 / 道具</h4>
+          <div class="castGrid">
+            <div class="castItem"><div class="ci"><img src="linwan.png" alt="林晚"></div><div><div class="nm">林晚 <span class="miniTag">主角</span><span class="miniTag" style="background:rgba(78,207,141,.1);color:var(--green)">🔒 一致性锁定</span></div><div class="ds">现代穿越者，成为木叶孤女，知晓结局试图拯救鼬，却陷入权力漩涡。</div></div></div>
+            <div class="castItem"><div class="ci"><img src="itachi.png" alt="鼬"></div><div><div class="nm">宇智波鼬 <span class="miniTag">主角</span><span class="miniTag" style="background:rgba(78,207,141,.1);color:var(--green)">🔒 一致性锁定</span></div><div class="ds">背负灭族悲剧的忍者，心思深沉，因任务与宿命被迫推开林晚。</div></div></div>
+            <div class="castItem"><div class="ci">🦋</div><div><div class="nm">宇智波止水 <span class="miniTag gray">男二</span></div><div class="ds">温柔守护型，暗中相救林晚，看穿她的心事并默默付出。</div></div></div>
+            <div class="castItem"><div class="ci">🧙</div><div><div class="nm">木叶长老 <span class="miniTag red">反派</span></div><div class="ds">猜忌宇智波一族，利用林晚作为监视棋子挑起矛盾。</div></div></div>
+            <div class="castItem"><div class="ci"><img src="corridor.jpg" alt="木叶长廊"></div><div><div class="nm">木叶长廊 <span class="miniTag gray">场景 1</span><span class="miniTag" style="background:rgba(78,207,141,.1);color:var(--green)">🔒</span></div><div class="ds">传统日式木质长廊，林晚与鼬深夜对峙的场所（月夜冷调）。</div></div></div>
+            <div class="castItem" style="align-items:center;justify-content:center;color:var(--dim);font-size:11.5px;background:none;border:none">道具 0 ｜ 本集无关键物件流转</div>
+          </div>
+        </div>
+        <div class="docPanel">
+          <h4>📜 剧本内容 <span class="edit" onclick="editScript()" id="spEditBtn">✎ 编辑</span>
+            <span style="display:inline-flex;gap:6px;margin-left:12px">
+              <button class="chip on" id="epTab1" onclick="switchEp(1)" style="padding:4px 13px;font-size:11px">第1集 · 异世囚笼</button>
+              <button class="chip" id="epTab2" onclick="switchEp(2)" style="padding:4px 13px;font-size:11px">第2集 · 未命名 <span style="opacity:.6">草稿</span></button>
+            </span>
+          </h4>
+          <div id="spEp1">
+          <div class="screenplay" id="spView"><b>第一集：异世囚笼</b>
+<b>【木叶长廊 内 夜】</b>
+
+木叶，夜晚长廊，月光冷白。
+<span class="act">△ 林晚扶着廊柱，指尖颤抖，眼神茫然又痛苦，身着木叶制式素色和服。</span>
+<span class="sl">林晚（低声独白）</span>：明明只是在家看火影……一睁眼，就来到了这里。我知道所有人的结局，唯独不知道，自己该怎么活下去。
+<span class="act">△ 鼬缓步从阴影走出，红瞳微光，神色淡漠。</span>
+<span class="sl">鼬</span>：深夜在此，有何目的。长老安排你，来监视我？
+<span class="sl">林晚（猛地抬头，眼眶泛红，声音发颤）</span>：我不是来监视你的！鼬，我知道你将要背负什么，我不想看你走向那条绝路！
+<span class="sl">鼬（淡淡勾起唇角，带着悲凉）</span>：预言？外来之人，不要妄言命运。
+<span class="act">△ 鼬转身，衣摆扫过地面，不留一丝温情。</span>
+<span class="sl">鼬</span>：离我远一点，否则，你会被拖入深渊。
+<span class="act">△ 黑屏字幕</span>：<b>我知晓你的悲剧，却无法改写。</b></div>
+          <textarea id="spEdit" style="display:none;width:100%;min-height:300px;resize:vertical;font-size:12.5px;line-height:2;border-radius:12px" spellcheck="false"></textarea>
+          </div>
+          <div id="spEp2" style="display:none">
+            <div class="screenplay" style="color:var(--dim)"><b>第2集：未命名（草稿）</b>
+
+【草稿 · 由大纲自动延展】
+<span class="act">△ 依第1集结尾钩子（黑屏字幕）延展：林晚被木叶高层约谈，监视任务坐实；止水暗中现身提醒。</span>
+<span class="act">△ 待导演智能体完成分集拆分决策后，本集剧本将正式化并进入片段编辑。</span>
+
+<b>提示</b>：切换回第1集可查看正式剧本；点击「✎ 编辑」可人工撰写第2集草稿。</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="flowBar">
+      <div class="statusSpin" id="outlineSpin"></div>
+      <span class="msg" id="outlineMsg">智能体剧组正在解读剧本…</span>
+      <button class="btn ghost sm" onclick="location.href='create.html'">上一步</button>
+      <button class="btn ghost sm" onclick="openModal('modalPrompt')">⚙ 全局设定</button>
+      <button class="btn white sm" onclick="goNext('assets.html',28)">下一步：生成资产 ◆28</button>
+    </div>
+  </section>
+</div>
+
+<div class="modalMask" id="modalPrompt">
+  <div class="modal">
+    <div class="modalHead"><h3>⚙ 全局设定（负面约束）</h3><button class="x" onclick="closeModal('modalPrompt')">×</button></div>
+    <textarea class="gpText">【全局设定】画面风格：赛博朋克电影。全程人物边界独立，自然表演，人物无穿插、无穿透；全程禁止出现字幕（黑屏字幕分镜除外）、禁止角色变脸、变装、形象突变；杜绝肢体畸形、扭曲、残缺等人体结构错误；禁止画面闪烁、跳变、卡顿、帧异常；全程无背景音乐、无 BGM，只保留对白与现场环境声。
+
+（此设定注入第1集全部 3 个片段的每一次生成）</textarea>
+    <div class="modalFoot"><button class="btn ghost sm" onclick="closeModal('modalPrompt')">取消</button><button class="btn white sm" onclick="closeModal('modalPrompt');toast('全局设定已保存，将注入后续所有生成')">保存</button></div>
+  </div>
+</div>
+<div class="toast" id="toast"></div>
+<script src="shared.js"></script>
+<script>
+document.querySelectorAll(".step3").forEach(s=>s.onclick=()=>location.href=s.dataset.step+".html");
+const AGENTS=[
+ {name:"编剧老赵",role:"剧本精编 · 节奏",ab:"编",cls:"a1",msgs:["原著我先通读了一遍。我先把水分压掉、剧本精编、节奏收紧。","SYS:开始剧本解读、故事分析","这个本子的核心张力其实在于全知者面对宿命论时的无力感，女主虽然知道所有剧情，却无法轻易打破原有的世界壁垒。","前期的互动要重点刻画这种想要靠近却被推开的撕裂感，男主的防备心是最大的阻碍，但也是最好看的反差虐点。","美术方面需要强调场景里的冷色调，利用大面积的阴影和清冷的月光来烘托那种绝望又压抑的氛围。"]},
+ {name:"美术小陈",role:"角色 · 场景 · 道具",ab:"美",cls:"a2",msgs:["SYS:开始角色提取、场景识别、道具提取","在角色设计上，我着重放大了人物视觉上的撕裂感。林晚身穿素色和服，展现出无依无靠的柔弱感；而鼬则以深色忍服和象征宿命悲剧的红瞳微光示人。这种外在的反差，能直观反映出两人想靠近却必须推开的情感张力。","第一集的场景承担着情绪铺垫的重任，我将木叶长廊的夜景抽离了暖色，大量使用冷蓝和冷灰。通过白月光的清冷照射和廊柱拉长的漆黑阴影，具象化地呈现出女主身处异世囚笼的压抑感与无力感。","目前第一集的情节核心在于人物的心理试探与宿命对峙，全靠对话和神态来推动权力漩涡中的情感博弈，并没有涉及关键物件的流转或动作交互，因此没有提取核心道具。"]},
+ {name:"导演James",role:"分集拆分 · 镜头",ab:"导",cls:"a3",msgs:["SYS:开始分集拆分","原剧本已经明确标注了第1集，总字数虽然只有两百多字，低于单集300字的常规下限，但在不新增原剧本内容的前提下，剧情已经形成了非常完整的叙事闭环。所以我决定严格保持原始的1集结构，不进行任何强行拆解。","这个长廊对峙场景的张力非常足，女主想靠近而男主极力推开，情绪高点很明确，无需频繁切景就能依靠人物的微表情和对白将宿命感烘托到位。","最后落在了黑屏字幕上，这种直接宣告无力改变命运的设计作为虐心型钩子非常绝，把那种被卷入洪流却无可奈何的撕裂感完美收束，直接切中了观众痛点。"]}
+];
+(function(){let delay=0;const box=$("chatFlow");AGENTS.forEach(a=>{
+  const nh=document.createElement("div");nh.className="agentName";
+  nh.innerHTML=`<span class="av ${a.cls}">${a.ab}</span>${a.name} <span class="role">${a.role}</span>`;box.appendChild(nh);
+  a.msgs.forEach(m=>{const d=document.createElement("div");
+    if(m.startsWith("SYS:")){d.className="msg sys";d.textContent="— "+m.slice(4)+" —"}
+    else{d.className="msg";d.textContent=m}
+    d.style.animationDelay=(delay+=.5)+"s";box.appendChild(d)});
+})})();
+setTimeout(()=>{$("outlineSpin").style.display="none";$("outlineMsg").innerHTML='<span style="color:var(--green)">✓</span> 剧本解读完成：大纲 / 摘要 / 角色·场景·道具 / 剧本内容 已生成，可以进行下一步了'},1500);
+let editing=false,curEp=1;
+function switchEp(i){
+  curEp=i;
+  $("epTab1").classList.toggle("on",i===1);$("epTab2").classList.toggle("on",i===2);
+  $("spEp1").style.display=i===1?"":"none";$("spEp2").style.display=i===2?"":"none";
+  if(i===2)toast("第2集为草稿：待导演智能体拆分决策后正式化（可人工编辑）");
+}
+function editScript(){
+  editing=!editing;
+  const v=$("spView"),t=$("spEdit"),b=$("spEditBtn");
+  if(editing){
+    if(curEp===2){t.value=t.value||"第2集：未命名（草稿）\n\n【场景 内 时】\n\n△ …";}
+    else if(!t.value)t.value=v.textContent.trim();
+    v.style.display="none";t.style.display="block";b.textContent="💾 保存";
+    toast("进入剧本编辑模式（演示：可自由修改文本）");
+  }else{
+    if(curEp===1){toast("剧本已保存 · 已重新提交编剧智能体校对节奏");v.style.display="";t.style.display="none";b.textContent="✎ 编辑";}
+    else{toast("第2集草稿已保存");v.style.display="";t.style.display="none";b.textContent="✎ 编辑";}
+  }
+}
+</script>
+</body>
+</html>

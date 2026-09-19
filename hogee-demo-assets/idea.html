@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>创意 · 灵感市场 — Hogee</title>
+<link rel="stylesheet" href="shared.css">
+<style>
+.tplCover{position:relative;overflow:hidden}
+.tplCover img.bg{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:top;opacity:.9}
+.tplCover .cap{position:relative;z-index:1;display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;text-align:center;font-weight:800;font-size:16px;color:#fff;line-height:1.45;padding:10px;text-shadow:0 2px 10px rgba(0,0,0,.85);gap:3px}
+.tplCover .cap .sub{font-size:10.5px;font-weight:400;opacity:.92;line-height:1.6;text-shadow:0 1px 6px rgba(0,0,0,.9)}
+.tplCover::after{content:"";position:absolute;inset:0;background:linear-gradient(180deg,rgba(10,10,20,.15),rgba(10,10,20,.55));z-index:0}
+.covTags{position:absolute;bottom:8px;left:8px;z-index:2;font-size:9.5px;color:#fff;background:rgba(10,10,20,.62);padding:3px 9px;border-radius:999px;letter-spacing:.5px}
+.dcBar{display:flex;align-items:center;gap:9px;margin:7px 0;font-size:11px}
+.dcBar .k{width:120px;color:var(--sub);flex-shrink:0}
+.dcBar .tr{flex:1;height:9px;border-radius:5px;background:var(--panel3);overflow:hidden}
+.dcBar .tr i{display:block;height:100%;border-radius:5px;background:linear-gradient(90deg,#8b5cf6,#6366f1)}
+.dcBar .v{width:52px;color:var(--dim);font-size:10px;text-align:right;flex-shrink:0}
+.dcStep{display:flex;gap:9px;padding:8px 0;border-top:1px dashed var(--line);font-size:11.5px}
+.dcStep .n{width:20px;height:20px;border-radius:50%;background:var(--accsoft);color:#a78bfa;font-size:10px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-top:1px}
+.dcStep .d{color:var(--sub);line-height:1.65}
+</style>
+</head>
+<body data-page="idea">
+<aside id="sideNav">
+  <div class="logo">H</div>
+  <a class="navItem" href="index.html" data-nav="home"><span class="ico">🏠</span>首页</a>
+  <a class="navItem" href="idea.html" data-nav="idea"><span class="ico">💡</span>创意</a>
+  <a class="navItem" href="create.html" data-nav="create"><span class="ico">🎬</span>创作</a>
+  <a class="navItem" href="canvas.html" data-nav="canvas"><span class="ico">🕸</span>画布</a>
+  <a class="navItem" href="asset.html" data-nav="asset"><span class="ico">📁</span>资产</a>
+  <a class="navItem" href="space.html" data-nav="space"><span class="ico">🧊</span>空间</a>
+  <button class="navItem" data-nav="team"><span class="ico">👥</span>团队</button>
+  <div class="spacer"></div>
+</aside>
+<div id="main">
+  <header id="topBar">
+    <div class="brand"><div class="mark">H</div><div><b>Hogee</b><br><span>AI 短剧工坊 · 逆命木叶</span></div></div>
+    <div style="flex:1"></div>
+    <button class="tbBtn" onclick="toast('演示：领取创作者权益（新人 ◆200 积分）')">领取创作者权益</button>
+    <button class="tbBtn" onclick="toast('演示：商务合作对接')">商务合作</button>
+    <button id="themeBtn" title="切换 明亮 / 暗色主题">☀️</button>
+    <button class="tbBtn vip">⚡ 开通会员</button>
+    <div id="creditChip">◆ <span id="creditNum">940</span></div>
+    <button class="bell" onclick="toggleNotif(event)">🔔<i></i></button>
+    <div class="avatar">赵</div>
+  </header>
+
+  <section class="page">
+    <div class="viewInner">
+      <div class="h2">创意 <em>· 灵感市场</em></div>
+      <div class="sub2">爆款模板 · 风格库 · 创意对话 —— 套用即开拍，跳过冷启动</div>
+      <div style="margin:16px 0 0;display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+        <button class="btn acc sm" onclick="location.href='creative.html'">💬 新建创意对话（图像 / 视频）</button>
+        <span style="font-size:11px;color:var(--dim)">对话式生成：提示词 → 参数确认（模型/画质/比例/数量/积分）→ 出图，支持抠图 / 擦除 / 改图 / 扩图 / 变清晰</span>
+      </div>
+      <div class="secHead" style="margin-top:24px"><h3>🏆 官方示例</h3><span style="font-size:11px;color:var(--dim)">官方出品 · 点击标签筛选 · 「用此示例」自动填充创作参数</span></div>
+      <div class="chips" id="offChips">
+        <button class="chip on" data-cat="all">全部</button>
+        <button class="chip" data-cat="科幻">科幻</button>
+        <button class="chip" data-cat="废土">废土</button>
+        <button class="chip" data-cat="大女主">大女主</button>
+        <button class="chip" data-cat="爽文">爽文</button>
+        <button class="chip" data-cat="复仇">复仇</button>
+        <button class="chip" data-cat="悬疑烧脑">悬疑烧脑</button>
+        <button class="chip" data-cat="权谋">权谋</button>
+        <button class="chip" data-cat="治愈">治愈</button>
+        <button class="chip" data-cat="逆袭">逆袭</button>
+      </div>
+      <div class="canvasGrid" id="offGrid">
+        <div class="workCard" data-cat="科幻 废土">
+          <div class="workCover tplCover"><img class="bg" src="corridor.jpg" style="filter:hue-rotate(200deg) saturate(1.5) brightness(.9)" alt=""><div class="cap">短片《星环之外》<span class="sub">自由画布 · 9:16</span></div><span class="covTags">科幻 · 废土</span></div>
+          <div class="tplOps"><span class="cnt">官方</span><button class="use" onclick="useTpl('星环之外')">用此示例</button></div>
+        </div>
+        <div class="workCard" data-cat="大女主 废土">
+          <div class="workCover tplCover"><img class="bg" src="corridor.jpg" style="filter:hue-rotate(-30deg) saturate(1.8) contrast(1.2)" alt=""><div class="cap">末日血源<span class="sub">原创短剧 · 12集</span></div><span class="covTags">大女主 · 末世</span></div>
+          <div class="tplOps"><span class="cnt">官方</span><button class="use" onclick="useTpl('末日血源')">用此示例</button></div>
+        </div>
+        <div class="workCard" data-cat="复仇 爽文">
+          <div class="workCover tplCover"><img class="bg" src="linwan.png" style="filter:saturate(1.5) brightness(1.05)" alt=""><div class="cap">真千金觉醒<span class="sub">原创短剧 · 8集</span></div><span class="covTags">复仇 · 爽文</span></div>
+          <div class="tplOps"><span class="cnt">官方</span><button class="use" onclick="useTpl('真千金觉醒')">用此示例</button></div>
+        </div>
+        <div class="workCard" data-cat="大女主 悬疑烧脑">
+          <div class="workCover tplCover"><img class="bg" src="itachi.png" style="filter:hue-rotate(220deg) contrast(1.25)" alt=""><div class="cap">致命记忆<span class="sub">原创短剧 · 10集</span></div><span class="covTags">大女主 · 悬疑烧脑</span></div>
+          <div class="tplOps"><span class="cnt">官方</span><button class="use" onclick="useTpl('致命记忆')">用此示例</button></div>
+        </div>
+        <div class="workCard" data-cat="权谋 爽文">
+          <div class="workCover tplCover"><img class="bg" src="itachi.png" style="filter:sepia(.55) contrast(1.15)" alt=""><div class="cap">谋断大秦<span class="sub">原创短剧 · 15集</span></div><span class="covTags">权谋 · 爽文</span></div>
+          <div class="tplOps"><span class="cnt">官方</span><button class="use" onclick="useTpl('谋断大秦')">用此示例</button></div>
+        </div>
+        <div class="workCard" data-cat="治愈 大女主">
+          <div class="workCover tplCover"><img class="bg" src="linwan.png" style="filter:brightness(1.15) saturate(.85)" alt=""><div class="cap">归途无声<span class="sub">原创短剧 · 6集</span></div><span class="covTags">治愈 · 大女主</span></div>
+          <div class="tplOps"><span class="cnt">官方</span><button class="use" onclick="useTpl('归途无声')">用此示例</button></div>
+        </div>
+        <div class="workCard" data-cat="大女主 逆袭">
+          <div class="workCover tplCover"><img class="bg" src="corridor.jpg" style="filter:saturate(1.6) hue-rotate(30deg)" alt=""><div class="cap">龙脉觉醒<span class="sub">原创短剧 · 9集</span></div><span class="covTags">大女主 · 逆袭</span></div>
+          <div class="tplOps"><span class="cnt">官方</span><button class="use" onclick="useTpl('龙脉觉醒')">用此示例</button></div>
+        </div>
+      </div>
+
+      <div class="secHead" style="margin-top:30px"><h3>🔥 爆款拆解</h3><span style="font-size:11px;color:var(--dim)">拆解爆款结构 → 套用到你的题材 · 一键复刻节奏与钩子</span></div>
+      <div class="canvasGrid">
+        <div class="workCard" onclick="decompose('逃跑男友')">
+          <div class="workCover tplCover"><img class="bg" src="linwan.png" style="filter:contrast(1.2) hue-rotate(300deg) saturate(1.3)" alt=""><div class="cap">逃跑男友<span class="sub">都市 · 甜宠反转 · 24集</span></div><span class="tag" style="background:#fb923c">爆款拆解</span></div>
+          <div class="tplOps"><span class="cnt">🔥 214w 播放</span><button class="use" onclick="event.stopPropagation();decompose('逃跑男友')">查看拆解</button></div>
+        </div>
+        <div class="workCard" onclick="decompose('谋断大秦·朝堂局')">
+          <div class="workCover tplCover"><img class="bg" src="itachi.png" style="filter:sepia(.6) contrast(1.3) brightness(.9)" alt=""><div class="cap">谋断大秦·朝堂局<span class="sub">古装 · 权谋碾压 · 15集</span></div><span class="tag" style="background:#fb923c">爆款拆解</span></div>
+          <div class="tplOps"><span class="cnt">🔥 168w 播放</span><button class="use" onclick="event.stopPropagation();decompose('谋断大秦·朝堂局')">查看拆解</button></div>
+        </div>
+        <div class="workCard" onclick="decompose('末日血源·觉醒篇')">
+          <div class="workCover tplCover"><img class="bg" src="corridor.jpg" style="filter:hue-rotate(-40deg) saturate(1.7) contrast(1.25)" alt=""><div class="cap">末日血源·觉醒篇<span class="sub">末世 · 大女主 · 12集</span></div><span class="tag" style="background:#fb923c">爆款拆解</span></div>
+          <div class="tplOps"><span class="cnt">🔥 97w 播放</span><button class="use" onclick="event.stopPropagation();decompose('末日血源·觉醒篇')">查看拆解</button></div>
+        </div>
+      </div>
+
+      <div class="secHead" style="margin-top:30px"><h3>📦 模板市场</h3></div>
+      <div class="chips" id="tplChips">
+        <button class="chip on" data-cat="all">全部</button>
+        <button class="chip" data-cat="穿越宿命">穿越宿命</button>
+        <button class="chip" data-cat="女频虐恋">女频虐恋</button>
+        <button class="chip" data-cat="热血战斗">热血战斗</button>
+        <button class="chip" data-cat="悬疑反转">悬疑反转</button>
+        <button class="chip" data-cat="教育生活">教育生活</button>
+        <div class="searchBox">🔍 搜索题材 / 标签 / 剧情要素</div>
+      </div>
+      <div class="canvasGrid" id="tplGrid">
+        <div class="workCard" data-cat="穿越宿命 女频虐恋">
+          <div class="workCover tplCover"><img class="bg" src="itachi.png" alt=""><div class="cap">穿越者的<br>宿命对峙<span class="sub">女频-轻小说 · 9:16 · 1集46s</span></div></div>
+          <div class="tplOps"><span class="cnt">🔥 23.4w</span><button class="use" onclick="useTpl('穿越者的宿命对峙')">用此创作</button></div>
+        </div>
+        <div class="workCard" data-cat="穿越宿命 女频虐恋">
+          <div class="workCover tplCover"><img class="bg" src="linwan.png" alt=""><div class="cap">开局知晓<br>所有人结局<span class="sub">穿越 · 全知流 · 9:16</span></div></div>
+          <div class="tplOps"><span class="cnt">🔥 18.9w</span><button class="use" onclick="useTpl('开局知晓所有人结局')">用此创作</button></div>
+        </div>
+        <div class="workCard" data-cat="热血战斗">
+          <div class="workCover tplCover"><img class="bg" src="itachi.png" style="filter:hue-rotate(140deg) saturate(1.6) brightness(1.08)" alt=""><div class="cap">反派他哥<br>今天也不想营业<span class="sub">男频 · 热血战斗 · 16:9</span></div></div>
+          <div class="tplOps"><span class="cnt">🔥 15.2w</span><button class="use" onclick="useTpl('反派他哥今天也不想营业')">用此创作</button></div>
+        </div>
+        <div class="workCard" data-cat="教育生活">
+          <div class="workCover tplCover"><img class="bg" src="corridor.jpg" style="filter:sepia(.5) saturate(1.3)" alt=""><div class="cap">我的店主<br>是位剑仙<span class="sub">古风 · 轻喜 · 9:16</span></div></div>
+          <div class="tplOps"><span class="cnt">🔥 11.7w</span><button class="use" onclick="useTpl('我的店主是位剑仙')">用此创作</button></div>
+        </div>
+        <div class="workCard" data-cat="热血战斗">
+          <div class="workCover tplCover"><img class="bg" src="corridor.jpg" style="filter:hue-rotate(190deg) saturate(1.7) contrast(1.15)" alt=""><div class="cap">末日机甲<br>修理铺<span class="sub">科幻 · 废土 · 16:9</span></div></div>
+          <div class="tplOps"><span class="cnt">🔥 9.8w</span><button class="use" onclick="useTpl('末日机甲修理铺')">用此创作</button></div>
+        </div>
+        <div class="workCard" data-cat="悬疑反转">
+          <div class="workCover tplCover"><img class="bg" src="linwan.png" style="filter:grayscale(.85) brightness(.8) contrast(1.2)" alt=""><div class="cap">声音剧场：<br>午夜电台<span class="sub">声音 · 悬疑 · 9:16</span></div></div>
+          <div class="tplOps"><span class="cnt">🔥 7.4w</span><button class="use" onclick="useTpl('午夜电台')">用此创作</button></div>
+        </div>
+      </div>
+      <div class="secHead" style="margin-top:30px"><h3>🎨 风格库</h3><span style="font-size:11px;color:var(--dim)">应用于「整体设定 · 视频风格」，全局注入所有镜头</span></div>
+      <div class="styleGrid">
+        <div class="styleCard" onclick="useStyle('赛博朋克电影')"><div class="sw" style="background:linear-gradient(120deg,#0b1e3a,#3a2f6b 50%,#b537f2)"></div><div class="nb"><b>赛博朋克电影</b><div class="d">冷调霓虹 · 高对比光影 · 电影质感</div><div class="a">当前项目使用中 →</div></div></div>
+        <div class="styleCard" onclick="useStyle('国漫写实')"><div class="sw" style="background:linear-gradient(120deg,#2b2320,#7a5c3a 55%,#c9a06a)"></div><div class="nb"><b>国漫写实</b><div class="d">厚涂质感 · 东方面部特征 · 柔光</div><div class="a">点击应用</div></div></div>
+        <div class="styleCard" onclick="useStyle('赛璐璐动画')"><div class="sw" style="background:linear-gradient(120deg,#f2e9dc,#f4a988 55%,#7ab8f2)"></div><div class="nb"><b>赛璐璐动画</b><div class="d">日式动画 · 硬色块阴影 · 高饱和</div><div class="a">点击应用</div></div></div>
+        <div class="styleCard" onclick="useStyle('影视质感')"><div class="sw" style="background:linear-gradient(120deg,#1a1a1e,#4a4a52 55%,#8a8a94)"></div><div class="nb"><b>影视质感</b><div class="d">自然光影 · 浅景深 · 纪实镜头感</div><div class="a">点击应用</div></div></div>
+        <div class="styleCard" onclick="useStyle('水墨国风')"><div class="sw" style="background:linear-gradient(120deg,#f4f1ea,#9aa3a8 50%,#3a4248)"></div><div class="nb"><b>水墨国风</b><div class="d">留白构图 · 墨色晕染 · 宣纸底</div><div class="a">点击应用</div></div></div>
+        <div class="styleCard" onclick="useStyle('像素复古')"><div class="sw" style="background:repeating-linear-gradient(45deg,#1a1030 0 12px,#3a2f6b 12px 24px)"></div><div class="nb"><b>像素复古</b><div class="d">8-bit 像素 · 抖动渐变 · 电子感</div><div class="a">点击应用</div></div></div>
+      </div>
+    </div>
+  </section>
+</div>
+<div class="modalMask" id="modalDecompose">
+  <div class="modal" style="width:520px">
+    <div class="modalHead"><h3 id="dcTitle">爆款拆解</h3><button class="x" onclick="closeModal('modalDecompose')">×</button></div>
+    <div style="font-size:11px;color:var(--dim);margin-bottom:10px">爆点密度（每 3s 一个情绪刺激 · 前 3 集完播率决定性指标）</div>
+    <div id="dcBars"></div>
+    <div style="font-size:11px;color:var(--dim);margin:14px 0 4px">结构拆解（可直接套用到你的题材）</div>
+    <div id="dcSteps"></div>
+    <div class="modalFoot"><button class="btn ghost sm" onclick="closeModal('modalDecompose')">关闭</button><button class="btn acc sm" onclick="closeModal('modalDecompose');toast('已套用该爆款结构 · 进入创作（节奏卡点已注入提示词模板）');setTimeout(()=>location.href='create.html',600)">用此结构创作</button></div>
+  </div>
+</div>
+<div class="toast" id="toast"></div>
+<script src="shared.js"></script>
+<script>
+document.querySelectorAll("#tplChips .chip").forEach(c=>c.onclick=()=>{
+  document.querySelectorAll("#tplChips .chip").forEach(x=>x.classList.remove("on"));
+  c.classList.add("on");
+  const cat=c.dataset.cat;
+  document.querySelectorAll("#tplGrid .workCard").forEach(w=>{
+    w.style.display=(cat==="all"||w.dataset.cat.includes(cat))?"":"none";
+  });
+});
+document.querySelectorAll("#offChips .chip").forEach(c=>c.onclick=()=>{
+  document.querySelectorAll("#offChips .chip").forEach(x=>x.classList.remove("on"));
+  c.classList.add("on");
+  const cat=c.dataset.cat;
+  document.querySelectorAll("#offGrid .workCard").forEach(w=>{
+    w.style.display=(cat==="all"||w.dataset.cat.includes(cat))?"":"none";
+  });
+});
+const DECOMPOSE={
+ "逃跑男友":{bars:[[92,"集1 · 开场钩子（男友假死谜团）"],[78,"集2 · 反转铺垫"],[95,"集3 · 身份揭穿"],[70,"集4-6 · 追妻火葬场"],[88,"集7 · 真相反转"],[60,"集8+ · 甜宠收束"]],steps:["开场 0-3s：葬礼现场女主微笑 —「他终于死了」反差钩子","第1集末：棺材空了 · 悬念钩","每集一个微型反转 + 一次肢体/台词暧昧","中段：误会 → 分离 → 第三方揭露三连","收束：真相大白 + 高甜复合 · 留续集钩"]},
+ "谋断大秦·朝堂局":{bars:[[85,"集1 · 质子归秦"],[90,"集2 · 朝堂对峙"],[65,"集3-5 · 布局"],[96,"集6 · 政变夜"],[75,"集7+ · 清算"]],steps:["开场：质子当殿受辱 → 隐忍人设立住","权谋信息差：观众知道 · 角色不知道","三集一小胜 · 六集一大胜的碾压节奏","对手降智但不弱智：每次失败有合理代价","收束：登位 + 开疆预告"]},
+ "末日血源·觉醒篇":{bars:[[88,"集1 · 觉醒夜"],[72,"集2-3 · 求生"],[94,"集4 · 背叛"],[80,"集5 · 血脉觉醒"],[93,"集6 · 反杀"]],steps:["开场 0-3s：丧尸破门 + 姐妹分离","女主从被保护者 → 保护者的能力曲线","背叛者提前 1.5 集埋线索（可回看验证）","觉醒不无敌：每次使用血脉有代价","收束：建立安全区 · 引出更大威胁"]}
+};
+function decompose(nm){
+  const d=DECOMPOSE[nm];if(!d){toast("演示：拆解报告生成中…");return}
+  $("dcTitle").textContent="🔥 爆款拆解 · "+nm;
+  $("dcBars").innerHTML=d.bars.map(b=>`<div class="dcBar"><span class="k">${b[1]}</span><span class="tr"><i style="width:${b[0]}%"></i></span><span class="v">${b[0]} 爆度</span></div>`).join("");
+  $("dcSteps").innerHTML=d.steps.map((s,i)=>`<div class="dcStep"><span class="n">${i+1}</span><span class="d">${s}</span></div>`).join("");
+  openModal("modalDecompose");
+}
+function useTpl(nm){toast("已套用模板「"+nm+"」· 进入创作");setTimeout(()=>location.href="create.html",500)}
+function useStyle(nm){toast("风格「"+nm+"」已写入整体设定，将全局注入所有镜头")}
+</script>
+</body>
+</html>

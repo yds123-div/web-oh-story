@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>创作 · 剧集创作 — Hogee</title>
+<link rel="stylesheet" href="shared.css">
+</head>
+<body data-page="create">
+<aside id="sideNav">
+  <div class="logo">H</div>
+  <a class="navItem" href="index.html" data-nav="home"><span class="ico">🏠</span>首页</a>
+  <a class="navItem" href="idea.html" data-nav="idea"><span class="ico">💡</span>创意</a>
+  <a class="navItem" href="create.html" data-nav="create"><span class="ico">🎬</span>创作</a>
+  <a class="navItem" href="canvas.html" data-nav="canvas"><span class="ico">🕸</span>画布</a>
+  <a class="navItem" href="asset.html" data-nav="asset"><span class="ico">📁</span>资产</a>
+  <a class="navItem" href="space.html" data-nav="space"><span class="ico">🧊</span>空间</a>
+  <button class="navItem" data-nav="team"><span class="ico">👥</span>团队</button>
+  <div class="spacer"></div>
+</aside>
+<div id="main">
+  <header id="topBar">
+    <div class="brand"><div class="mark">H</div><div><b>Hogee</b><br><span>AI 短剧工坊 · 逆命木叶</span></div></div>
+    <div style="flex:1"></div>
+    <button class="tbBtn" onclick="toast('演示：领取创作者权益（新人 ◆200 积分）')">领取创作者权益</button>
+    <button class="tbBtn" onclick="toast('演示：商务合作对接')">商务合作</button>
+    <button id="themeBtn" title="切换 明亮 / 暗色主题">☀️</button>
+    <button class="tbBtn vip">⚡ 开通会员</button>
+    <div id="creditChip">◆ <span id="creditNum">940</span></div>
+    <button class="bell" onclick="toggleNotif(event)">🔔<i></i></button>
+    <div class="avatar">赵</div>
+  </header>
+
+  <section class="page">
+    <div class="viewInner">
+      <div class="h2">剧集创作</div>
+      <div class="sub2">短剧 AGENT，一键直出整部剧 ｜ 参考 tiaoyue /aigc/drama/home-b</div>
+      <div class="chips" style="margin:16px 0 0">
+        <button class="chip on" id="mScript" onclick="setMode('script')">📄 剧本模式（≤30万字）</button>
+        <button class="chip" id="mNovel" onclick="setMode('novel')">📖 小说模式（≤10万字 · 一键转视频）</button>
+        <span style="font-size:11px;color:var(--dim);margin-left:10px" id="modeHint">上传成品剧本，AI 精编后进入三步工作流</span>
+      </div>
+      <div class="uploadWrap" style="margin-top:14px">
+        <div class="uploadPanel">
+          <div class="fileIco"><div class="ln"></div><div class="ln"></div><div class="ln"></div><div class="ln"></div></div>
+          <div id="upEmpty">
+            <h4 id="upTitle">拖拽剧本到这里，或选择上传方式</h4>
+            <p id="upDesc">支持 txt / pdf / doc / docx / md 格式 · 单文件 ≤ 10MB · 剧本字数不超过 30 万字</p>
+            <div class="btnRow">
+              <button class="btn white" onclick="doUpload()">⬆ 上传剧本</button>
+              <button class="btn ghost" onclick="pasteMode()">📋 粘贴文本</button>
+            </div>
+          </div>
+          <div id="pasteBox" style="display:none">
+            <textarea id="pasteTa" style="min-height:170px;resize:vertical;font-size:12px;line-height:1.9" placeholder="粘贴剧本文本…">【木叶长廊 内 夜】
+木叶，夜晚长廊，月光冷白。
+△ 林晚扶着廊柱，指尖颤抖，眼神茫然又痛苦，身着木叶制式素色和服。
+林晚（低声独白）：明明只是在家看火影……一睁眼，就来到了这里。
+△ 鼬缓步从阴影走出，红瞳微光，神色淡漠。
+鼬：深夜在此，有何目的。长老安排你，来监视我？</textarea>
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-top:10px">
+              <span style="font-size:11px;color:var(--dim)"><span id="pasteCnt">0</span> 字（≤300,000）</span>
+              <div style="display:flex;gap:8px">
+                <button class="btn ghost sm" onclick="exitPaste()">返回上传</button>
+                <button class="btn white sm" onclick="usePaste()">使用此文本</button>
+              </div>
+            </div>
+          </div>
+          <div class="uploaded" id="upDone" style="display:none">
+            <div class="fileIco" style="position:relative"><div class="ln"></div><div class="ln"></div><div class="ln"></div><div class="ln"></div>
+              <button style="position:absolute;top:-10px;right:-10px;width:24px;height:24px;border-radius:50%;background:var(--panel3);border:1px solid var(--line2);color:var(--sub);font-size:12px" onclick="resetUpload()">×</button>
+            </div>
+            <div class="ok">✓ 上传成功</div>
+            <div class="tip" id="upFileTip">《逆命木叶.txt》 · 删除当前文件后可重新上传</div>
+            <div style="margin-top:12px;display:flex;gap:6px;justify-content:center;flex-wrap:wrap" id="validRow"></div>
+          </div>
+        </div>
+        <div class="cfgPanel">
+          <h4>创作参数</h4>
+          <div class="fRow"><label>文件名称</label><input id="fileNameInput" value="逆命木叶"></div>
+          <div class="fRow"><label>从官方示例开始（可选）</label>
+            <select id="tplSel" onchange="applyTpl(this.value)">
+              <option value="">— 不使用示例 —</option>
+              <option value="星环之外|科幻|废土">星环之外 · 科幻/废土 · 自由画布</option>
+              <option value="末日血源|大女主|末世">末日血源 · 大女主/末世</option>
+              <option value="真千金觉醒|复仇|爽文">真千金觉醒 · 复仇/爽文</option>
+              <option value="逃跑男友|爆款拆解|都市">逃跑男友 · 爆款拆解结构</option>
+            </select>
+          </div>
+          <div class="fRow"><label>选择项目</label><select><option>默认项目</option><option>逆命木叶企划</option></select></div>
+          <div class="f2 fRow">
+            <div><label>分类</label><select><option selected>女频-轻小说</option><option>穿越宿命</option><option>热血战斗</option></select></div>
+            <div><label>风格库</label><select><option selected>赛博朋克电影</option><option>国漫写实</option><option>赛璐璐动画</option></select></div>
+          </div>
+          <div class="f3 fRow">
+            <div><label>视频比例</label><select><option selected>📱 9:16</option><option>16:9</option></select></div>
+            <div><label>场景比例</label><select><option selected>🖥 16:9</option><option>9:16</option></select></div>
+            <div><label>生图质量 <span class="priceNote">9积分/张</span></label><select><option>4K</option><option selected>2K</option><option>1080P</option></select></div>
+          </div>
+          <div class="cfgFoot" style="flex-direction:column;align-items:stretch;gap:10px">
+            <div class="progWrap" id="novelProg" style="display:none;margin:0"><div class="progBar"><i id="novelFill"></i></div><div class="progTxt" id="novelTxt">…</div></div>
+            <div style="display:flex;justify-content:flex-end"><button class="btn acc" id="goBtn" onclick="startCreate()">✦ 立即创作 ◆32</button></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+</div>
+<div class="toast" id="toast"></div>
+<script src="shared.js"></script>
+<script>
+let mode="script";
+function setMode(m){
+  mode=m;
+  $("mScript").classList.toggle("on",m==="script");
+  $("mNovel").classList.toggle("on",m==="novel");
+  if(m==="novel"){
+    $("upTitle").textContent="上传小说，一键转视频";
+    $("upDesc").innerHTML="支持 txt / docx / pdf / md · 单文件 ≤ 10MB · 小说不超过 <b>10 万字</b>（自动章节切分 → 编剧 Agent 改编 → 三步工作流）";
+    $("modeHint").textContent="小说模式：先解析章节，再由编剧智能体改编为可拍摄剧本";
+    $("goBtn").innerHTML="📖 一键转视频 ◆32";
+    $("fileNameInput").value=$("fileNameInput").value||"我的小说";
+  }else{
+    $("upTitle").textContent="拖拽剧本到这里，或选择上传方式";
+    $("upDesc").textContent="支持 txt / pdf / doc / docx / md 格式 · 单文件 ≤ 10MB · 剧本字数不超过 30 万字";
+    $("modeHint").textContent="上传成品剧本，AI 精编后进入三步工作流";
+    $("goBtn").innerHTML="✦ 立即创作 ◆32";
+  }
+  $("pasteCnt").textContent=$("pasteTa").value.length;
+}
+function pasteMode(){$("upEmpty").style.display="none";$("pasteBox").style.display="block";$("pasteCnt").textContent=$("pasteTa").value.length}
+function exitPaste(){$("pasteBox").style.display="none";$("upEmpty").style.display="block"}
+$("pasteTa").addEventListener("input",()=>$("pasteCnt").textContent=$("pasteTa").value.length);
+function validChips(){
+  const novel=mode==="novel";
+  const words=novel?86420:2847;
+  const rows=[["格式",novel?"txt":"txt"],["大小",novel?"1.8MB":"38KB"],["字数",words.toLocaleString()+(novel?" · 12 章":"")]];
+  $("validRow").innerHTML=rows.map(r=>`<span class="miniTag" style="font-size:10px;padding:4px 10px">${r[0]} ✓ ${r[1]}</span>`).join("")+`<span class="miniTag" style="background:rgba(78,207,141,.12);color:var(--green);font-size:10px;padding:4px 10px">校验通过</span>`;
+}
+function doUpload(){
+  $("upEmpty").style.display="none";
+  $("upDone").style.display="block";
+  $("upFileTip").textContent=mode==="novel"?"《我的小说.txt》 · 12 章 · 删除当前文件后可重新上传":"《逆命木叶.txt》 · 删除当前文件后可重新上传";
+  validChips();
+  toast(mode==="novel"?"小说上传成功：86,420 字 · 12 章被识别":"剧本上传成功：2,847 字 · 格式校验通过");
+}
+function usePaste(){
+  const v=$("pasteTa").value.trim();
+  if(v.length<10){toast("文本太短：请粘贴至少 10 字的剧本内容");return}
+  $("pasteBox").style.display="none";$("upDone").style.display="block";
+  $("upFileTip").textContent="粘贴文本 · "+v.length+" 字 · 删除后可重新粘贴";
+  $("validRow").innerHTML=`<span class="miniTag" style="font-size:10px;padding:4px 10px">来源 ✓ 粘贴板</span><span class="miniTag" style="font-size:10px;padding:4px 10px">字数 ✓ ${v.length}</span><span class="miniTag" style="background:rgba(78,207,141,.12);color:var(--green);font-size:10px;padding:4px 10px">校验通过</span>`;
+  toast("文本已载入（"+v.length+" 字）");
+}
+function applyTpl(v){
+  if(!v)return;
+  const[nm,t1,t2]=v.split("|");
+  $("fileNameInput").value=nm;
+  toast("已套用官方示例「"+nm+"」· 标签："+t1+" / "+t2+"（风格与分类已自动填充）");
+}
+function startCreate(){
+  if($("upDone").style.display!=="block"){toast("请先上传剧本 / 小说，或粘贴文本");return}
+  if(!spend(32))return;
+  if(mode==="novel"){
+    const btn=$("goBtn");btn.disabled=true;btn.style.opacity=.55;
+    $("novelProg").style.display="block";
+    const steps=["章节切分：共 12 章…","编剧 Agent 改编：节奏收紧 · 对白口语化…","美术 Agent：角色 / 场景 / 道具提取…","生成剧本大纲…"];
+    let p=0,si=0;$("novelTxt").textContent=steps[0];
+    const iv=setInterval(()=>{
+      p+=5+Math.random()*8;if(p>100)p=100;
+      $("novelFill").style.width=p+"%";
+      const ns=Math.min(steps.length-1,Math.floor(p/100*steps.length));if(ns!==si){si=ns;$("novelTxt").textContent=steps[si]}
+      if(p>=100){clearInterval(iv);$("novelTxt").textContent="✓ 小说 → 剧本 转换完成";
+        setTimeout(()=>{setUnlocked(1);location.href="outline.html"},600)}
+    },180);
+    return;
+  }
+  toast("已提交智能体剧组：编剧解读中…");
+  setTimeout(()=>{setUnlocked(1);location.href="outline.html"},700);
+}
+setMode("script");
+</script>
+</body>
+</html>

@@ -1,0 +1,404 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>节点画布 · 第1集：异世囚笼 — Hogee</title>
+<link rel="stylesheet" href="shared.css">
+</head>
+<body data-page="node">
+<aside id="sideNav">
+  <div class="logo">H</div>
+  <a class="navItem" href="index.html" data-nav="home"><span class="ico">🏠</span>首页</a>
+  <a class="navItem" href="idea.html" data-nav="idea"><span class="ico">💡</span>创意</a>
+  <a class="navItem" href="create.html" data-nav="create"><span class="ico">🎬</span>创作</a>
+  <a class="navItem" href="canvas.html" data-nav="canvas"><span class="ico">🕸</span>画布</a>
+  <a class="navItem" href="asset.html" data-nav="asset"><span class="ico">📁</span>资产</a>
+  <a class="navItem" href="space.html" data-nav="space"><span class="ico">🧊</span>空间</a>
+  <button class="navItem" data-nav="team"><span class="ico">👥</span>团队</button>
+  <div class="spacer"></div>
+</aside>
+<div id="main">
+  <header id="topBar">
+    <div class="brand"><div class="mark">H</div><div><b>Hogee</b><br><span>AI 短剧工坊 · 逆命木叶</span></div></div>
+    <div style="flex:1"></div>
+    <button class="tbBtn" onclick="toast('演示：领取创作者权益（新人 ◆200 积分）')">领取创作者权益</button>
+    <button class="tbBtn" onclick="toast('演示：商务合作对接')">商务合作</button>
+    <button id="themeBtn" title="切换 明亮 / 暗色主题">☀️</button>
+    <button class="tbBtn vip">⚡ 开通会员</button>
+    <div id="creditChip">◆ <span id="creditNum">940</span></div>
+    <button class="bell" onclick="toggleNotif(event)">🔔<i></i></button>
+    <div class="avatar">赵</div>
+  </header>
+
+  <section id="view-node" style="position:relative;flex:1;overflow:hidden">
+    <div id="nodeCanvas">
+      <div class="cvToolbar">
+        <button class="back" style="font-size:17px;padding:2px 8px" onclick="location.href='canvas.html'">‹</button>
+        <span class="ttl">逆命木叶 · 第1集「异世囚笼」</span>
+        <div class="selBox" onclick="event.stopPropagation();popupModel(this)">模型 <b>Seedance 2.5</b> ▾</div>
+        <div class="cvTools">
+          <button class="toolBtn" data-fn="vid" onclick="toolFn('vid')">🎥 视频生成</button>
+          <button class="toolBtn" data-fn="img" onclick="toolFn('img')">🖼 图片生成</button>
+          <button class="toolBtn" data-fn="aud" onclick="toolFn('aud')">🎵 音频生成</button>
+          <button class="toolBtn" data-fn="txt" onclick="toolFn('txt')">📝 文本</button>
+          <button class="toolBtn" data-fn="edit" onclick="toolFn('edit')">✂ 智能剪辑</button>
+          <button class="toolBtn" data-fn="tri" onclick="toolFn('tri')">👥 角色三视图</button>
+          <button class="toolBtn" data-fn="grid" onclick="toolFn('grid')">🔲 多机位九宫格</button>
+          <button class="toolBtn" data-fn="light" onclick="toolFn('light')">💡 灯光控制</button>
+          <button class="toolBtn" data-fn="hd" onclick="toolFn('hd')">🔍 高清扩图</button>
+          <button class="toolBtn" data-fn="frame" onclick="toolFn('frame')">🎞 逐帧拉片</button>
+          <button class="toolBtn" data-fn="retake" onclick="toolFn('retake')">↻ 片段重拍</button>
+          <button class="toolBtn" data-fn="group" onclick="toolFn('group')">📦 打组复用</button>
+        </div>
+        <div style="margin-left:auto;display:flex;gap:6px;padding-left:8px">
+          <button class="zBtn" style="width:auto;padding:0 12px;font-size:11px" onclick="buildGraph(true)">↻ 重排</button>
+          <button class="zBtn" style="width:auto;padding:0 12px;font-size:11px" onclick="resetCanvas()">🧹 清空</button>
+        </div>
+      </div>
+      <div class="canvasTip" id="canvasTip" style="top:60px"><span class="cur">🖱</span><span class="rb">右击</span>唤起菜单放置基础节点，或选择快速入口</div>
+      <div class="quickWrap" id="quickWrap" style="top:58%">
+        <div class="quickRow">
+          <div class="qCard" onclick="quickNode(0)"><div class="ic">📄</div><b>剧本节点</b><i>剧本解析 · 大纲</i></div>
+          <div class="qCard" onclick="quickNode(1)"><div class="ic">🧊</div><b>主体生成</b><i>角色形象资产</i></div>
+          <div class="qCard" onclick="quickNode(2)"><div class="ic">🎬</div><b>分镜生成</b><i>分集 · 片段拆分</i></div>
+          <div class="qCard" onclick="quickNode(3)"><div class="ic">🖼</div><b>图像生成</b><i>关键帧 · 场景图</i></div>
+          <div class="qCard" onclick="quickNode(4)"><div class="ic">🎥</div><b>视频生成</b><i>片段视频合成</i></div>
+        </div>
+        <button class="btn acc" style="margin-top:26px" onclick="buildGraph()">✨ 根据剧情生成画布 · 第1集「异世囚笼」</button>
+        <div style="margin-top:10px;font-size:10.5px;color:var(--dim)">生成 剧本 → 主体/场景 → 分镜 → 关键帧 → 片段视频 → 整集合成 的完整管线图（矢量箭头 · 可手动修正）</div>
+      </div>
+      <div id="graphWrap">
+        <svg id="edgeSvg" width="1900" height="800" viewBox="0 0 1900 800">
+          <defs><marker id="arr" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7.5" markerHeight="7.5" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#8b5cf6"/></marker></defs>
+        </svg>
+      </div>
+      <div id="miniMap" title="小地图：点击定位视图"><span class="mmCap">MINIMAP</span></div>
+      <div id="grpPanel"></div>
+      <div class="canvasZoom"><button class="zBtn" onclick="setZoom(zoom+0.1)">＋</button><button class="zBtn" onclick="setZoom(zoom-0.1)">−</button><button class="zBtn" style="font-size:11px" onclick="resetCanvas()">⟲</button></div>
+    </div>
+  </section>
+</div>
+<div class="toast" id="toast"></div>
+<div id="ctxMenu"></div>
+<script src="shared.js"></script>
+<script>
+let nodeZ=10,panX=0,panY=0,dynSeq=0,grpSeq=0,zoom=1;
+const GROUP_TMPL=[];
+function applyTransform(){graphWrap.style.transform=`translate(${panX}px,${panY}px) scale(${zoom})`}
+function setZoom(z){zoom=Math.max(.5,Math.min(1.6,Math.round(z*10)/10));applyTransform();updateMini();toast("画布缩放 "+Math.round(zoom*100)+"%")}
+function updateMini(){
+  const mm=$("miniMap");if(!mm)return;
+  mm.querySelectorAll(".mmN,.mmV").forEach(x=>x.remove());
+  const sc=184/1900;
+  GRAPH.nodes.forEach(n=>{const el=$("nd_"+n.id);if(!el)return;
+    const d=document.createElement("i");d.className="mmN";
+    d.style.left=(el.offsetLeft*sc)+"px";d.style.top=(el.offsetTop*sc)+"px";mm.appendChild(d)});
+  const v=document.createElement("i");v.className="mmV";
+  const w=$("nodeCanvas").clientWidth,h=$("nodeCanvas").clientHeight;
+  v.style.left=(-panX/zoom*sc)+"px";v.style.top=(-panY/zoom*sc)+"px";
+  v.style.width=(w/zoom*sc)+"px";v.style.height=(h/zoom*sc)+"px";
+  mm.appendChild(v);
+}
+$("miniMap").addEventListener("click",e=>{
+  const r=e.currentTarget.getBoundingClientRect();
+  const sc=184/1900;
+  const gx=(e.clientX-r.left)/sc,gy=(e.clientY-r.top)/sc;
+  panX=-(gx*zoom-$("nodeCanvas").clientWidth/2);panY=-(gy*zoom-$("nodeCanvas").clientHeight/2);
+  applyTransform();updateMini();
+});
+$("nodeCanvas").addEventListener("wheel",e=>{
+  if(e.target.closest(".node"))return;
+  e.preventDefault();setZoom(zoom+(e.deltaY<0?0.1:-0.1));
+},{passive:false});
+const SVGNS="http://www.w3.org/2000/svg";
+const graphWrap=$("graphWrap"),edgeSvg=$("edgeSvg");
+const TYPE_COLOR={script:"#60a5fa",sub:"#a78bfa",sb:"#f472b6",img:"#2dd4bf",vid:"#fb923c",merge:"#e8c37a",dyn:"#94a3b8"};
+const NODE_DEFS=[
+ {t:"剧本节点",ico:"📄",v:"outline",d:"剧本解析 · 大纲 · 摘要<br>智能体剧组联席解读"},
+ {t:"主体生成",ico:"🧊",v:"assets",d:"角色形象 / 场景 / 道具<br>一致性资产卡生成"},
+ {t:"分镜生成",ico:"🎬",v:"episodes",d:"分集拆分 · 片段编排<br>导演决策 + 分镜流"},
+ {t:"图像生成",ico:"🖼",v:"assets",d:"关键帧 / 场景图<br>4K · 9积分/张"},
+ {t:"视频生成",ico:"🎥",v:"studio",d:"片段视频合成<br>S 2.0-fast · 9:16"}
+];
+const GRAPH={
+ nodes:[
+  {id:"script",ico:"📄",type:"script",t:"剧本 · 第1集：异世囚笼",x:24,y:216,body:"【木叶长廊 内 夜】<br>△ 动作行 ×6 · 对白 ×5<br>黑屏字幕收尾",st:["READY","ok"]},
+  {id:"linwan",ico:"🧊",type:"sub",t:"主体 · 林晚",x:316,y:52,img:"linwan.png",body:"素色和服 · 一致性锁定",st:["READY","ok"]},
+  {id:"itachi",ico:"🧊",type:"sub",t:"主体 · 宇智波鼬",x:316,y:216,img:"itachi.png",body:"深色忍服 · 红瞳微光",st:["READY","ok"]},
+  {id:"scene",ico:"🏛",type:"sub",t:"场景 · 木叶长廊-月夜",x:316,y:380,img:"corridor.jpg",body:"16:9 · 冷白月光 · 地灯暖光",st:["READY","ok"]},
+  {id:"sb1",ico:"🎬",type:"sb",t:"分镜 · 片段1",x:616,y:28,body:"2 分镜 · ⏱ 13s<br>扶柱独白 → 鼬显露",st:["READY","ok"]},
+  {id:"sb2",ico:"🎬",type:"sb",t:"分镜 · 片段2",x:616,y:186,body:"3 分镜 · ⏱ 14s<br>质问 → 过肩否认（语音标注）",st:["READY","ok"]},
+  {id:"sb3",ico:"🎬",type:"sb",t:"分镜 · 片段3",x:616,y:344,body:"2 分镜 · ⏱ 10s<br>预言 → 警告 → 黑屏字幕",st:["READY","ok"]},
+  {id:"img1",ico:"🖼",type:"img",t:"图像 · 关键帧 S1",x:906,y:28,img:"corridor.jpg",body:"9:16 首帧 · 冷月廊柱",st:["READY","ok"]},
+  {id:"img2",ico:"🖼",type:"img",t:"图像 · 关键帧 S2",x:906,y:186,img:"corridor.jpg",body:"过肩构图 · 石地灯光晕",st:["READY","ok"]},
+  {id:"img3",ico:"🖼",type:"img",t:"图像 · 关键帧 S3",x:906,y:344,img:"corridor.jpg",body:"收暗前帧 · 廊柱剪影",st:["READY","ok"]},
+  {id:"vid1",ico:"🎥",type:"vid",t:"视频 · 片段1",x:1196,y:28,vid:"clip1.mp4",body:"13s · 480P",st:["✓ 已生成","ok"]},
+  {id:"vid2",ico:"🎥",type:"vid",t:"视频 · 片段2",x:1196,y:186,vid:"clip2.mp4",body:"14s · 480P",st:["✓ 已生成","ok"]},
+  {id:"vid3",ico:"🎥",type:"vid",t:"视频 · 片段3",x:1196,y:344,vid:"clip3.mp4",body:"10s · 待生成",st:["未生成","no"]},
+  {id:"merge",ico:"⬇",type:"merge",t:"合成 · 第1集整片",x:1486,y:186,body:"3 片段 · 00:37<br>导出 720P / MP4",st:["PENDING","wip"]}
+ ],
+ edges:[["script","linwan"],["script","itachi"],["script","scene"],
+  ["script","sb1"],["script","sb2"],["script","sb3"],
+  ["linwan","sb1"],["scene","sb1"],["itachi","sb2"],["linwan","sb2"],["itachi","sb3"],["scene","sb3"],
+  ["sb1","img1"],["sb2","img2"],["sb3","img3"],
+  ["img1","vid1"],["img2","vid2"],["img3","vid3"],
+  ["vid1","merge"],["vid2","merge"],["vid3","merge"]]
+};
+function nodeEl(n){
+  const el=document.createElement("div");el.className="node";el.id="nd_"+n.id;
+  el.style.left=n.x+"px";el.style.top=n.y+"px";
+  let th="";
+  if(n.img)th=`<div class="thumb"><img src="${n.img}" style="${n.f?"filter:"+n.f:""}" draggable="false" alt=""></div>`;
+  else if(n.vid)th=`<div class="thumb"><video src="${n.vid}#t=1" preload="metadata" muted playsinline></video>${n.st[1]==="no"?'<span class="phTag">占位</span>':""}</div>`;
+  el.innerHTML=`<div class="nh" style="border-color:${TYPE_COLOR[n.type]||TYPE_COLOR.dyn}"><span class="ic">${n.ico}</span>${n.t}</div>${th}<div class="nb">${n.body}</div><span class="ns ${n.st[1]}">${n.st[0]}</span>
+  <div class="nodeActs"><button title="画布快捷预览" data-act="prev">▶</button><button title="复制节点" data-act="dup">⧉</button><button title="删除节点" data-act="del">🗑</button></div>
+  <span class="port in" title="输入端口"></span><span class="port out" title="按住拖动 → 连接到其他节点"></span>`;
+  graphWrap.appendChild(el);bindNode(el);
+  return el;
+}
+function nodeName(id){const n=GRAPH.nodes.find(x=>x.id===id);return n?n.t:id}
+function portPos(el,side){return side==="out"?{x:el.offsetLeft+el.offsetWidth,y:el.offsetTop+el.offsetHeight/2}:{x:el.offsetLeft,y:el.offsetTop+el.offsetHeight/2}}
+function gxy(e){const r=$("nodeCanvas").getBoundingClientRect();return{x:(e.clientX-r.left-panX)/zoom,y:(e.clientY-r.top-panY)/zoom}}
+function edgeD(p1,p2){return `M${p1.x},${p1.y} C${p1.x+70},${p1.y} ${p2.x-70},${p2.y} ${p2.x},${p2.y}`}
+function bindNode(el){
+  el.addEventListener("mousedown",e=>{
+    if(e.button!==0)return;
+    if(e.ctrlKey||e.metaKey){el.classList.toggle("sel")}
+    else if(!el.classList.contains("sel")){clearSel();el.classList.add("sel")}
+    syncTools();closePrev();
+    el.style.zIndex=++nodeZ;
+    const sL=el.offsetLeft,sT=el.offsetTop,cx=e.clientX,cy=e.clientY;
+    const mv=ev=>{el.style.left=Math.max(0,sL+(ev.clientX-cx)/zoom)+"px";el.style.top=Math.max(0,sT+(ev.clientY-cy)/zoom)+"px";drawEdges(false)};
+    const up=()=>{document.removeEventListener("mousemove",mv);document.removeEventListener("mouseup",up);updateMini()};
+    document.addEventListener("mousemove",mv);document.addEventListener("mouseup",up);
+  });
+  el.querySelectorAll(".nodeActs button").forEach(b=>{
+    b.addEventListener("mousedown",ev=>ev.stopPropagation());
+    b.addEventListener("click",ev=>{
+      ev.stopPropagation();
+      const id=el.id.slice(3),n=GRAPH.nodes.find(x=>x.id===id);
+      if(b.dataset.act==="prev")previewFloat(n||{},ev);
+      else if(b.dataset.act==="dup"&&n)dupNode(n);
+      else if(b.dataset.act==="del")delNode(id);
+    });
+  });
+  el.querySelector(".port.out").addEventListener("mousedown",e=>{
+    e.stopPropagation();
+    const p1=portPos(el,"out");
+    const tmp=document.createElementNS(SVGNS,"path");tmp.setAttribute("class","edge temp");edgeSvg.appendChild(tmp);
+    const mv=ev=>tmp.setAttribute("d",edgeD(p1,gxy(ev)));
+    const up=ev=>{
+      document.removeEventListener("mousemove",mv);document.removeEventListener("mouseup",up);tmp.remove();
+      const hit=document.elementFromPoint(ev.clientX,ev.clientY);
+      const nd=hit&&hit.closest?hit.closest(".node"):null;
+      if(nd&&nd!==el){
+        const a=el.id.slice(3),b=nd.id.slice(3);
+        if(!GRAPH.edges.some(x=>(x[0]===a&&x[1]===b)||(x[0]===b&&x[1]===a))){GRAPH.edges.push([a,b]);drawEdges(false);toast("连线已创建："+nodeName(a)+" → "+nodeName(b))}
+        else toast("连线已存在（或反向存在）")}
+    };
+    document.addEventListener("mousemove",mv);document.addEventListener("mouseup",up);
+  });
+}
+function drawEdges(anim){
+  edgeSvg.querySelectorAll(".edge,.edgeX").forEach(x=>x.remove());
+  GRAPH.edges.forEach((ed,i)=>{
+    const a=$("nd_"+ed[0]),b=$("nd_"+ed[1]);if(!a||!b)return;
+    const p1=portPos(a,"out"),p2=portPos(b,"in");
+    const p=document.createElementNS(SVGNS,"path");
+    p.setAttribute("d",edgeD(p1,p2));p.setAttribute("class","edge");p.setAttribute("marker-end","url(#arr)");
+    edgeSvg.appendChild(p);
+    if(anim){const L=p.getTotalLength();p.style.strokeDasharray=L;p.style.strokeDashoffset=L;
+      requestAnimationFrame(()=>{p.style.transition="stroke-dashoffset .5s ease "+(i*0.045)+"s";p.style.strokeDashoffset=0});
+      setTimeout(()=>{p.style.strokeDasharray="";p.style.transition=""},1000+i*45)}
+    const mx=(p1.x+p2.x)/2,my=(p1.y+p2.y)/2;
+    const g=document.createElementNS(SVGNS,"g");g.setAttribute("class","edgeX");g.setAttribute("transform",`translate(${mx},${my})`);
+    g.innerHTML=`<circle r="8"></circle><text y="3.5" text-anchor="middle">×</text>`;
+    g.addEventListener("mousedown",ev=>{ev.stopPropagation();GRAPH.edges.splice(i,1);drawEdges(false);toast("连线已删除："+nodeName(ed[0])+" ✕ "+nodeName(ed[1]))});
+    edgeSvg.appendChild(g);
+  });
+}
+function buildGraph(rebuild){
+  graphWrap.querySelectorAll(".node,.grpBox").forEach(n=>n.remove());
+  panX=16;panY=10;zoom=1;applyTransform();
+  $("canvasTip").style.display="none";$("quickWrap").style.display="none";closePrev();
+  GRAPH.nodes.forEach((n,i)=>{const el=nodeEl(n);el.style.animationDelay=(i*0.07)+"s"});
+  setTimeout(()=>{drawEdges(true);updateMini()},GRAPH.nodes.length*70+120);
+  toast(rebuild?"已按剧情重排管线布局":"已根据第1集剧情生成画布管线（21 条矢量连线）");
+}
+function resetCanvas(){
+  graphWrap.querySelectorAll(".node,.grpBox").forEach(n=>n.remove());
+  edgeSvg.querySelectorAll(".edge,.edgeX").forEach(x=>x.remove());
+  panX=panY=0;zoom=1;applyTransform();updateMini();
+  $("canvasTip").style.display="flex";$("quickWrap").style.display="flex";closePrev();syncTools();
+  toast("画布已清空，恢复快速入口")
+}
+const ctx=$("ctxMenu");
+const CTX_DEFS=[
+ {t:"文本节点",ico:"📝",d:"自由文本 · 对白 · 设定"},
+ {t:"图片节点",ico:"🖼",d:"图片资产 / 生成结果"},
+ {t:"视频节点",ico:"🎥",d:"视频素材 / 生成结果"},
+ {t:"音频节点",ico:"🎵",d:"配音 · 音效 · BGM"},
+ {t:"脚本节点",ico:"📜",d:"剧本 → 分镜 脚本"},
+ {t:"主体生成",ico:"🧊",d:"角色形象资产"},
+ {t:"分镜生成",ico:"🎬",d:"分集 · 片段拆分"},
+ {t:"图像生成",ico:"🖼",d:"关键帧 · 场景图"},
+ {t:"视频生成",ico:"🎥",d:"片段视频合成"},
+ {t:"智能剪辑",ico:"✂",d:"多片段对齐剪接"}
+];
+$("nodeCanvas").addEventListener("contextmenu",e=>{
+  e.preventDefault();
+  ctx.innerHTML="";
+  CTX_DEFS.forEach(d=>{
+    const b=document.createElement("button");
+    b.innerHTML=`<span>${d.ico}</span>${d.t}<i style="margin-left:auto;font-style:normal;font-size:9.5px;color:var(--dim)">${d.d}</i>`;
+    b.onclick=()=>{ctxAdd(d,e.clientX,e.clientY);ctx.style.display="none";toast("已放置节点："+d.t)};
+    ctx.appendChild(b);
+  });
+  ctx.style.display="block";
+  ctx.style.left=Math.min(e.clientX,innerWidth-240)+"px";
+  ctx.style.top=Math.min(e.clientY,innerHeight-380)+"px";
+});
+function ctxAdd(def,cx,cy){
+  const g=gxy({clientX:cx,clientY:cy});
+  const id="dyn"+(++dynSeq);
+  GRAPH.nodes.push({id,ico:def.ico,type:"dyn",t:def.t,x:Math.max(10,g.x-104),y:Math.max(10,g.y-30),body:String(def.d).replace(/<br>/g," · "),st:["READY","ok"]});
+  $("canvasTip").style.display="none";
+  nodeEl(GRAPH.nodes[GRAPH.nodes.length-1]);
+}
+document.addEventListener("click",e=>{if(!ctx.contains(e.target))ctx.style.display="none"});
+function clearSel(){document.querySelectorAll(".node.sel").forEach(x=>x.classList.remove("sel"));syncTools()}
+function selNodes(){return[...document.querySelectorAll(".node.sel")].map(x=>GRAPH.nodes.find(n=>"nd_"+n.id===x.id)).filter(Boolean)}
+function syncTools(){
+  const has=!!document.querySelector(".node.sel");
+  document.querySelectorAll(".toolBtn").forEach(b=>b.classList.toggle("hot",has&&["vid","img","aud","txt","group"].includes(b.dataset.fn)));
+}
+let curGrp=0;
+const TOOL_META={
+ vid:{ico:"🎥",t:"视频生成",mk:()=>({type:"vid",st:["✓ 已生成","ok"],vid:"clip1.mp4",body:"Seedance 2.5 · 9:16 · 480P · 13s"})},
+ img:{ico:"🖼",t:"图片生成",mk:()=>({type:"img",st:["READY","ok"],img:"corridor.jpg",body:"图片节点 · 4K · 9积分"})},
+ aud:{ico:"🎵",t:"音频生成",mk:()=>({type:"dyn",st:["READY","ok"],body:"音频 · 对白配音 + 现场环境声"})},
+ txt:{ico:"📝",t:"文本",mk:()=>({type:"dyn",st:["READY","ok"],body:"自由文本 · 待编排对白草稿"})}
+};
+function toolFn(fn){
+  const sel=selNodes();
+  if(fn==="group"){
+    if(sel.length<2){toast("打组复用：请 Ctrl+点击 多选 2 个以上节点");return}
+    makeGroup(sel);return;
+  }
+  if(TOOL_META[fn]){
+    if(!sel.length){toast("请先点击选中一个节点，再调用「"+TOOL_META[fn].t+"」");return}
+    const m=TOOL_META[fn],src=sel[0],selEl=$("nd_"+src.id);
+    const id="dyn"+(++dynSeq);
+    const def=m.mk();def.id=id;def.ico=m.ico;def.t=m.t+" · "+src.t.split(" · ").pop();
+    def.x=(selEl?selEl.offsetLeft:400)+260;def.y=(selEl?selEl.offsetTop:200)+40;
+    GRAPH.nodes.push(def);const el=nodeEl(def);el.classList.add("sel");
+    GRAPH.edges.push([src.id,id]);drawEdges(false);syncTools();
+    toast("已调用「"+m.t+"」→ 生成子节点并自动连线（演示）");
+    return;
+  }
+  if(["tri","grid","light","hd","retake"].includes(fn)){
+    if(!sel.length){toast("请先点击选中一个节点，再调用该功能");return}
+    const src=sel[0],selEl=$("nd_"+src.id);
+    const bx=(selEl?selEl.offsetLeft:400)+262,by=(selEl?selEl.offsetTop:200)-20;
+    const mk=(o)=>{const id="dyn"+(++dynSeq);const d=Object.assign({id,ico:"🖼",type:"img",t:o.t,x:bx+o.dx,y:by+o.dy,body:o.body,st:["READY","ok"]},o);GRAPH.nodes.push(d);nodeEl(d);GRAPH.edges.push([src.id,id]);return d};
+    if(fn==="tri"){
+      mk({t:"三视图 · 正面",img:src.img||"linwan.png",body:"正面 · 一致性参考",dy:-8});
+      mk({t:"三视图 · 侧面",img:src.img||"linwan.png",body:"侧面 · 一致性参考",f:"hue-rotate(18deg)",dy:112});
+      mk({t:"三视图 · 背面",img:src.img||"linwan.png",body:"背面 · 一致性参考",f:"hue-rotate(-18deg)",dy:232});
+      toast("已生成「角色三视图」：正 / 侧 / 背 三节点（一致性参考已锁定）");
+    }else if(fn==="grid"){
+      mk({ico:"🔲",t:"多机位九宫格",type:"dyn",body:"9 机位候选构图<br>"+Array.from({length:9},(_,i)=>`<span style="display:inline-block;width:16%;height:15px;margin:1%;border-radius:3px;background:rgba(139,92,246,${.2+i*.07});vertical-align:middle"></span>`).join(""),dy:60});
+      toast("已生成「多机位九宫格」：一镜 9 机位候选构图节点");
+    }else if(fn==="light"){
+      mk({t:"灯光 · 冷月光",img:"corridor.jpg",body:"冷白主光 · 高对比",dy:-8});
+      mk({t:"灯光 · 地灯暖光",img:"corridor.jpg",f:"sepia(.35) saturate(1.4)",body:"暖调氛围 · 柔和",dy:112});
+      mk({t:"灯光 · 逆光剪影",img:"corridor.jpg",f:"brightness(.45) contrast(1.5)",body:"逆光 · 剪影构图",dy:232});
+      toast("已生成 3 组灯光变体：冷月 / 地灯暖光 / 逆光剪影");
+    }else if(fn==="hd"){
+      selEl.querySelector(".ns").textContent="4K 已扩图";
+      toast("高清扩图完成：480P 草稿 → 4K 外扩构图（节点状态已更新）");
+    }else{
+      src.take=(src.take||1)+1;
+      selEl.querySelector(".ns").textContent="TAKE "+src.take;
+      selEl.querySelector(".nb").innerHTML=(selEl.querySelector(".nb").innerHTML||"").split("<br>TAKE")[0]+"<br>TAKE "+src.take+" · 保持资产一致性重拍";
+      toast("片段重拍已提交（TAKE "+src.take+"）· 旧版本保留可回滚");
+    }
+    drawEdges(false);updateMini();
+    return;
+  }
+  const desc={edit:"智能剪辑：多片段对齐 / 剪接 / 音乐收尾",frame:"逐帧拉片：按帧检视表演与穿帮"};
+  const s0=sel[0];
+  toast(desc[fn]+(s0?" ｜ 目标节点："+s0.t:"（请先选中节点）"));
+}
+function makeGroup(sel){
+  const els=sel.map(n=>$("nd_"+n.id)).filter(Boolean);
+  const x1=Math.min(...els.map(e=>e.offsetLeft))-16,y1=Math.min(...els.map(e=>e.offsetTop))-28;
+  const x2=Math.max(...els.map(e=>e.offsetLeft+e.offsetWidth))+16,y2=Math.max(...els.map(e=>e.offsetTop+e.offsetHeight))+14;
+  const g=document.createElement("div");g.className="grpBox";
+  g.style.left=x1+"px";g.style.top=y1+"px";g.style.width=(x2-x1)+"px";g.style.height=(y2-y1)+"px";
+  const gname="组 "+(++curGrp);
+  g.innerHTML=`<span class="grpLabel">📦 ${gname} · ${sel.length} 节点 · 已存为模板</span>`;
+  graphWrap.appendChild(g);
+  GROUP_TMPL.push({name:gname,ids:sel.map(s=>s.id)});
+  renderGrpPanel();
+  toast("已打组 "+sel.length+" 个节点并保存为模板（左下角可一键重复执行）");
+}
+function renderGrpPanel(){
+  const p=$("grpPanel");
+  p.innerHTML=GROUP_TMPL.map((g,i)=>`<div class="gp"><span>📦 ${g.name} · ${g.ids.length} 节点</span><button onclick="execGroup(${i})">▶ 执行</button></div>`).join("");
+}
+function execGroup(i){
+  const g=GROUP_TMPL[i];if(!g)return;
+  const map={};let n=0;
+  g.ids.forEach(id=>{const src=GRAPH.nodes.find(x=>x.id===id);if(!src)return;
+    const nid="dyn"+(++dynSeq);map[id]=nid;
+    const c=Object.assign({},src,{id:nid,t:src.t,x:src.x+56,y:src.y+56});
+    GRAPH.nodes.push(c);nodeEl(c);n++});
+  GRAPH.edges.filter(e=>map[e[0]]&&map[e[1]]).forEach(e=>GRAPH.edges.push([map[e[0]],map[e[1]]]));
+  drawEdges(false);updateMini();
+  toast("已重复执行「"+g.name+"」：克隆 "+n+" 个节点并复刻内部连线");
+}
+function previewFloat(n,e){
+  closePrev();
+  if(!n.vid&&!n.img){toast("该节点暂无可预览的媒体");return}
+  const d=document.createElement("div");d.className="miniPrev";d.id="prevFloat";
+  d.innerHTML=(n.vid?`<video class="mv" src="${n.vid}" controls autoplay muted loop playsinline></video>`:`<img class="mi" src="${n.img}" alt="">`)+`<div class="cap"><span>${n.t}</span><span>画布快捷预览</span></div>`;
+  document.body.appendChild(d);
+  d.style.left=Math.min(e.clientX+14,innerWidth-280)+"px";
+  d.style.top=Math.min(e.clientY+10,innerHeight-250)+"px";
+  d.addEventListener("mousedown",ev=>ev.stopPropagation());
+}
+function closePrev(){const p=$("prevFloat");if(p)p.remove()}
+document.addEventListener("click",e=>{const p=$("prevFloat");if(p&&!p.contains(e.target))closePrev()});
+function dupNode(n){
+  const id="dyn"+(++dynSeq);
+  const c=Object.assign({},n,{id,t:n.t+" 副本",x:n.x+28,y:n.y+28});
+  GRAPH.nodes.push(c);nodeEl(c);
+  toast("节点已复制："+c.t);
+}
+function delNode(id){
+  const n=GRAPH.nodes.find(x=>x.id===id);
+  GRAPH.nodes=GRAPH.nodes.filter(x=>x.id!==id);
+  GRAPH.edges=GRAPH.edges.filter(x=>x[0]!==id&&x[1]!==id);
+  const el=$("nd_"+id);if(el)el.remove();
+  drawEdges(false);syncTools();
+  toast("节点已删除"+(n?"："+n.t:""));
+}
+$("nodeCanvas").addEventListener("mousedown",e=>{
+  if(e.button!==0)return;
+  if(e.target.closest(".node,.qCard,.canvasZoom,.cvToolbar,#ctxMenu,.edgeX,.edge,.btn"))return;
+  clearSel();closePrev();
+  const sx=e.clientX-panX,sy=e.clientY-panY;
+  const mv=ev=>{panX=ev.clientX-sx;panY=ev.clientY-sy;applyTransform()};
+  const up=()=>{document.removeEventListener("mousemove",mv);document.removeEventListener("mouseup",up);updateMini()};
+  document.addEventListener("mousemove",mv);document.addEventListener("mouseup",up);
+});
+function quickNode(i){
+  const d=NODE_DEFS[i];
+  const cw=$("view-node").clientWidth,ch=$("view-node").clientHeight;
+  ctxAdd(d,cw/2+(i-2)*150+90,ch/2+140);
+  setTimeout(()=>location.href=d.v+".html",400);
+}
+</script>
+</body>
+</html>

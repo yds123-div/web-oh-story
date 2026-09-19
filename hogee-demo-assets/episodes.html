@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>STEP3 · 分集视频管理 — 逆命木叶</title>
+<link rel="stylesheet" href="shared.css">
+</head>
+<body data-page="episodes">
+<aside id="sideNav">
+  <div class="logo">H</div>
+  <a class="navItem" href="index.html" data-nav="home"><span class="ico">🏠</span>首页</a>
+  <a class="navItem" href="idea.html" data-nav="idea"><span class="ico">💡</span>创意</a>
+  <a class="navItem" href="create.html" data-nav="create"><span class="ico">🎬</span>创作</a>
+  <a class="navItem" href="canvas.html" data-nav="canvas"><span class="ico">🕸</span>画布</a>
+  <a class="navItem" href="asset.html" data-nav="asset"><span class="ico">📁</span>资产</a>
+  <a class="navItem" href="space.html" data-nav="space"><span class="ico">🧊</span>空间</a>
+  <button class="navItem" data-nav="team"><span class="ico">👥</span>团队</button>
+  <div class="spacer"></div>
+</aside>
+<div id="main">
+  <header id="topBar">
+    <div class="brand"><div class="mark">H</div><div><b>Hogee</b><br><span>AI 短剧工坊 · 逆命木叶</span></div></div>
+    <div style="flex:1"></div>
+    <button class="tbBtn" onclick="toast('演示：领取创作者权益（新人 ◆200 积分）')">领取创作者权益</button>
+    <button class="tbBtn" onclick="toast('演示：商务合作对接')">商务合作</button>
+    <button id="themeBtn" title="切换 明亮 / 暗色主题">☀️</button>
+    <button class="tbBtn vip">⚡ 开通会员</button>
+    <div id="creditChip">◆ <span id="creditNum">940</span></div>
+    <button class="bell" onclick="toggleNotif(event)">🔔<i></i></button>
+    <div class="avatar">赵</div>
+  </header>
+
+  <section class="page">
+    <div class="flowHead">
+      <button class="back" onclick="location.href='index.html'">‹</button>
+      <span class="flowTitle">逆命木叶 <span class="tag">分集视频管理</span></span>
+      <div class="steps3">
+        <button class="step3 done" data-step="outline"><span class="n">1</span>剧本大纲</button><span class="stepArr">›</span>
+        <button class="step3 done" data-step="assets"><span class="n">2</span>角色、场景和道具</button><span class="stepArr">›</span>
+        <button class="step3 on" data-step="episodes"><span class="n">3</span>分集视频</button>
+      </div>
+    </div>
+    <div class="viewInner">
+      <div class="h2" style="font-size:20px">分集视频</div>
+      <div class="sub2">导演智能体已完成分集拆分决策 · 共 1 集</div>
+      <div style="margin-top:22px" id="epBox">
+        <div class="epLoad">
+          <div class="ph"></div>
+          <div style="flex:1">
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px"><div class="statusSpin"></div><b style="font-size:14px">分集拆分中…</b></div>
+            <div style="font-size:12px;color:var(--dim);line-height:1.8">导演 James：原剧本已明确标注第1集，总字数两百余字，低于单集300字常规下限，但叙事闭环完整——严格保持原始 1 集结构，不做强行拆解。</div>
+          </div>
+        </div>
+      </div>
+      <div class="flowBar">
+        <span class="msg">分集就绪后，进入片段编辑器生成视频</span>
+        <button class="btn ghost sm" onclick="location.href='assets.html'">上一步</button>
+        <button class="btn acc sm" id="epEnter" style="opacity:.4" onclick="enterStudio()">进入片段编辑 ◆60</button>
+      </div>
+    </div>
+  </section>
+</div>
+<div class="toast" id="toast"></div>
+<script src="shared.js"></script>
+<script>
+document.querySelectorAll(".step3").forEach(s=>s.onclick=()=>location.href=s.dataset.step+".html");
+let episodeReady=false;
+function epReady(){
+  episodeReady=true;
+  $("epBox").innerHTML=`<div class="epCard" onclick="enterStudio(true)">
+    <div class="cv"><img src="corridor.jpg" alt="第1集封面"><span class="pill ok" style="position:absolute;top:10px;left:10px"><span class="dot"></span>已拆分</span></div>
+    <div class="bd"><h4>第1集：异世囚笼</h4>
+      <div class="mt">共 3 个片段 · 总时长 00:37 · 9:16<br>片段1 穿越惊惶(13s) ｜ 片段2 质问与否认(14s) ｜ 片段3 预言·警告·无力挽留(10s)</div>
+      <div style="margin-top:12px"><span class="pill wip"><span class="dot"></span>点击进入片段编辑器</span></div>
+    </div></div>
+  <div class="epCard" style="margin-top:14px;opacity:.75" onclick="toast('第2集为草稿：大纲已延展，待导演智能体拆分决策（可在 STEP1 编辑草稿）')">
+    <div class="cv" style="background:linear-gradient(140deg,#232a4d,#2b2440)"><span style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-weight:800;color:rgba(255,255,255,.7)">第2集 · 草稿</span><span class="pill no" style="position:absolute;top:10px;left:10px"><span class="dot"></span>未拆分</span></div>
+    <div class="bd"><h4>第2集：未命名</h4>
+      <div class="mt">草稿 · 由第1集结尾钩子自动延展<br>林晚被高层约谈 · 止水暗中现身提醒 · 监视任务坐实</div>
+      <div style="margin-top:12px"><span class="pill no">待拆分</span></div>
+    </div></div>`;
+  $("epEnter").style.opacity="1";
+  toast("分集拆分完成：第1集 · 异世囚笼（3 片段 / 37s）");
+}
+function enterStudio(free){
+  if(!episodeReady){toast("分集拆分中，请稍候…");return}
+  if(free){setUnlocked(4);location.href="studio.html";return}
+  if(!spend(60))return;
+  setUnlocked(4);toast("已进入片段编辑器（◆60）");setTimeout(()=>location.href="studio.html",500);
+}
+setTimeout(epReady,1800);
+</script>
+</body>
+</html>

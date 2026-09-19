@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>创意对话 · AI 创作 — Hogee</title>
+<link rel="stylesheet" href="shared.css">
+</head>
+<body data-page="creative">
+<aside id="sideNav">
+  <div class="logo">H</div>
+  <a class="navItem" href="index.html" data-nav="home"><span class="ico">🏠</span>首页</a>
+  <a class="navItem" href="idea.html" data-nav="idea"><span class="ico">💡</span>创意</a>
+  <a class="navItem" href="create.html" data-nav="create"><span class="ico">🎬</span>创作</a>
+  <a class="navItem" href="canvas.html" data-nav="canvas"><span class="ico">🕸</span>画布</a>
+  <a class="navItem" href="asset.html" data-nav="asset"><span class="ico">📁</span>资产</a>
+  <a class="navItem" href="space.html" data-nav="space"><span class="ico">🧊</span>空间</a>
+  <button class="navItem" data-nav="team"><span class="ico">👥</span>团队</button>
+  <div class="spacer"></div>
+</aside>
+<div id="main">
+  <header id="topBar">
+    <div class="brand"><div class="mark">H</div><div><b>Hogee</b><br><span>AI 短剧工坊 · 逆命木叶</span></div></div>
+    <div style="flex:1"></div>
+    <button class="tbBtn" onclick="toast('演示：领取创作者权益（新人 ◆200 积分）')">领取创作者权益</button>
+    <button class="tbBtn" onclick="toast('演示：商务合作对接')">商务合作</button>
+    <button id="themeBtn" title="切换 明亮 / 暗色主题">☀️</button>
+    <button class="tbBtn vip">⚡ 开通会员</button>
+    <div id="creditChip">◆ <span id="creditNum">940</span></div>
+    <button class="bell" onclick="toggleNotif(event)">🔔<i></i></button>
+    <div class="avatar">赵</div>
+  </header>
+
+  <section class="page" style="display:flex;overflow:hidden">
+    <div class="crSide">
+      <button class="back" style="margin:0 5px 10px;font-size:12px;color:var(--sub);padding:6px 10px" onclick="location.href='idea.html'">‹ 返回创意首页</button>
+      <div class="fRow"><label>归属项目</label><select><option>默认项目</option><option>逆命木叶企划</option></select></div>
+      <button class="btn acc crNew" onclick="newChat()">＋ 新建对话</button>
+      <div class="lbl">最近对话</div>
+      <div id="chatList">
+        <div class="crItem on" onclick="loadChat(0)"><div class="t">火影忍者 宇智波镜大战 宇智波斑</div><div class="d">2026-09-17 · 图像 ×1</div></div>
+        <div class="crItem" onclick="loadChat(1)"><div class="t">木叶长廊 月夜 场景概念图</div><div class="d">2026-09-16 · 图像 ×3</div></div>
+        <div class="crItem" onclick="loadChat(2)"><div class="t">林晚 素色和服 三视图</div><div class="d">2026-09-15 · 图像 ×3</div></div>
+        <div class="crItem" onclick="loadChat(3)"><div class="t">片段1 扶柱独白 视频草稿</div><div class="d">2026-09-14 · 视频 ×2</div></div>
+      </div>
+    </div>
+    <div class="crMain">
+      <div class="crFlow" id="crFlow"></div>
+      <div class="crInputBar">
+        <div class="crInputRow">
+          <div class="selBox" style="cursor:pointer" onclick="switchTab(this)"><b>🖼 图像</b></div>
+          <input class="crInput" id="crInput" placeholder="让创作随灵感而生 —— 描述你想要的画面 / 角色对峙 / 场景概念…" onkeydown="if(event.key==='Enter')askGen()">
+          <button class="btn acc" onclick="askGen()">✦ 生成</button>
+        </div>
+        <div class="crFoot">
+          <span>模型 <b style="color:#a78bfa">Seedream_4.5</b>（图像）/ Seedance 2.0（视频）</span>
+          <span>画质 2K</span><span>比例 9:16</span><span>数量 1</span>
+          <span style="margin-left:auto">当前余额 ◆<span id="crBal">940</span></span>
+        </div>
+      </div>
+    </div>
+  </section>
+</div>
+
+<div class="modalMask" id="modalConfirm">
+  <div class="modal">
+    <div class="modalHead"><h3>参数确认</h3><button class="x" onclick="closeModal('modalConfirm')">×</button></div>
+    <div class="fRow"><label>提示词</label><input id="cfPrompt" readonly></div>
+    <div class="fRow"><label>模型</label><input id="cfModel" value="Seedream_4.5" readonly></div>
+    <div class="f3 fRow">
+      <div><label>画质</label><input value="2K" readonly></div>
+      <div><label>比例</label><input value="9:16" readonly></div>
+      <div><label>生成数量</label><input value="1" readonly></div>
+    </div>
+    <div style="display:flex;justify-content:space-between;font-size:12px;color:var(--sub);padding:4px 2px 2px">
+      <span>当前余额：<b id="cfBal">940</b> 积分</span><span>合计 <b style="color:#a78bfa" id="cfFee">3</b> 积分</span>
+    </div>
+    <div class="modalFoot"><button class="btn ghost sm" onclick="closeModal('modalConfirm')">取消</button><button class="btn acc sm" onclick="startGen()">开始生成</button></div>
+  </div>
+</div>
+<div class="toast" id="toast"></div>
+<script src="shared.js"></script>
+<script>
+$("crBal").textContent=getCredit();
+let tab="图像",curChat=0,lastPrompt="";
+const CHATS=[
+ {prompt:"火影忍者 宇智波镜大战 宇智波斑",kind:"image",img:"itachi.png",model:"Seedream_4.5",meta:"9:16 · 2K",fee:3},
+ {prompt:"木叶长廊 月夜 场景概念图 冷白月光",kind:"image",img:"corridor.jpg",model:"Seedream_4.5",meta:"16:9 · 2K",fee:3},
+ {prompt:"林晚 素色和服 正侧背三视图",kind:"image",img:"linwan.png",model:"Seedream_4.5",meta:"9:16 · 2K",fee:3},
+ {prompt:"片段1 扶柱独白 月夜廊柱 竖屏 13s",kind:"video",vid:"clip1.mp4",model:"Seedance 2.0",meta:"9:16 · 13s",fee:5}
+];
+function resCard(c,done){
+  const media=c.kind==="video"
+    ?`<video src="${c.vid}" controls autoplay muted loop playsinline style="width:100%;display:block;border-radius:11px;background:#000"></video>`
+    :`<img src="${c.img}" alt="生成结果">`;
+  const meta=`${c.model} ｜ ${c.meta} ｜ ${c.kind==="image"?"图片":"视频"}生成 ◆${c.fee}`;
+  return `<div class="hd"><b style="color:#a78bfa">✦ AI 创作</b><span>${done?"生成完成 · 共 1 个结果":"让创作随灵感而生"}</span></div>
+  <div class="im">${media}<span class="aigcTag">AI生成</span></div>
+  <div class="edHd"></div>
+  <div class="ops">
+    <button class="btn ghost sm" onclick="regenLast()">↻ 重新生成</button>
+    <button class="btn ghost sm" onclick="${c.kind==="video"?"downloadDemo('创意对话_视频结果.mp4')":`dlFile('${c.img}')`}">⬇ 下载</button>
+    <button class="btn ghost sm" onclick="addProj(this)">＋ 加入项目</button>
+    <span class="meta">${meta}</span>
+  </div>
+  ${c.kind==="image"?`<div class="ops" style="margin-top:8px">
+    <span style="font-size:10.5px;color:var(--dim)">编辑工具：</span>
+    <button class="btn ghost sm" onclick="applyTool('cut',this)">✂ AI 抠图</button>
+    <button class="btn ghost sm" onclick="applyTool('erase',this)">🧽 擦除</button>
+    <button class="btn ghost sm" onclick="applyTool('repaint',this)">🖌 标记改图</button>
+    <button class="btn ghost sm" onclick="applyTool('expand',this)">🔲 扩图</button>
+    <button class="btn ghost sm" onclick="applyTool('hd',this)">✨ 变清晰</button>
+  </div>`:""}`;
+}
+function loadChat(i){
+  curChat=i;
+  document.querySelectorAll("#chatList .crItem").forEach((c,j)=>c.classList.toggle("on",j===i));
+  const c=CHATS[i];
+  $("crFlow").innerHTML=`<div class="crMsg user"><div class="who">🧑 oTtb0u（我）</div><div class="bub">${c.prompt}</div></div>
+  <div class="crRes">${resCard(c,true)}</div>`;
+  lastPrompt=c.prompt;
+  toast("已打开历史对话（"+(c.kind==="image"?"图像":"视频")+" 结果）");
+}
+function switchTab(el){tab=tab==="图像"?"视频":"图像";el.innerHTML=`<b>${tab==="图像"?"🖼 图像":"🎥 视频"}</b>`;toast("已切换到"+tab+"生成（模型："+(tab==="图像"?"Seedream_4.5":"Seedance 2.0")+"）")}
+function newChat(){
+  curChat=-1;
+  document.querySelectorAll("#chatList .crItem").forEach(c=>c.classList.remove("on"));
+  $("crFlow").innerHTML="";lastPrompt="";
+  toast("已新建对话：输入提示词开始生成");
+}
+function dlFile(src){const a=document.createElement("a");a.href=src;a.download=src.split("/").pop();document.body.appendChild(a);a.click();a.remove();toast("已开始下载："+a.download)}
+function addProj(btn){
+  event.stopPropagation();
+  popupOpts(btn,"加入项目",[{n:"逆命木叶企划",d:"角色 4 · 场景 1 · 进行中"},{n:"默认项目",d:"空项目"},{n:"＋ 新建项目",d:"创建后加入"}],n=>toast("已加入项目「"+n+"」资产库（可在片段提示词中 @ 引用）"));
+}
+const TOOLS={
+ cut:{l:"✂ 抠图",msg:"AI 抠图完成：白底已抠除（透明底 · mix-blend 演示）",fx:(im,box)=>{box.classList.add("cutout")}},
+ erase:{l:"🧽 擦除",msg:"擦除完成：多余元素已移除",fx:im=>im.style.filter+=" brightness(1.04)"},
+ repaint:{l:"🖌 局部重绘",msg:"标记改图完成：标记区域已按提示词重绘",fx:im=>im.style.filter+=" hue-rotate(6deg) saturate(1.08)"},
+ expand:{l:"🔲 扩图",msg:"扩图完成：已外扩至 16:9 构图（AI 补全边缘）",fx:(im,box)=>{box.classList.add("expanded")}},
+ hd:{l:"✨ 4K",msg:"变清晰完成：2K → 4K 超分（细节增强）",fx:im=>im.style.filter+=" contrast(1.16) saturate(1.14) brightness(1.03)"}
+};
+function applyTool(t,btn){
+  const card=btn.closest(".crRes");const box=card.querySelector(".im");const im=card.querySelector("img");
+  if(!im){toast("该结果为视频，编辑工具仅支持图像");return}
+  const tl=TOOLS[t];tl.fx(im,box);
+  const hd=card.querySelector(".edHd");
+  hd.insertAdjacentHTML("beforeend",`<span>${tl.l} ✓</span>`);
+  toast(tl.msg);
+}
+function regenLast(){
+  if(!lastPrompt){toast("当前对话暂无提示词");return}
+  $("crInput").value=lastPrompt;askGen();
+}
+function askGen(){
+  const v=$("crInput").value.trim();
+  if(!v){toast("请输入提示词，例如：火影忍者 宇智波镜大战 宇智波斑");return}
+  $("cfPrompt").value=v;$("cfBal").textContent=getCredit();
+  const fee=tab==="图像"?3:5;
+  $("cfModel").value=tab==="图像"?"Seedream_4.5":"Seedance 2.0";
+  $("cfFee").textContent=fee;
+  openModal("modalConfirm");
+}
+function startGen(){
+  const v=$("cfPrompt").value;
+  const fee=tab==="图像"?3:5;
+  closeModal("modalConfirm");
+  if(!spend(fee))return;
+  $("crBal").textContent=getCredit();
+  lastPrompt=v;
+  const flow=$("crFlow");
+  const msg=document.createElement("div");msg.className="crMsg user";
+  msg.innerHTML=`<div class="who">🧑 oTtb0u（我）</div><div class="bub">${v.replace(/</g,"&lt;")}</div>`;
+  flow.appendChild(msg);flow.scrollTop=flow.scrollHeight;
+  const res=document.createElement("div");res.className="crRes";
+  const m=tab==="图像"?"Seedream_4.5 · 2K · 9:16":"Seedance 2.0 · 9:16 · 13s";
+  res.innerHTML=`<div class="hd"><b style="color:#a78bfa">✦ AI 创作</b><span>生成中…</span></div>
+  <div class="crGenSpin"><div class="statusSpin" style="width:26px;height:26px;border-width:3px"></div><div>${m} · ◆${fee}</div></div>`;
+  flow.appendChild(res);flow.scrollTop=flow.scrollHeight;
+  const c=tab==="图像"
+    ?{prompt:v,kind:"image",img:Math.random()<.5?"linwan.png":"itachi.png",model:"Seedream_4.5",meta:"9:16 · 2K",fee:3}
+    :{prompt:v,kind:"video",vid:"clip1.mp4",model:"Seedance 2.0",meta:"9:16 · 13s",fee:5};
+  setTimeout(()=>{
+    res.innerHTML=resCard(c,true);
+    flow.scrollTop=flow.scrollHeight;
+    toast((c.kind==="image"?"图片":"视频")+"已生成完成！你可以重新生成或下载。");
+  },tab==="图像"?1800:2400);
+  $("crInput").value="";
+}
+loadChat(0);
+</script>
+</body>
+</html>

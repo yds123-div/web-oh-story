@@ -1,0 +1,326 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>片段编辑器 · 第1集：异世囚笼 — 逆命木叶</title>
+<link rel="stylesheet" href="shared.css">
+</head>
+<body data-page="studio">
+<aside id="sideNav">
+  <div class="logo">H</div>
+  <a class="navItem" href="index.html" data-nav="home"><span class="ico">🏠</span>首页</a>
+  <a class="navItem" href="idea.html" data-nav="idea"><span class="ico">💡</span>创意</a>
+  <a class="navItem" href="create.html" data-nav="create"><span class="ico">🎬</span>创作</a>
+  <a class="navItem" href="canvas.html" data-nav="canvas"><span class="ico">🕸</span>画布</a>
+  <a class="navItem" href="asset.html" data-nav="asset"><span class="ico">📁</span>资产</a>
+  <a class="navItem" href="space.html" data-nav="space"><span class="ico">🧊</span>空间</a>
+  <button class="navItem" data-nav="team"><span class="ico">👥</span>团队</button>
+  <div class="spacer"></div>
+</aside>
+<div id="main">
+  <header id="topBar">
+    <div class="brand"><div class="mark">H</div><div><b>Hogee</b><br><span>AI 短剧工坊 · 逆命木叶</span></div></div>
+    <div style="flex:1"></div>
+    <button class="tbBtn" onclick="toast('演示：领取创作者权益（新人 ◆200 积分）')">领取创作者权益</button>
+    <button class="tbBtn" onclick="toast('演示：商务合作对接')">商务合作</button>
+    <button id="themeBtn" title="切换 明亮 / 暗色主题">☀️</button>
+    <button class="tbBtn vip">⚡ 开通会员</button>
+    <div id="creditChip">◆ <span id="creditNum">940</span></div>
+    <button class="bell" onclick="toggleNotif(event)">🔔<i></i></button>
+    <div class="avatar">赵</div>
+  </header>
+
+  <section id="view-studio" class="on">
+    <div class="studioHead">
+      <button class="back" onclick="location.href='episodes.html'">‹</button>
+      <div class="selBox" onclick="event.stopPropagation();popupOpts(this,'分集切换',[{n:'第1集 · 异世囚笼',d:'3 片段 · 00:37 · 进行中',cur:true},{n:'第2集 · 未命名（草稿）',d:'待导演智能体拆分后进入编辑'}],pickEp)">集：<b>第1集 · 异世囚笼</b> ▾</div>
+      <span class="st">总片段数：<b style="color:#a78bfa" id="segTotal">3</b> ｜ 总时长：<b style="color:#a78bfa" id="segDur">00:37</b></span>
+      <div class="right">
+        <div class="selBox" onclick="event.stopPropagation();popupModel(this)">模型 <b>S 2.0-fast</b> ▾</div>
+        <div class="selBox" onclick="event.stopPropagation();popupOpts(this,'风格库（全局注入）',[{n:'赛博朋克电影',d:'冷调霓虹 · 高对比（当前项目）',cur:true},{n:'国漫写实',d:'厚涂 · 柔光'},{n:'赛璐璐动画',d:'日式 · 高饱和'},{n:'水墨国风',d:'留白 · 晕染'}],pickStyle)">🎨 <b>赛博朋克电影</b> ▾</div>
+        <div class="selBox" onclick="event.stopPropagation();popupOpts(this,'画面比例',[{n:'9:16',d:'竖屏 · 短剧（当前）',cur:true},{n:'16:9',d:'横屏 · 影视'},{n:'1:1',d:'方画幅'}],pickRatio)"> <b>9:16</b> ▾</div>
+        <div class="selBox" onclick="event.stopPropagation();popupOpts(this,'清晰度',[{n:'480P',d:'草稿迭代 · 低积分'},{n:'720P',d:'标准出片（当前）',cur:true},{n:'1080P',d:'会员'},{n:'4K',d:'会员 · 生图 9积分/张'}],pickRes)"><b>720p</b> ▾</div>
+        <button class="btn ghost sm" onclick="openModal('modalExport')">⬇ 合成</button>
+      </div>
+    </div>
+    <div class="studioBody">
+      <div class="libCol">
+        <div class="h">资产库 <span class="add" onclick="toast('演示：添加资产')">＋</span></div>
+        <div class="libSec">角色 <span>2</span></div>
+        <div class="libCard" onclick="toast('已引用：林晚-默认形象')"><div class="im"><img src="linwan.png" alt="林晚"></div><div class="nm">林晚-默认形象</div></div>
+        <div class="libCard" onclick="toast('已引用：宇智波鼬-默认形象')"><div class="im"><img src="itachi.png" alt="鼬"></div><div class="nm">宇智波鼬-默认形象</div></div>
+        <div class="libSec">场景 <span>1</span></div>
+        <div class="libCard" onclick="toast('已引用：木叶长廊-月夜')"><div class="im wide"><img src="corridor.jpg" alt="木叶长廊" style="object-position:center"></div><div class="nm">木叶长廊-月夜</div></div>
+        <div class="libSec">道具 <span>0</span></div>
+        <div style="font-size:10.5px;color:var(--dim);padding:2px 5px">暂无道具</div>
+        <div class="libSec">素材 <span>0</span></div>
+        <div style="font-size:10.5px;color:var(--dim);padding:2px 5px">暂无素材</div>
+      </div>
+      <div class="editCol">
+        <div class="segTabs" id="segTabs"></div>
+        <div class="editTip">片段时长请限制在 <b>4-15s</b>，输入 <b>@</b> 可快速调整镜头时长、引用角色、场景、素材</div>
+        <div class="promptBox">
+          <div class="pbh"><h4 id="pbTitle">片段 1</h4><span class="pill wip" id="pbState"><span class="dot"></span>已生成</span>
+            <span class="cnt"><span id="pbCnt">420</span> / 9000</span>
+            <button class="genBtn" id="genBtn" onclick="genClip()">生成 <span class="fee">◆1300</span></button>
+          </div>
+          <div class="promptText" id="promptText"></div>
+          <div class="progWrap" id="progWrap"><div class="progBar"><i id="progFill"></i></div><div class="progTxt" id="progTxt">排队中…</div></div>
+          <div class="shotList" id="shotList"></div>
+        </div>
+      </div>
+      <div class="prevCol">
+        <div class="prevPanel">
+          <div class="prevBox" id="prevBox">
+            <video id="vid" src="clip1.mp4" poster="corridor.jpg" preload="metadata" playsinline></video>
+            <div class="empty" id="prevEmpty"><div class="hex">▶</div>当前片段视频尚未生成<br><span style="font-size:10.5px;opacity:.7">点击左上「生成」开始创建</span></div>
+          </div>
+          <div class="prevBar">
+            <button class="playBtn" id="playIcon" onclick="togglePlay()">▶</button>
+            <div class="pBar" id="pBar" onclick="seekVid(event)"><i id="pFill"></i></div>
+            <span id="pTime">00:00 / 00:13</span>
+          </div>
+          <div class="prevMeta"><span id="prevRatio">9:16 · 480P</span><span id="prevTag">片段 1 · 真实生成结果</span></div>
+        </div>
+        <div class="audPanel">
+          <div class="h">🎙 音画同出 · 音轨 <span class="go" onclick="genDub()">生成配音</span></div>
+          <div id="audList"></div>
+        </div>
+      </div>
+    </div>
+    <div class="tlBar" id="tlBar">
+      <button class="tlPlay" onclick="togglePlay()">▶</button>
+      <span class="tlTime" id="tlTime">00:00 / 00:37</span>
+      <div class="tlClips" id="tlClips"></div>
+      <button class="tlNew" onclick="addSeg()">＋<span>新建片段</span></button>
+      <button class="tlMulti" id="tlMultiBtn" onclick="toggleMulti()">批量操作</button>
+    </div>
+  </section>
+</div>
+
+<div class="modalMask" id="modalPrompt">
+  <div class="modal">
+    <div class="modalHead"><h3>⚙ 全局设定（负面约束）</h3><button class="x" onclick="closeModal('modalPrompt')">×</button></div>
+    <textarea class="gpText">【全局设定】画面风格：赛博朋克电影。全程人物边界独立，自然表演，人物无穿插、无穿透；全程禁止出现字幕（黑屏字幕分镜除外）、禁止角色变脸、变装、形象突变；杜绝肢体畸形、扭曲、残缺等人体结构错误；禁止画面闪烁、跳变、卡顿、帧异常；全程无背景音乐、无 BGM，只保留对白与现场环境声。
+
+（此设定注入第1集全部 3 个片段的每一次生成）</textarea>
+    <div class="modalFoot"><button class="btn ghost sm" onclick="closeModal('modalPrompt')">取消</button><button class="btn white sm" onclick="closeModal('modalPrompt');toast('全局设定已保存，将注入后续所有生成')">保存</button></div>
+  </div>
+</div>
+<div class="modalMask" id="modalExport">
+  <div class="modal">
+    <div class="modalHead"><h3>⬇ 合成 / 导出</h3><button class="x" onclick="closeModal('modalExport')">×</button></div>
+    <div class="fRow"><label>导出范围</label><select><option>整集（片段 1-3 · 00:37）</option><option>仅当前片段</option></select></div>
+    <div class="f2 fRow">
+      <div><label>分辨率</label><select><option selected>720P</option><option>1080P（会员）</option><option>4K（会员）</option></select></div>
+      <div><label>格式</label><select><option>MP4</option><option>MOV</option></select></div>
+    </div>
+    <div class="fRow"><label>水印</label><select><option>无水印（会员）</option><option selected>带平台角标</option></select></div>
+    <div style="font-size:11px;color:var(--dim)">合成消耗按片段时长计费；未生成片段将自动跳过</div>
+    <div class="modalFoot"><button class="btn ghost sm" onclick="closeModal('modalExport')">取消</button><button class="btn acc sm" onclick="closeModal('modalExport');toast('已加入合成队列，完成后可在「空间」下载')">开始合成</button></div>
+  </div>
+</div>
+<div class="toast" id="toast"></div>
+<script src="shared.js"></script>
+<script>
+const SEGS=[
+ {no:1,dur:13,title:"穿越惊惶 · 扶柱独白",gen:true,vid:"clip1.mp4",
+  prompt:`<span class="refChip scene"><span class="th"><img src="corridor.jpg"></span>木叶长廊-月夜</span> 冷白月光洒在深色木地板上，两盏行灯未点亮，长廊空寂无声，只有不稳定的呼吸与轻微衣料声，由 2 个分镜组成。<br><span class="hd">分镜 1 <span class="t">⏱ 4s</span></span><span class="refChip role"><span class="th"><img src="linwan.png"></span>林晚-默认形象</span> 身着木叶制式素色和服，站在左侧近景原木廊柱旁一手扶柱，肩背未完全挺直，指尖贴柱细颤；视线游离长廊空处，低声独白<span class="vb">[音调偏低，音色质感细腻柔软，气息起伏带颤抖，语速缓慢]</span>：「明明只是在家看火影……一睁眼，就来到了这里。我知道所有人的结局，唯独不知道，自己该怎么活下去。」<br><span class="hd">分镜 2 <span class="t">⏱ 9s</span></span>切面部特写：阴影边缘压出 <span class="refChip role"><span class="th"><img src="itachi.png"></span>宇智波鼬-默认形象</span> 墨黑长袍衣摆一角，红色瞳孔先于面容显出微光；林晚听见缓慢脚步，胸口起伏骤停，眼睑微抬，视线转向右侧深处阴影，仍扶柱未动。`,
+  shots:[
+   {id:"c01",dur:4.0,kind:"全景",act:"林晚穿端正完整的木叶制式素色和服，站在廊柱旁以一手撑住柱身，肩背未完全挺直；视线游离长廊空处，喉间压下一口发颤的气，指尖贴着木面细细抖动。",who:"林晚（惊惶痛苦，低声断续）",line:"明明只是在家看火影……一睁眼，就来到了这里。我知道所有人的结局，唯独不知道，自己该怎么活下去。"},
+   {id:"c02",dur:9.0,kind:"特写→近景",act:"阴影边缘先压出鼬墨黑色长袍的一角，厚实衣摆随稳定步伐掠过幽暗木地板；红色瞳孔先于完整面容显出微光。林晚听见缓慢脚步，胸口起伏短促停住，眼睑微抬，视线从空长廊转向右侧深处阴影中的鼬，仍扶柱未动。"}]},
+ {no:2,dur:14,title:"质问与否认",gen:true,vid:"clip2.mp4",
+  prompt:`整体背景：场景设定在 <span class="refChip scene"><span class="th"><img src="corridor.jpg"></span>木叶长廊-月夜</span>，由 3 个分镜组成。<br><span class="hd">分镜 1 <span class="t">⏱ 3s</span></span>中景，镜头缓慢向左平移，冷白月光斜射粗糙木质地板形成明暗对比；<span class="refChip role"><span class="th"><img src="linwan.png"></span>林晚-默认形象</span> 与 <span class="refChip role"><span class="th"><img src="itachi.png"></span>宇智波鼬-默认形象</span> 相对而站，鼬在画面左侧深处廊柱阴影中缓步走向镜头前的林晚，停步对视，眉头微压、表情平静。<br><span class="hd">分镜 2 <span class="t">⏱ 4s</span></span>中景固定镜头，石质地灯光晕照亮两人之间的木地板；两人视线交互，鼬眼睑微收、目光锐利、眉头向内皱起，开口质问<span class="vb">[音调偏低，音色质感冷硬偏沉，声音厚重扎实，发音方式字正腔圆，气息平稳绵长，正常语速]</span>：「深夜在此，有何目的。长老安排你，来监视我？」<br><span class="hd">分镜 3 <span class="t">⏱ 7s</span></span>近景，越过鼬的右肩拍向画面右侧深处的林晚，冷月光打在林晚半边脸上；她起初略微低头，随后头部迅速抬起，眉头痛苦地蹙在一起，双眼微微睁大且眼眶泛红，急切否认<span class="vb">[音调偏低，音色质感细腻柔软，声音适中，气息起伏带颤抖，快速语速]</span>：「我不是来监视你的！鼬，我知道你将要背负什么，我不想看你走向那条绝路！」`,
+  shots:[
+   {id:"c03",dur:3.0,kind:"中景 · 缓慢左移",act:"冷白月光斜射粗糙木质地板形成明暗对比；林晚与鼬相对而站，鼬在画面左侧深处廊柱阴影中缓步走向镜头前的林晚，停步对视，眉头微压、表情平静。"},
+   {id:"c04",dur:4.0,kind:"中景 · 固定",act:"石质地灯光晕照亮两人之间的木地板；两人视线交互，鼬眼睑微收、目光锐利、眉头向内皱起。",who:"鼬",voice:"[音调偏低，音色质感冷硬偏沉，声音厚重扎实，发音方式字正腔圆，气息平稳绵长，正常语速]",line:"深夜在此，有何目的。长老安排你，来监视我？"},
+   {id:"c05",dur:7.0,kind:"近景 · 过肩（越鼬右肩）",act:"冷月光打在林晚半边脸上；她起初略微低头，随后头部迅速抬起，眉头痛苦地蹙在一起，双眼微微睁大且眼眶泛红，急切否认。",who:"林晚",voice:"[音调偏低，音色质感细腻柔软，声音适中，气息起伏带颤抖，快速语速]",line:"我不是来监视你的！鼬，我知道你将要背负什么，我不想看你走向那条绝路！"}]},
+ {no:3,dur:10,title:"预言 · 警告 · 无力挽留",gen:false,vid:"clip3.mp4",
+  prompt:`<span class="refChip scene"><span class="th"><img src="corridor.jpg"></span>木叶长廊-月夜</span> 月光稳定，行灯未亮，现场空寂只余两人呼吸，由 2 个分镜组成。<br><span class="hd">分镜 1 <span class="t">⏱ 6s</span></span><span class="refChip role"><span class="th"><img src="linwan.png"></span>林晚-默认形象</span> 视线死死定在 <span class="refChip role"><span class="th"><img src="itachi.png"></span>宇智波鼬-默认形象</span> 脸上，眼眶泛红：「我不想看你走向那条绝路！」鼬眼睑轻收窄，唇角极浅勾起便被红瞳深处的悲凉拖冷<span class="vb">[音调偏低，音色质感冷硬偏沉，气息平稳绵长，缓慢语速]</span>：「预言？外来之人，不要妄言命运。」随即肩线转开，原地转向月洞门方向。<br><span class="hd">分镜 2 <span class="t">⏱ 4s</span></span>鼬背向林晚，肩背稳定没有回头，低沉警告：「离我远一点，否则，你会被拖入深渊。」警告落下，林晚双手扶柱、身体无力下滑，指尖细颤传到袖口；画面收暗，居中白色字幕：「我知晓你的悲剧，却无法改写。」`,
+  shots:[
+   {id:"c06",dur:6.0,kind:"特写",act:"林晚视线死死定在鼬脸上，喉咙在「绝路」处明显收紧；鼬眼睑轻轻收窄，唇角极浅地勾起一点弧度，笑意刚形成便被红瞳深处的悲凉拖冷，随即肩线转开，原地转向背景月洞门。",who:"林晚 → 鼬",line:"「我不想看你走向那条绝路！」 / 「预言？外来之人，不要妄言命运。」"},
+   {id:"c07",dur:4.0,kind:"中景 → 黑屏",act:"鼬背向林晚朝向长廊深处，肩背稳定没有回头；警告落下后林晚双手扶柱、身体无力下滑，泛红的眼睛停在鼬背影上。画面收暗切黑，居中出现白色字幕。",who:"鼬（冷淡警告，低沉缓慢）",line:"离我远一点，否则，你会被拖入深渊。 △ 黑屏字幕：我知晓你的悲剧，却无法改写。"}]}
+];
+const SEG_CNT=["420","742","386"];
+let curSeg=0,playing=false;
+const vid=$("vid");
+function buildSegTabs(){
+  const box=$("segTabs");box.innerHTML="";
+  SEGS.forEach((s,i)=>{
+    const b=document.createElement("button");b.className="segTab"+(i===curSeg?" on":"");
+    b.innerHTML=`片段 ${s.no} · ${s.dur}s`;
+    b.onclick=()=>loadSeg(i);
+    box.appendChild(b);
+  });
+}
+function renderPrompt(){
+  const s=SEGS[curSeg];
+  $("pbTitle").textContent="片段 "+s.no+" · "+s.title;
+  $("pbState").className="pill "+(s.gen?"ok":"no");
+  $("pbState").innerHTML=`<span class="dot"></span>`+(s.gen?"已生成":"未生成");
+  $("pbCnt").textContent=s.gen?SEG_CNT[curSeg]:"0";
+  syncGenBtn();
+  $("promptText").innerHTML=s.prompt;
+  $("shotList").innerHTML=`<div class="editTip" style="margin:0 0 8px">分镜详情（点击展开 · 演示数据）</div>`+s.shots.map(c=>`
+    <div class="shotItem" id="shot-${c.id}">
+      <div class="shotTop" onclick="this.parentElement.classList.toggle('open')"><span class="shotId">${c.id}</span><span class="shotDur">${c.dur.toFixed(1)}s</span><span class="shotKind">${c.kind}</span><span style="margin-left:auto;font-size:10px;color:var(--dim)">点击展开</span></div>
+      <div class="shotBody"><div class="shotAct">${c.act}</div>${c.voice?`<div class="vb" style="margin:6px 0">${c.voice}</div>`:""}${c.line?`<div class="shotLine"><span class="who">${c.who}：</span>${c.line}</div>`:""}</div>
+    </div>`).join("");
+}
+function syncGenBtn(){
+  const s=SEGS[curSeg];
+  $("genBtn").innerHTML=(s.gen?"再次生成 ":"生成 ")+`<span class="fee">◆${s.gen?406:1300}</span>`;
+}
+function loadSeg(i){curSeg=i;buildSegTabs();renderPrompt();buildClips();syncVideo()}
+function syncVideo(){
+  const s=SEGS[curSeg];
+  vid.pause();playing=false;$("playIcon").textContent="▶";
+  document.querySelector(".tlPlay").textContent="▶";
+  if(s.gen){$("prevEmpty").style.display="none";vid.style.display="block";
+    vid.src=s.vid;vid.load();vid.currentTime=0;
+    $("prevRatio").textContent="9:16 · 480P";
+    $("prevTag").textContent="片段 "+s.no+" · 真实生成结果";
+  }else{$("prevEmpty").style.display="block";vid.style.display="none";
+    $("prevRatio").textContent="9:16 · 720p";
+    $("prevTag").textContent="片段 "+s.no+" · 尚未生成";
+  }
+  updateVidUI();
+}
+function togglePlay(){
+  const s=SEGS[curSeg];
+  if(!s.gen){toast("片段 "+s.no+" 尚未生成，请先点击「生成」");return}
+  playing=!playing;
+  if(playing)vid.play();else vid.pause();
+  $("playIcon").textContent=playing?"⏸":"▶";
+  document.querySelector(".tlPlay").textContent=playing?"⏸":"▶";
+}
+vid.addEventListener("timeupdate",()=>{if(playing)updateVidUI()});
+vid.addEventListener("ended",()=>{playing=false;$("playIcon").textContent="▶";document.querySelector(".tlPlay").textContent="▶"});
+function updateVidUI(){
+  const s=SEGS[curSeg];
+  const p=Math.min(1,vid.currentTime/(vid.duration||1));
+  $("pFill").style.width=(p*100)+"%";
+  const f=n=>String(Math.floor(n/60)).padStart(2,"0")+":"+String(Math.floor(n%60)).padStart(2,"0");
+  $("pTime").textContent=f(vid.currentTime)+" / "+f(s.dur);
+  const sum=SEGS.slice(0,curSeg).reduce((a,x)=>a+x.dur,0)+Math.min(vid.currentTime,s.dur);
+  $("tlTime").textContent=f(sum)+" / "+f(SEGS.reduce((a,x)=>a+x.dur,0));
+}
+function seekVid(e){
+  if(!SEGS[curSeg].gen)return;
+  const r=e.currentTarget.getBoundingClientRect();
+  vid.currentTime=Math.max(0,Math.min(1,(e.clientX-r.left)/r.width))*(vid.duration||SEGS[curSeg].dur);
+  updateVidUI();
+}
+function buildClips(){
+  const box=$("tlClips");box.innerHTML="";
+  SEGS.forEach((s,i)=>{
+    const d=document.createElement("div");
+    d.className="tlClip"+(i===curSeg?" sel":"")+(s.gen?"":" emptyC");
+    d.draggable=!multiMode;
+    d.innerHTML=`<span class="chk2" onclick="event.stopPropagation();this.parentElement.classList.toggle('checked');syncMultiBtn()">✓</span>
+      <div class="im">${s.gen?`<video src="${s.vid}#t=1" preload="metadata" muted playsinline></video><span style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:#fff;font-size:13px;background:rgba(0,0,0,.22)">▶</span><span class="resTag">480P</span>`:`<span class="no">${s.no}</span>`}</div>
+      <div class="ft"><span class="st"><i></i>${s.gen?"已生成":"未生成"}</span><span class="du">00:${String(s.dur).padStart(2,"0")}</span></div>`;
+    d.onclick=()=>{if(multiMode){d.classList.toggle("checked");syncMultiBtn()}else loadSeg(i)};
+    d.addEventListener("dragstart",e=>{dragFrom=i});
+    d.addEventListener("dragover",e=>{e.preventDefault();d.classList.add("dragOver")});
+    d.addEventListener("dragleave",()=>d.classList.remove("dragOver"));
+    d.addEventListener("drop",e=>{e.preventDefault();d.classList.remove("dragOver");const t=SEGS.splice(dragFrom,1)[0];SEGS.splice(i,0,t);curSeg=i;buildSegTabs();renderPrompt();buildClips();syncVideo();toast("片段顺序已调整：片段 "+t.no+" 移至第 "+(i+1)+" 位")});
+    box.appendChild(d);
+  });
+  $("segTotal").textContent=SEGS.length;
+  const tot=SEGS.reduce((a,x)=>a+x.dur,0);
+  $("segDur").textContent="00:"+String(tot).padStart(2,"0");
+  renderAud();
+}
+let dragFrom=0,multiMode=false;
+function syncMultiBtn(){
+  const n=document.querySelectorAll(".tlClip.checked").length;
+  $("tlMultiBtn").textContent=multiMode?("批量操作（已选 "+n+"）"):"批量操作";
+}
+function toggleMulti(){
+  if(multiMode){showBatchMenu();return}
+  multiMode=true;
+  $("tlBar").classList.add("multi");
+  toast("多选模式：勾选片段后再次点「批量操作」执行");
+  syncMultiBtn();buildClips();
+}
+function exitMulti(){multiMode=false;$("tlBar").classList.remove("multi");document.querySelectorAll(".tlClip.checked").forEach(c=>c.classList.remove("checked"));syncMultiBtn();buildClips()}
+function showBatchMenu(){
+  const sel=[...document.querySelectorAll(".tlClip.checked")].map(c=>[...c.parentElement.children].indexOf(c)).filter(i=>i>-1);
+  if(!sel.length){toast("请先勾选要批量操作的片段");return}
+  popupOpts($("tlMultiBtn"),"批量操作 · 已选 "+sel.length+" 个片段",[
+    {n:"批量重新生成",d:"保持提示词与资产一致性 · 按时长计积分"},
+    {n:"批量删除片段",d:"不可撤销（至少保留 1 个片段）"},
+    {n:"批量导出选中",d:"拼接选中片段为单个 MP4"},
+    {n:"退出多选",d:"返回单选模式"}
+  ],act=>{
+    if(act==="批量重新生成"){
+      sel.forEach(i=>{SEGS[i].gen=true});
+      toast("已提交 "+sel.length+" 个片段重新生成（演示：即时完成）");
+      exitMulti();buildClips();syncVideo();
+    }else if(act==="批量删除"){
+      if(sel.length>=SEGS.length){toast("至少保留 1 个片段");return}
+      sel.sort((a,b)=>b-a).forEach(i=>SEGS.splice(i,1));
+      curSeg=0;toast("已删除 "+sel.length+" 个片段");
+      exitMulti();buildSegTabs();renderPrompt();buildClips();syncVideo();
+    }else if(act==="批量导出选中"){
+      toast("已加入导出队列：选中 "+sel.length+" 个片段将拼接导出");
+      exitMulti();
+    }else{exitMulti()}
+  });
+}
+function pickEp(n){
+  if(n.includes("第2集")){toast("第2集为草稿：待导演智能体完成分集拆分后可进入编辑");return}
+  toast("已在第1集 · 异世囚笼");
+}
+function pickStyle(n){toast("风格已切换：「"+n+"」· 将全局注入后续所有生成")}
+function pickRatio(n){toast("画面比例已切换："+n+"（片段将按新比例生成）")}
+function pickRes(n){toast("清晰度已切换："+n+(n==="4K"||n==="1080P"?"（会员权益）":""))}
+function addSeg(){
+  if(SEGS.length>=8){toast("演示上限：单集最多 8 个片段");return}
+  const no=SEGS.length+1;
+  SEGS.push({no,dur:4,title:"新片段 · 待编排",gen:false,vid:"clip1.mp4",
+    prompt:`<span class="refChip scene"><span class="th"><img src="corridor.jpg"></span>木叶长廊-月夜</span> （新片段 · 点击编辑提示词，@ 引用角色 / 场景 / 素材）`,
+    shots:[]});
+  curSeg=SEGS.length-1;
+  buildSegTabs();renderPrompt();buildClips();syncVideo();
+  toast("片段 "+no+" 已创建（默认 4s · 4-15s 限制）");
+}
+/* 音画同出 · 音轨 */
+const AUDS=[
+ {nm:"c01 林晚 · 独白",d:4,voice:"细腻柔软 · 气息带颤",st:"已合成"},
+ {nm:"c04 鼬 · 质问",d:4,voice:"冷硬偏沉 · 字正腔圆",st:"已合成"},
+ {nm:"c05 林晚 · 否认",d:7,voice:"急促带颤 · 快速语速",st:"待生成"},
+ {nm:"环境声 · 夜风/衣料",d:37,voice:"现场底声 · 无 BGM",st:"已合成"}
+];
+function renderAud(){
+  $("audList").innerHTML=AUDS.map(a=>{
+    const bars=Array.from({length:26},()=>`<i style="height:${3+Math.round(Math.random()*13)}px"></i>`).join("");
+    return `<div class="audRow"><span class="nm" title="${a.nm}">${a.nm}</span><span class="wave">${bars}</span><button class="pl" onclick="toast('试听：${a.voice}（演示无声）')">▶</button><span class="st2">${a.st}</span></div>`;
+  }).join("");
+}
+function genDub(){
+  toast("音画同出：按台词语音标注生成配音并与画面对齐…");
+  setTimeout(()=>{AUDS.forEach(a=>a.st="已合成");renderAud();toast("配音生成完成：对白 + 环境声已对齐画面时轴（音画同出）")},1600);
+}
+function genClip(){
+  const s=SEGS[curSeg];
+  const btn=$("genBtn"),wrap=$("progWrap"),fill=$("progFill"),txt=$("progTxt");
+  btn.disabled=true;btn.style.opacity=.55;wrap.style.display="block";
+  const steps=["排队中…","注入全局负面设定…","资产一致性对齐（林晚/鼬/木叶长廊）…","生成关键帧（赛博朋克电影 · 9:16）…","视频合成 S 2.0-fast…","音轨：对白 + 现场环境声…"];
+  let p=0,si=0;txt.textContent=steps[0];
+  const iv=setInterval(()=>{
+    p+=4+Math.random()*7;if(p>100)p=100;
+    fill.style.width=p+"%";
+    const ns=Math.min(steps.length-1,Math.floor(p/100*steps.length));if(ns!==si){si=ns;txt.textContent=steps[si]}
+    if(p>=100){clearInterval(iv);txt.textContent="✓ 生成完成";
+      setTimeout(()=>{wrap.style.display="none";fill.style.width="0";btn.disabled=false;btn.style.opacity=1;
+        s.gen=true;renderPrompt();buildClips();syncVideo();
+        toast("片段 "+s.no+" 视频已生成（真实结果 · 480P）");
+      },500);}
+  },170);
+}
+buildSegTabs();renderPrompt();buildClips();syncVideo();
+</script>
+</body>
+</html>

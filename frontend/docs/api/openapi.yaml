@@ -1,0 +1,996 @@
+openapi: 3.1.0
+info:
+  title: DeepSFV API
+  version: 0.9.0
+  description: |
+    前后端唯一接口契约。统一前缀 `/api`。
+    异步任务：提交 `POST /api/{resource}/tasks` → 轮询 `GET /api/tasks/{taskId}`。
+    本切片含 outline / assets / episode-split / segments / video / export / templates / notifications。
+servers:
+  - url: /api
+paths:
+  /projects:
+    get:
+      operationId: listProjects
+      summary: 项目列表（含存储用量）
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: 项目列表
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProjectListResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+    post:
+      operationId: createProject
+      summary: 新建项目
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateProjectBody'
+      responses:
+        '201':
+          description: 已创建
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Project'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  /projects/{id}:
+    patch:
+      operationId: patchProject
+      summary: 重命名项目
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name:
+                  type: string
+      responses:
+        '200':
+          description: 更新后的项目
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Project'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /credits:
+    get:
+      operationId: getCredits
+      summary: 积分余额（只读）
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: 当前余额
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreditsResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  /projects/{id}/outline-tasks:
+    post:
+      operationId: submitOutlineTask
+      summary: 提交剧本大纲解读任务
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OutlineTaskBody'
+      responses:
+        '202':
+          description: 已受理
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SubmitTaskResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /tasks/{taskId}:
+    get:
+      operationId: getTask
+      summary: 查询异步任务状态
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: taskId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 任务状态
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TaskStatus'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /projects/{id}/outline:
+    get:
+      operationId: getOutline
+      summary: 获取剧本大纲
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+      responses:
+        '200':
+          description: 大纲
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Outline'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /projects/{id}/outline/finalize:
+    post:
+      operationId: finalizeOutline
+      summary: 剧本定稿并解锁 STEP2
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+      responses:
+        '200':
+          description: 工作流状态
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkflowState'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /projects/{id}/workflow:
+    get:
+      operationId: getWorkflow
+      summary: 项目工作流解锁进度
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+      responses:
+        '200':
+          description: 工作流状态
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkflowState'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /projects/{id}/assets:
+    get:
+      operationId: listAssets
+      summary: 项目资产列表
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+      responses:
+        '200':
+          description: 资产列表
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AssetListResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /projects/{id}/assets/complete:
+    post:
+      operationId: completeAssets
+      summary: 完成资产步骤并解锁 STEP3
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+      responses:
+        '200':
+          description: 工作流状态
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkflowState'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  /assets/{id}/image-tasks:
+    post:
+      operationId: submitAssetImageTask
+      summary: 提交资产生图任务
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/AssetId'
+      responses:
+        '202':
+          description: 已受理
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SubmitTaskResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /assets/{id}:
+    patch:
+      operationId: patchAsset
+      summary: 更新资产（一致性锁定）
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/AssetId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [consistencyLocked]
+              properties:
+                consistencyLocked:
+                  type: boolean
+      responses:
+        '200':
+          description: 更新后的资产
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Asset'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /projects/{id}/episode-split-tasks:
+    post:
+      operationId: submitEpisodeSplitTask
+      summary: 提交导演分集拆分任务
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+      responses:
+        '202':
+          description: 已受理
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SubmitTaskResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  /projects/{id}/episodes:
+    get:
+      operationId: listEpisodes
+      summary: 分集列表
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+      responses:
+        '200':
+          description: 分集列表
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EpisodeListResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /models:
+    get:
+      operationId: listModels
+      summary: 视频生成模型常量表
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: 模型列表
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ModelListResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  /episodes/{episodeId}:
+    get:
+      operationId: getEpisode
+      summary: 分集详情
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/EpisodeId'
+      responses:
+        '200':
+          description: 分集
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Episode'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /episodes/{episodeId}/segments:
+    get:
+      operationId: listSegments
+      summary: 分集下的片段列表
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/EpisodeId'
+      responses:
+        '200':
+          description: 片段列表
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SegmentListResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /segments/{id}:
+    patch:
+      operationId: patchSegment
+      summary: 保存分镜提示词与分镜详情
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/SegmentId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchSegmentBody'
+      responses:
+        '200':
+          description: 更新后的片段
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Segment'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /segments/{id}/video-tasks:
+    post:
+      operationId: submitSegmentVideoTask
+      summary: 提交片段生视频任务
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/SegmentId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VideoTaskBody'
+      responses:
+        '202':
+          description: 已受理
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SubmitTaskResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /episodes/{episodeId}/export-tasks:
+    post:
+      operationId: submitEpisodeExportTask
+      summary: 提交整集合成导出任务
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/EpisodeId'
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ExportTaskBody'
+      responses:
+        '202':
+          description: 已受理
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SubmitTaskResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  /templates:
+    get:
+      operationId: listTemplates
+      summary: 官方示例模板
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: 模板列表
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TemplateListResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  /notifications:
+    get:
+      operationId: listNotifications
+      summary: 通知中心列表
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: 通知列表
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotificationListResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+  parameters:
+    ProjectId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+    AssetId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+    EpisodeId:
+      name: episodeId
+      in: path
+      required: true
+      schema:
+        type: string
+    SegmentId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+  responses:
+    Unauthorized:
+      description: 未授权
+    BadRequest:
+      description: 请求无效
+    NotFound:
+      description: 资源不存在
+  schemas:
+    ProjectStatus:
+      type: string
+      enum: [in_progress, archived]
+    Project:
+      type: object
+      required:
+        - id
+        - name
+        - coverUrl
+        - updatedAt
+        - status
+        - statusText
+        - assetCount
+        - characterCount
+        - sceneCount
+        - segmentCount
+        - durationSec
+        - creditBalance
+        - aspectRatio
+        - style
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        coverUrl:
+          type: [string, 'null']
+        updatedAt:
+          type: string
+          format: date-time
+        status:
+          $ref: '#/components/schemas/ProjectStatus'
+        statusText:
+          type: string
+        assetCount:
+          type: integer
+        characterCount:
+          type: integer
+        sceneCount:
+          type: integer
+        segmentCount:
+          type: integer
+        durationSec:
+          type: integer
+        creditBalance:
+          type: integer
+        aspectRatio:
+          type: string
+        style:
+          type: string
+    StorageUsage:
+      type: object
+      required: [usedBytes, quotaBytes, retentionDays]
+      properties:
+        usedBytes:
+          type: integer
+        quotaBytes:
+          type: integer
+        retentionDays:
+          type: integer
+    ProjectListResponse:
+      type: object
+      required: [projects, storage]
+      properties:
+        projects:
+          type: array
+          items:
+            $ref: '#/components/schemas/Project'
+        storage:
+          $ref: '#/components/schemas/StorageUsage'
+    CreateProjectBody:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+        templateId:
+          type: string
+        aspectRatio:
+          type: string
+        style:
+          type: string
+    CreditsResponse:
+      type: object
+      required: [balance]
+      properties:
+        balance:
+          type: integer
+          example: 940
+    OutlineTaskBody:
+      type: object
+      required: [sourceType]
+      properties:
+        sourceType:
+          type: string
+          enum: [paste, file]
+        text:
+          type: string
+        fileName:
+          type: string
+    SubmitTaskResponse:
+      type: object
+      required: [taskId]
+      properties:
+        taskId:
+          type: string
+    TaskStatus:
+      type: object
+      required: [taskId, status, progress]
+      properties:
+        taskId:
+          type: string
+        status:
+          type: string
+          enum: [pending, running, succeeded, failed]
+        progress:
+          type: integer
+          minimum: 0
+          maximum: 100
+        result:
+          description: 成功时的任务结果
+        error:
+          type: string
+    WorkflowStep:
+      type: integer
+      enum: [1, 2, 3]
+    WorkflowState:
+      type: object
+      required: [projectId, unlockedStep, outlineFinalized, assetsCompleted]
+      properties:
+        projectId:
+          type: string
+        unlockedStep:
+          $ref: '#/components/schemas/WorkflowStep'
+        outlineFinalized:
+          type: boolean
+        assetsCompleted:
+          type: boolean
+    AssetType:
+      type: string
+      enum: [character, scene, prop, material]
+    Asset:
+      type: object
+      required:
+        - id
+        - projectId
+        - type
+        - name
+        - role
+        - description
+        - imageUrl
+        - emoji
+        - consistencyLocked
+        - status
+      properties:
+        id:
+          type: string
+        projectId:
+          type: string
+        type:
+          $ref: '#/components/schemas/AssetType'
+        name:
+          type: string
+        role:
+          type: string
+        description:
+          type: string
+        imageUrl:
+          type: [string, 'null']
+        emoji:
+          type: [string, 'null']
+        consistencyLocked:
+          type: boolean
+        status:
+          type: string
+          enum: [pending, ready]
+    OutlineSetting:
+      type: object
+      required: [videoStyle, aspectRatio, resolution, model]
+      properties:
+        videoStyle:
+          type: string
+        aspectRatio:
+          type: string
+        resolution:
+          type: string
+        model:
+          type: string
+    OutlineSummary:
+      type: object
+      required: [protagonists, genre, synopsis, background, setting]
+      properties:
+        protagonists:
+          type: string
+        genre:
+          type: string
+        synopsis:
+          type: string
+        background:
+          type: string
+        setting:
+          type: string
+    Outline:
+      type: object
+      required:
+        - projectId
+        - projectName
+        - finalized
+        - setting
+        - summary
+        - extractedAssets
+        - screenplayTitle
+        - screenplay
+      properties:
+        projectId:
+          type: string
+        projectName:
+          type: string
+        finalized:
+          type: boolean
+        setting:
+          $ref: '#/components/schemas/OutlineSetting'
+        summary:
+          $ref: '#/components/schemas/OutlineSummary'
+        extractedAssets:
+          type: array
+          items:
+            $ref: '#/components/schemas/Asset'
+        screenplayTitle:
+          type: string
+        screenplay:
+          type: string
+    AssetListResponse:
+      type: object
+      required: [assets]
+      properties:
+        assets:
+          type: array
+          items:
+            $ref: '#/components/schemas/Asset'
+    EpisodeSegmentSummary:
+      type: object
+      required: [no, title, durationSec]
+      properties:
+        no:
+          type: integer
+        title:
+          type: string
+        durationSec:
+          type: integer
+    Episode:
+      type: object
+      required:
+        - id
+        - projectId
+        - number
+        - title
+        - status
+        - segmentCount
+        - durationSec
+        - coverUrl
+        - summary
+        - segments
+      properties:
+        id:
+          type: string
+        projectId:
+          type: string
+        number:
+          type: integer
+        title:
+          type: string
+        status:
+          type: string
+          enum: [split, draft]
+        segmentCount:
+          type: integer
+        durationSec:
+          type: integer
+        coverUrl:
+          type: [string, 'null']
+        summary:
+          type: string
+        segments:
+          type: array
+          items:
+            $ref: '#/components/schemas/EpisodeSegmentSummary'
+    EpisodeListResponse:
+      type: object
+      required: [episodes]
+      properties:
+        episodes:
+          type: array
+          items:
+            $ref: '#/components/schemas/Episode'
+    ModelId:
+      type: string
+      enum: [seedance-2.5, minimax-h3-max, wan-3.0]
+    Model:
+      type: object
+      required: [id, name]
+      properties:
+        id:
+          $ref: '#/components/schemas/ModelId'
+        name:
+          type: string
+    ModelListResponse:
+      type: object
+      required: [models]
+      properties:
+        models:
+          type: array
+          items:
+            $ref: '#/components/schemas/Model'
+    Shot:
+      type: object
+      required: [id, durationSec, shotType, camera, action, speaker, voice, line]
+      properties:
+        id:
+          type: string
+        durationSec:
+          type: number
+        shotType:
+          type: string
+        camera:
+          type: string
+        action:
+          type: string
+        speaker:
+          type: string
+        voice:
+          type: string
+        line:
+          type: string
+    Segment:
+      type: object
+      required:
+        - id
+        - episodeId
+        - projectId
+        - no
+        - title
+        - durationSec
+        - generated
+        - videoUrl
+        - prompt
+        - shots
+        - model
+        - charCount
+      properties:
+        id:
+          type: string
+        episodeId:
+          type: string
+        projectId:
+          type: string
+        no:
+          type: integer
+        title:
+          type: string
+        durationSec:
+          type: integer
+        generated:
+          type: boolean
+        videoUrl:
+          type: [string, 'null']
+        prompt:
+          type: string
+          description: 分镜提示词。资产引用使用 `@[assetId]` 标记。
+        shots:
+          type: array
+          items:
+            $ref: '#/components/schemas/Shot'
+        model:
+          type: [string, 'null']
+        charCount:
+          type: integer
+    SegmentListResponse:
+      type: object
+      required: [segments]
+      properties:
+        segments:
+          type: array
+          items:
+            $ref: '#/components/schemas/Segment'
+    PatchSegmentBody:
+      type: object
+      properties:
+        prompt:
+          type: string
+        shots:
+          type: array
+          items:
+            $ref: '#/components/schemas/Shot'
+        title:
+          type: string
+    VideoTaskBody:
+      type: object
+      required: [model]
+      properties:
+        model:
+          $ref: '#/components/schemas/ModelId'
+    ExportTaskBody:
+      type: object
+      properties:
+        resolution:
+          type: string
+        format:
+          type: string
+    Template:
+      type: object
+      required:
+        - id
+        - name
+        - subtitle
+        - tags
+        - coverUrl
+        - coverFilter
+        - scriptText
+        - style
+        - aspectRatio
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        subtitle:
+          type: string
+        tags:
+          type: array
+          items:
+            type: string
+        coverUrl:
+          type: string
+        coverFilter:
+          type: string
+        scriptText:
+          type: string
+        style:
+          type: string
+        aspectRatio:
+          type: string
+    TemplateListResponse:
+      type: object
+      required: [templates]
+      properties:
+        templates:
+          type: array
+          items:
+            $ref: '#/components/schemas/Template'
+    AppNotification:
+      type: object
+      required: [id, icon, title, time, read]
+      properties:
+        id:
+          type: string
+        icon:
+          type: string
+        title:
+          type: string
+        time:
+          type: string
+        read:
+          type: boolean
+    NotificationListResponse:
+      type: object
+      required: [notifications]
+      properties:
+        notifications:
+          type: array
+          items:
+            $ref: '#/components/schemas/AppNotification'
+security:
+  - bearerAuth: []

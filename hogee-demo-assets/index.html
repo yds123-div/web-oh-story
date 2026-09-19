@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Hogee · 逆命木叶 — 汇总首页</title>
+<link rel="stylesheet" href="shared.css">
+</head>
+<body data-page="home">
+<aside id="sideNav">
+  <div class="logo">H</div>
+  <a class="navItem" href="index.html" data-nav="home"><span class="ico">🏠</span>首页</a>
+  <a class="navItem" href="idea.html" data-nav="idea"><span class="ico">💡</span>创意</a>
+  <a class="navItem" href="create.html" data-nav="create"><span class="ico">🎬</span>创作</a>
+  <a class="navItem" href="canvas.html" data-nav="canvas"><span class="ico">🕸</span>画布</a>
+  <a class="navItem" href="asset.html" data-nav="asset"><span class="ico">📁</span>资产</a>
+  <a class="navItem" href="space.html" data-nav="space"><span class="ico">🧊</span>空间</a>
+  <button class="navItem" data-nav="team"><span class="ico">👥</span>团队</button>
+  <div class="spacer"></div>
+</aside>
+<div id="main">
+  <header id="topBar">
+    <div class="brand"><div class="mark">H</div><div><b>Hogee</b><br><span>AI 短剧工坊 · 逆命木叶</span></div></div>
+    <div style="flex:1"></div>
+    <button class="tbBtn" onclick="toast('演示：领取创作者权益（新人 ◆200 积分）')">领取创作者权益</button>
+    <button class="tbBtn" onclick="toast('演示：商务合作对接')">商务合作</button>
+    <button id="themeBtn" title="切换 明亮 / 暗色主题">☀️</button>
+    <button class="tbBtn vip">⚡ 开通会员</button>
+    <div id="creditChip">◆ <span id="creditNum">940</span></div>
+    <button class="bell" onclick="toggleNotif(event)">🔔<i></i></button>
+    <div class="avatar">赵</div>
+  </header>
+
+  <section class="page">
+    <div class="viewInner">
+      <div class="h2">逆命木叶 <em>· 第1集：异世囚笼</em></div>
+      <div class="sub2">女频-轻小说 · 穿越宿命 · 火影IP二创 ｜ 剧本 → 资产 → 分镜 → 视频，一条流水线直出</div>
+
+      <div class="homeHero">
+        <div class="homeCard deco">
+          <div class="k">GUIDED FLOW · 向导模式</div>
+          <h3>三步工作流</h3>
+          <p>剧本 / 小说双模式入口（小说 ≤10 万字一键转视频），智能体剧组（编剧 · 美术 · 导演）接力完成从文字到成片的全流水线，每步产出可人工干预修订。</p>
+          <div class="flowMini"><b>1</b> 剧本大纲 <span style="opacity:.6">解读→设定→摘要→资产清单→剧本定稿</span> › <b>2</b> 角色、场景和道具 <span style="opacity:.6">形象生成→一致性→管理</span> › <b>3</b> 分集视频 <span style="opacity:.6">拆分→片段编辑→生成→合成</span></div>
+          <button class="btn acc go" onclick="location.href='create.html'">从创作开始 →</button>
+        </div>
+        <div class="homeCard">
+          <div class="k">FREE CANVAS · 自由模式</div>
+          <h3>节点画布</h3>
+          <p>LibTV 式无限画布工作台：五种基础节点（文本/图片/视频/音频/脚本）自由连线，选中节点调用顶部 12+ 专业功能。</p>
+          <div class="flowMini">📝🖼🎥🎵📜 基础节点 ｜ 选中 → 🎥 视频生成 / 👥 三视图 / 🔲 九宫格 / 💡 灯光 …</div>
+          <button class="btn ghost go" onclick="location.href='node.html'">打开画布 →</button>
+        </div>
+      </div>
+
+      <div class="wfHead"><h3>🧭 三步工作流 · 全景拆解</h3><span class="nt">通用生产管线，与具体项目内容无关 ｜ 点击任一步骤直达对应页面</span></div>
+      <div class="wfWrap">
+        <div class="wfStep">
+          <span class="no">STEP 1</span>
+          <h4>剧本大纲</h4>
+          <div class="goal">把原始剧本文本变成结构化创作蓝图：定基调、定设定、定资产清单。</div>
+          <div class="wfSub"><span class="n">1</span><div><div class="t">剧本输入</div><div class="d">上传 txt / pdf / doc / docx（≤30万字）或粘贴文本；填写项目归属、分类、风格库、视频比例、生图质量。</div></div></div>
+          <div class="wfSub"><span class="n">2</span><div><div class="t">编剧智能体解读</div><div class="d">通读原著 → 压水分 · 精编 · 收节奏；输出核心张力、情感曲线与爽虐点分析。</div></div></div>
+          <div class="wfSub"><span class="n">3</span><div><div class="t">整体设定</div><div class="d">视频风格、画面比例、清晰度、生成模型四项全局参数。</div></div></div>
+          <div class="wfSub"><span class="n">4</span><div><div class="t">剧本摘要</div><div class="d">主角 / 故事类型 / 故事梗概 / 故事背景 / 故事设定 五段结构化摘要。</div></div></div>
+          <div class="wfSub"><span class="n">5</span><div><div class="t">资产提取清单</div><div class="d">美术智能体完成角色提取、场景识别、道具提取；角色含人设定位。</div></div></div>
+          <div class="wfSub"><span class="n">6</span><div><div class="t">剧本内容定稿</div><div class="d">分集剧本正式化：场次标注、动作行（△）、对白、画外音与黑屏字幕。</div></div></div>
+          <div class="wfOut"><span>大纲文档</span><span>资产清单</span><span>正式剧本</span></div>
+          <button class="btn acc sm wfGo" onclick="location.href='outline.html'">进入 STEP 1 →</button>
+        </div>
+        <div class="wfArr">➜</div>
+        <div class="wfStep">
+          <span class="no">STEP 2</span>
+          <h4>角色、场景和道具</h4>
+          <div class="goal">把文字资产清单变成可引用的视觉资产，并锁定跨镜头一致性。</div>
+          <div class="wfSub"><span class="n">1</span><div><div class="t">角色形象生成</div><div class="d">逐角色提交形象任务：占位图 loading「1个形象生成中」→ AI 立绘上卡；支持多形象。</div></div></div>
+          <div class="wfSub"><span class="n">2</span><div><div class="t">一致性锁定</div><div class="d">形象卡锁定后注入后续所有分镜，防止变脸 / 变装 / 形象突变。</div></div></div>
+          <div class="wfSub"><span class="n">3</span><div><div class="t">场景生成</div><div class="d">场景图按场景比例（16:9）生成，明确光照、时段与氛围基调。</div></div></div>
+          <div class="wfSub"><span class="n">4</span><div><div class="t">道具 / 素材管理</div><div class="d">关键物件提取（可为空）与外部参考素材上传。</div></div></div>
+          <div class="wfSub"><span class="n">5</span><div><div class="t">统计 · 筛选 · 质检</div><div class="d">全部角色 n/N · 场景 · 道具 · 素材 四类统计筛选；单个 / 批量重新生成。</div></div></div>
+          <div class="wfOut"><span>可用资产库</span><span>@引用源</span><span>一致性档案</span></div>
+          <button class="btn acc sm wfGo" onclick="location.href='assets.html'">进入 STEP 2 →</button>
+        </div>
+        <div class="wfArr">➜</div>
+        <div class="wfStep">
+          <span class="no">STEP 3</span>
+          <h4>分集视频</h4>
+          <div class="goal">把剧本与资产组装成片段视频，直至整集合成导出。</div>
+          <div class="wfSub"><span class="n">1</span><div><div class="t">分集拆分</div><div class="d">导演智能体决策集数结构（字数 / 叙事闭环 / 情绪高点），产出分集卡与片段列表。</div></div></div>
+          <div class="wfSub"><span class="n">2</span><div><div class="t">片段编排</div><div class="d">总片段数与总时长总览；单片段时长限制 4-15s；可新建 / 批量操作。</div></div></div>
+          <div class="wfSub"><span class="n">3</span><div><div class="t">提示词编辑</div><div class="d">整体背景 + 分镜块（⏱时长 / 景别 / 运镜 / 表演）；<b>@</b> 快速引用角色、场景、素材（chip 内嵌）。</div></div></div>
+          <div class="wfSub"><span class="n">4</span><div><div class="t">台词配音设定</div><div class="d">对白附语音标注：音调 / 音色质感 / 发音方式 / 气息 / 语速。</div></div></div>
+          <div class="wfSub"><span class="n">5</span><div><div class="t">视频生成</div><div class="d">模型档位（fast / mini / pro）；生成 ◆1300 · 再次生成 ◆406；六阶段进度；480P 草稿出片。</div></div></div>
+          <div class="wfSub"><span class="n">6</span><div><div class="t">预览与时间轴</div><div class="d">右侧播放器预览；底部时间轴片段缩略（首帧 + 分辨率角标）逐段检视。</div></div></div>
+          <div class="wfSub"><span class="n">7</span><div><div class="t">合成导出</div><div class="d">范围（整集 / 当前片段）、分辨率、格式、水印四项导出配置。</div></div></div>
+          <div class="wfOut"><span>片段视频</span><span>整集成片</span><span>时间轴工程</span></div>
+          <button class="btn acc sm wfGo" onclick="location.href='episodes.html'">进入 STEP 3 →</button>
+        </div>
+      </div>
+
+      <div class="metaStrip">
+        <div class="metaCard"><div class="k">视频风格</div><div class="v">赛博朋克电影</div></div>
+        <div class="metaCard"><div class="k">画面比例</div><div class="v">📱 9:16</div></div>
+        <div class="metaCard"><div class="k">资产</div><div class="v">角色 4 · 场景 1 · 道具 0</div></div>
+        <div class="metaCard"><div class="k">成片</div><div class="v">第1集 · 3片段 · 00:37</div></div>
+        <div class="metaCard"><div class="k">演示控制</div><div class="v"><button class="btn ghost sm" onclick="resetDemo()">↺ 重置演示（◆940）</button></div></div>
+      </div>
+
+      <div class="wfHead"><h3>🗺 全部页面导航</h3><span class="nt">子页面独立文件 · 本页为汇总入口</span></div>
+      <div class="pageNavGrid">
+        <a class="pnCard" href="create.html"><span class="ic" style="background:rgba(139,92,246,.14)">🎬</span><div><b>创作 · 剧集创作</b><span>剧本/小说双模式 · 文件校验 · 粘贴文本 · 一键转视频</span></div></a>
+        <a class="pnCard" href="outline.html"><span class="ic" style="background:rgba(96,165,250,.14)">📄</span><div><b>STEP1 · 剧本大纲</b><span>智能体剧组会议 / 摘要 / 剧本定稿</span></div></a>
+        <a class="pnCard" href="assets.html"><span class="ic" style="background:rgba(167,139,250,.14)">🎭</span><div><b>STEP2 · 项目资产库</b><span>角色 4 / 场景 1 / 一致性锁定</span></div></a>
+        <a class="pnCard" href="episodes.html"><span class="ic" style="background:rgba(244,114,182,.14)">🎞</span><div><b>STEP3 · 分集管理</b><span>导演拆分决策 / 分集卡</span></div></a>
+        <a class="pnCard" href="studio.html"><span class="ic" style="background:rgba(251,146,60,.14)">🎥</span><div><b>片段编辑器</b><span>提示词分镜 / 语音标注 / 真实视频预览</span></div></a>
+        <a class="pnCard" href="canvas.html"><span class="ic" style="background:rgba(45,212,191,.14)">🗂</span><div><b>画布管理</b><span>项目 / 新建画布 / 创作工坊</span></div></a>
+        <a class="pnCard" href="node.html"><span class="ic" style="background:rgba(232,195,122,.14)">🕸</span><div><b>节点画布</b><span>剧情管线图 / 基础节点 / 12+ 专业功能</span></div></a>
+        <a class="pnCard" href="asset.html"><span class="ic" style="background:rgba(99,102,241,.14)">📁</span><div><b>资产广场</b><span>分类筛选 / 瀑布流 / 上传 / 加入项目</span></div></a>
+        <a class="pnCard" href="space.html"><span class="ic" style="background:rgba(148,163,184,.14)">🧊</span><div><b>空间 · 个人</b><span>项目卡 / 重命名 / 存储用量</span></div></a>
+        <a class="pnCard" href="idea.html"><span class="ic" style="background:rgba(236,72,153,.14)">💡</span><div><b>创意 · 灵感市场</b><span>官方示例 / 爆款拆解 / 模板 / 风格库 / 创意对话</span></div></a>
+      </div>
+    </div>
+  </section>
+</div>
+<div class="toast" id="toast"></div>
+<script src="shared.js"></script>
+</body>
+</html>

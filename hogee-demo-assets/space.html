@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>空间 · 个人 — Hogee</title>
+<link rel="stylesheet" href="shared.css">
+</head>
+<body data-page="space">
+<aside id="sideNav">
+  <div class="logo">H</div>
+  <a class="navItem" href="index.html" data-nav="home"><span class="ico">🏠</span>首页</a>
+  <a class="navItem" href="idea.html" data-nav="idea"><span class="ico">💡</span>创意</a>
+  <a class="navItem" href="create.html" data-nav="create"><span class="ico">🎬</span>创作</a>
+  <a class="navItem" href="canvas.html" data-nav="canvas"><span class="ico">🕸</span>画布</a>
+  <a class="navItem" href="asset.html" data-nav="asset"><span class="ico">📁</span>资产</a>
+  <a class="navItem" href="space.html" data-nav="space"><span class="ico">🧊</span>空间</a>
+  <button class="navItem" data-nav="team"><span class="ico">👥</span>团队</button>
+  <div class="spacer"></div>
+</aside>
+<div id="main">
+  <header id="topBar">
+    <div class="brand"><div class="mark">H</div><div><b>Hogee</b><br><span>AI 短剧工坊 · 逆命木叶</span></div></div>
+    <div style="flex:1"></div>
+    <button class="tbBtn" onclick="toast('演示：领取创作者权益（新人 ◆200 积分）')">领取创作者权益</button>
+    <button class="tbBtn" onclick="toast('演示：商务合作对接')">商务合作</button>
+    <button id="themeBtn" title="切换 明亮 / 暗色主题">☀️</button>
+    <button class="tbBtn vip">⚡ 开通会员</button>
+    <div id="creditChip">◆ <span id="creditNum">940</span></div>
+    <button class="bell" onclick="toggleNotif(event)">🔔<i></i></button>
+    <div class="avatar">赵</div>
+  </header>
+
+  <section class="page">
+    <div class="viewInner">
+      <div class="h2">空间 <em>· 个人</em></div>
+      <div class="sub2">参考 tiaoyue /space/personal ｜ 个人项目卡 · 重命名 / 归档 · 项目积分余额 · 成片下载 · 存储用量</div>
+
+      <div class="docPanel" style="display:flex;align-items:center;gap:18px;margin-top:20px">
+        <div style="width:52px;height:52px;border-radius:14px;background:linear-gradient(135deg,#8b5cf6,#6366f1);display:flex;align-items:center;justify-content:center;font-size:24px">🧊</div>
+        <div style="flex:1">
+          <div style="display:flex;align-items:center;gap:10px"><b style="font-size:15px">个人空间</b><span class="miniTag">免费版</span></div>
+          <div style="font-size:11px;color:var(--dim);margin-top:5px">存储用量 <b style="color:var(--txt)" id="storeTxt">3.4 GB</b> / 10 GB · 成片保留 30 天 · 合成完成后可在此下载</div>
+          <div class="storeBar"><i id="storeFill"></i></div>
+        </div>
+        <button class="btn ghost sm" onclick="toast('演示：团队空间（成员 / 邀请 / 权限）在「团队」模块')">👥 切换团队空间</button>
+      </div>
+
+      <div class="secHead"><h3>📁 我的项目</h3><button class="btn acc sm" onclick="openModal('modalNewProj')">＋ 新建项目</button></div>
+      <div class="spGrid">
+        <div class="spCard" onclick="location.href='canvas.html'">
+          <div class="cv"><img src="corridor.jpg" alt="逆命木叶"><span class="aigcTag">✦ AI生成</span>
+            <div class="ops"><button onclick="event.stopPropagation();renameProj(this)">✎ 重命名</button><button onclick="event.stopPropagation();toast('演示：已归档「逆命木叶」')">📦 归档</button></div>
+          </div>
+          <div class="bd"><b>逆命木叶</b>
+            <div class="row"><span>更新于 2026-09-17 18:20</span><span class="pill ok" style="padding:2px 9px"><span class="dot"></span>进行中</span></div>
+            <div class="row"><span>资产 5（角色4+场景1）</span><span>片段 3 · 00:37</span></div>
+            <div class="row"><span>项目积分余额 ◆132</span><span>9:16 · 赛博朋克电影</span></div>
+          </div>
+        </div>
+        <div class="spCard" onclick="toast('演示：打开项目「火影乱斗」')">
+          <div class="cv" style="background:linear-gradient(150deg,#2b1b3d,#43307a 55%,#1c2a52)"><span style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-weight:800;color:rgba(255,255,255,.85)">火影乱斗</span>
+            <div class="ops"><button onclick="event.stopPropagation();renameProj(this)">✎ 重命名</button><button onclick="event.stopPropagation();toast('演示：已恢复「火影乱斗」')">↺ 恢复</button></div>
+          </div>
+          <div class="bd"><b>火影乱斗</b>
+            <div class="row"><span>更新于 2026-09-16 21:04</span><span class="pill no" style="padding:2px 9px">已归档</span></div>
+            <div class="row"><span>资产 2</span><span>片段 4 · 00:46</span></div>
+            <div class="row"><span>项目积分余额 ◆0</span><span>16:9</span></div>
+          </div>
+        </div>
+        <div class="spCard" style="display:flex;align-items:center;justify-content:center;border:1.5px dashed var(--line2);color:var(--sub)" onclick="openModal('modalNewProj')">
+          <div style="text-align:center"><div style="font-size:26px;margin-bottom:8px">＋</div><div style="font-size:12px">新建项目</div></div>
+        </div>
+      </div>
+
+      <div class="secHead"><h3>🎬 成片 · 导出记录</h3></div>
+      <div class="epTable">
+        <div class="epRow hd"><span>任务</span><span>范围</span><span>规格</span><span>状态</span><span>时间</span><span>操作</span></div>
+        <div class="epRow"><span>逆命木叶 第1集 v2</span><span>整集 00:37</span><span>720P · MP4</span><span><span class="pill ok"><span class="dot"></span>已完成</span></span><span>09-17 18:02</span><span><button class="btn ghost sm" onclick="downloadDemo('逆命木叶_第1集_v2_720P.mp4')">⬇ 下载</button></span></div>
+        <div class="epRow"><span>逆命木叶 第1集 v1</span><span>片段1-2 · 00:27</span><span>480P · MP4</span><span><span class="pill ok"><span class="dot"></span>已完成</span></span><span>09-17 16:40</span><span><button class="btn ghost sm" onclick="downloadDemo('逆命木叶_第1集_v1_480P.mp4')">⬇ 下载</button></span></div>
+        <div class="epRow"><span>火影乱斗 整集</span><span>整集 00:46</span><span>720P · MP4</span><span><span class="pill no"><span class="dot"></span>已过期</span></span><span>09-10 11:12</span><span><button class="btn ghost sm" onclick="toast('成片保留 30 天，已过期 · 可重新合成')">↻ 重新合成</button></span></div>
+      </div>
+    </div>
+  </section>
+</div>
+
+<div class="modalMask" id="modalNewProj">
+  <div class="modal">
+    <div class="modalHead"><h3>新建项目</h3><button class="x" onclick="closeModal('modalNewProj')">×</button></div>
+    <div class="fRow"><label>项目名称</label><input id="projName" placeholder="输入项目名称"></div>
+    <div class="f2 fRow">
+      <div><label>默认比例</label><select><option>9:16</option><option>16:9</option></select></div>
+      <div><label>默认风格</label><select><option>赛博朋克电影</option><option>国漫写实</option></select></div>
+    </div>
+    <div class="modalFoot"><button class="btn ghost sm" onclick="closeModal('modalNewProj')">取消</button><button class="btn acc sm" onclick="createProj()">创 建</button></div>
+  </div>
+</div>
+<div class="toast" id="toast"></div>
+<script src="shared.js"></script>
+<script>
+(function(){
+  const kb=+(localStorage.getItem("hogee-store")||0);
+  if(kb>0){
+    const gb=(3.4+kb/1024/1024);
+    const t=$("storeTxt");if(t)t.textContent=gb.toFixed(2)+" GB（含本次会话上传 "+(kb>1024?(kb/1024).toFixed(1)+"MB":kb+"KB")+"）";
+    const f=$("storeFill");if(f)f.style.width=Math.min(96,(gb/10*100))+"%";
+  }
+})();
+function renameProj(btn){
+  const card=btn.closest(".spCard");
+  const b=card.querySelector(".bd b");
+  const nm=prompt("重命名项目（演示）",b.textContent);
+  if(nm&&nm.trim()){b.textContent=nm.trim();toast("项目已重命名为「"+nm.trim()+"」")}
+}
+function createProj(){
+  const nm=$("projName").value.trim()||"未命名项目";
+  closeModal("modalNewProj");$("projName").value="";
+  toast("项目「"+nm+"」已创建（演示）· 可在创作中选择归属");
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>资产广场 — Hogee</title>
+<link rel="stylesheet" href="shared.css">
+</head>
+<body data-page="asset">
+<aside id="sideNav">
+  <div class="logo">H</div>
+  <a class="navItem" href="index.html" data-nav="home"><span class="ico">🏠</span>首页</a>
+  <a class="navItem" href="idea.html" data-nav="idea"><span class="ico">💡</span>创意</a>
+  <a class="navItem" href="create.html" data-nav="create"><span class="ico">🎬</span>创作</a>
+  <a class="navItem" href="canvas.html" data-nav="canvas"><span class="ico">🕸</span>画布</a>
+  <a class="navItem" href="asset.html" data-nav="asset"><span class="ico">📁</span>资产</a>
+  <a class="navItem" href="space.html" data-nav="space"><span class="ico">🧊</span>空间</a>
+  <button class="navItem" data-nav="team"><span class="ico">👥</span>团队</button>
+  <div class="spacer"></div>
+</aside>
+<div id="main">
+  <header id="topBar">
+    <div class="brand"><div class="mark">H</div><div><b>Hogee</b><br><span>AI 短剧工坊 · 逆命木叶</span></div></div>
+    <div style="flex:1"></div>
+    <button class="tbBtn" onclick="toast('演示：领取创作者权益（新人 ◆200 积分）')">领取创作者权益</button>
+    <button class="tbBtn" onclick="toast('演示：商务合作对接')">商务合作</button>
+    <button id="themeBtn" title="切换 明亮 / 暗色主题">☀️</button>
+    <button class="tbBtn vip">⚡ 开通会员</button>
+    <div id="creditChip">◆ <span id="creditNum">940</span></div>
+    <button class="bell" onclick="toggleNotif(event)">🔔<i></i></button>
+    <div class="avatar">赵</div>
+  </header>
+
+  <section class="page">
+    <div class="viewInner">
+      <div class="h2">资产 <em>· 广场</em></div>
+      <div class="sub2">参考 tiaoyue /asset ｜ 分类筛选 + 资产瀑布流 · 上传资产 · 加入项目 · 文件预览 · AI 生成标识 · 豆包式编辑工具（抠图/擦除/改图/扩图/变清晰）</div>
+      <div class="chips" id="wallChips">
+        <button class="chip on" data-cat="all">全部</button>
+        <button class="chip" data-cat="角色">角色立绘</button>
+        <button class="chip" data-cat="场景">场景</button>
+        <button class="chip" data-cat="视频">视频片段</button>
+        <button class="chip" data-cat="素材">素材参考</button>
+        <button class="chip" data-cat="上传">我的上传</button>
+        <div style="margin-left:auto;display:flex;gap:8px">
+          <div class="searchBox" style="margin-left:0">🔍 搜索资产名称 / 标签</div>
+          <button class="btn acc sm" onclick="openModal('modalUpload')">⬆ 上传资产</button>
+        </div>
+      </div>
+      <div class="wallGrid" id="wallGrid"></div>
+      <div class="noteBar" style="margin-top:6px"><span class="ic">ℹ</span><span>点击卡片预览文件 · AI 生成资产均带「AI生成」标识；项目内资产请前往 <a href="assets.html" style="color:#a78bfa">STEP2 项目资产库</a></span></div>
+    </div>
+  </section>
+</div>
+
+<div class="modalMask" id="modalUpload">
+  <div class="modal">
+    <div class="modalHead"><h3>⬆ 上传资产</h3><button class="x" onclick="closeModal('modalUpload')">×</button></div>
+    <div class="fRow"><label>归属项目</label><select><option>默认项目</option><option>逆命木叶企划</option></select></div>
+    <div class="fRow"><label>资产分类</label><select><option>素材参考</option><option>角色立绘</option><option>场景</option></select></div>
+    <div class="fRow"><label>文件</label>
+      <input type="file" id="upFile" accept="image/*,video/*" style="display:none" onchange="previewUp(this)">
+      <div id="upDrop" style="border:1.5px dashed var(--line2);border-radius:12px;padding:20px;text-align:center;color:var(--dim);font-size:12px;cursor:pointer" onclick="$('upFile').click()">
+        📁 点击或拖拽文件到此处<br>支持 png / jpg / webp / mp4 · 单文件 ≤ 50MB
+      </div>
+      <div id="upPrev" style="display:none;margin-top:10px"></div>
+    </div>
+    <div class="modalFoot"><button class="btn ghost sm" onclick="closeModal('modalUpload')">取消</button><button class="btn acc sm" onclick="doUploadReal()">确认上传</button></div>
+  </div>
+</div>
+
+<div class="modalMask" id="modalPrev" onclick="if(event.target===this)closeModal('modalPrev')">
+  <div class="modal" style="width:480px">
+    <div class="modalHead"><h3 id="pvName">预览</h3><button class="x" onclick="closeModal('modalPrev')">×</button></div>
+    <div id="pvBody" style="border-radius:12px;overflow:hidden;background:var(--panel2)"></div>
+    <div style="display:flex;gap:7px;flex-wrap:wrap;margin-top:14px" id="pvTools">
+      <button class="btn ghost sm" onclick="toast('演示：AI 抠图 → 透明底')">✂ AI 抠图</button>
+      <button class="btn ghost sm" onclick="toast('演示：擦除多余元素')">🧽 擦除</button>
+      <button class="btn ghost sm" onclick="toast('演示：标记区域局部重绘')">🖌 标记改图</button>
+      <button class="btn ghost sm" onclick="toast('演示：外扩构图（9:16 → 16:9）')">🔲 扩图</button>
+      <button class="btn ghost sm" onclick="toast('演示：超分至 4K')">✨ 变清晰</button>
+      <button class="btn acc sm" style="margin-left:auto" onclick="closeModal('modalPrev');toast('演示：已加入项目「逆命木叶企划」')">＋ 加入项目</button>
+    </div>
+  </div>
+</div>
+<div class="toast" id="toast"></div>
+<script src="shared.js"></script>
+<script>
+const WALL=[
+ {cat:"角色",nm:"林晚-默认形象",img:"linwan.png",h:300,mt:"角色立绘 · 9:16 · 4K",tag:"AI生成"},
+ {cat:"场景",nm:"木叶长廊-月夜",img:"corridor.jpg",h:200,mt:"场景 · 16:9 · 2K",tag:"AI生成"},
+ {cat:"角色",nm:"宇智波鼬-默认形象",img:"itachi.png",h:300,mt:"角色立绘 · 9:16 · 4K",tag:"AI生成"},
+ {cat:"视频",nm:"片段1 · 扶柱独白",vid:"clip1.mp4",h:200,mt:"视频 · 13s · 480P",tag:"AI生成"},
+ {cat:"视频",nm:"片段2 · 质问与否认",vid:"clip2.mp4",h:200,mt:"视频 · 14s · 480P",tag:"AI生成"},
+ {cat:"视频",nm:"片段3 · 预言警告",vid:"clip3.mp4",h:200,mt:"视频 · 13s · 480P",tag:"AI生成"},
+ {cat:"素材",nm:"月夜参考-构图A",img:"corridor.jpg",h:160,f:"sepia(.4) saturate(1.2)",mt:"素材参考 · 上传",tag:"上传"},
+ {cat:"素材",nm:"和服姿态参考",img:"linwan.png",h:240,f:"grayscale(.8)",mt:"素材参考 · 上传",tag:"上传"},
+ {cat:"素材",nm:"忍者服盔甲参考",img:"itachi.png",h:240,f:"hue-rotate(160deg) saturate(1.4)",mt:"素材参考 · 上传",tag:"上传"}
+];
+function renderWall(cat){
+  const g=$("wallGrid");g.innerHTML="";
+  WALL.filter(a=>cat==="all"||(cat==="上传"?a.tag==="上传":a.cat===cat)).forEach((a,i)=>{
+    const c=document.createElement("div");c.className="wallCard";
+    c.innerHTML=`<div class="im" style="height:${a.h}px">${a.vid
+      ?`<video src="${a.vid}#t=1" preload="metadata" muted playsinline></video><span style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:#fff;font-size:20px;background:rgba(0,0,0,.25)">▶</span>`
+      :`<img src="${a.img}" style="height:100%;width:100%;object-fit:cover;object-position:top;${a.f?"filter:"+a.f:""}" alt="${a.nm}">`}
+      <span class="aigcTag">${a.tag==="AI生成"?"✦ AI生成":"⬆ 上传"}</span></div>
+    <div class="ft"><div class="nm">${a.nm}</div>
+    <div class="mt"><span>${a.mt}</span><button class="addBtn" onclick="event.stopPropagation();addProjBtn(this,'${a.nm}')">＋加入项目</button></div></div>`;
+    c.onclick=()=>preview(a);
+    g.appendChild(c);
+  });
+}
+function preview(a){
+  $("pvName").textContent="文件预览 · "+a.nm;
+  $("pvBody").innerHTML=a.vid
+    ?`<video src="${a.vid}" controls autoplay muted loop playsinline style="width:100%;display:block;background:#000"></video>`
+    :`<img src="${a.img}" style="width:100%;display:block;${a.f?"filter:"+a.f:""}" alt="">`;
+  $("pvTools").style.display=a.cat==="视频"?"none":"flex";
+  openModal("modalPrev");
+}
+document.querySelectorAll("#wallChips .chip").forEach(c=>c.onclick=()=>{
+  document.querySelectorAll("#wallChips .chip").forEach(x=>x.classList.remove("on"));
+  c.classList.add("on");renderWall(c.dataset.cat);
+});
+let upData=null;
+function previewUp(inp){
+  const f=inp.files&&inp.files[0];if(!f)return;
+  if(f.size>50*1024*1024){toast("文件超过 50MB 上限");inp.value="";return}
+  const isVid=f.type.startsWith("video");
+  const url=URL.createObjectURL(f);
+  upData={f,url,isVid,nm:f.name.replace(/\.[^.]+$/,""),size:(f.size/1024).toFixed(0)};
+  $("upPrev").style.display="block";
+  $("upPrev").innerHTML=`<div class="castItem"><div class="ci" style="width:56px;height:56px">${isVid?"🎥":`<img src="${url}">`}</div>
+  <div><div class="nm" style="font-size:12px">${f.name} <span class="miniTag ok" style="background:rgba(78,207,141,.12);color:var(--green)">校验通过</span></div>
+  <div class="ds">${isVid?"视频":"图片"} · ${upData.size} KB · 将归入「${$("upCat")?$("upCat").value:"素材参考"}」</div></div></div>`;
+}
+function doUploadReal(){
+  if(!upData){toast("请先选择文件");return}
+  const catSel=document.querySelector("#modalUpload select");
+  const catMap={"角色立绘":"角色","场景":"场景","素材参考":"素材"};
+  const cat=catMap[catSel.value]||"素材";
+  WALL.push({cat,nm:upData.nm,img:upData.isVid?null:upData.url,vid:upData.isVid?upData.url:null,h:upData.isVid?200:210,mt:(cat==="素材"?"素材参考":cat)+" · 刚上传 · "+upData.size+"KB",tag:"上传"});
+  try{const s=+(localStorage.getItem("hogee-store")||0)+ +upData.size;localStorage.setItem("hogee-store",s)}catch(e){}
+  upData=null;$("upFile").value="";$("upPrev").style.display="none";
+  closeModal("modalUpload");
+  renderWall(cat);
+  document.querySelectorAll("#wallChips .chip").forEach(x=>x.classList.toggle("on",x.dataset.cat===cat));
+  toast("上传成功：已归入「"+catSel.value+"」（真实文件已入瀑布流）");
+}
+function addProjBtn(btn,nm){
+  event.stopPropagation();
+  popupOpts(btn,"加入项目",[{n:"逆命木叶企划",d:"角色 4 · 场景 1 · 进行中"},{n:"默认项目",d:"空项目"},{n:"＋ 新建项目",d:"创建后加入"}],p=>{
+    btn.textContent="✓ 已加入 "+p.slice(0,4);
+    btn.disabled=true;btn.style.opacity=.6;
+    toast("「"+nm+"」已加入项目「"+p+"」（片段提示词可 @ 引用）");
+  });
+}
+renderWall("all");
+</script>
+</body>
+</html>
