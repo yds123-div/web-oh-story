@@ -4,12 +4,14 @@ import { AppLayout } from './layout/AppLayout';
 import { WorkflowGate } from './components/WorkflowGate';
 
 const HomePage = lazy(() => import('./pages/HomePage'));
-const IdeaPage = lazy(() => import('./pages/IdeaPage'));
+const CreativePage = lazy(() => import('./pages/CreativePage'));
 const CreatePage = lazy(() => import('./pages/CreatePage'));
 const OutlinePage = lazy(() => import('./pages/OutlinePage'));
 const AssetsPage = lazy(() => import('./pages/AssetsPage'));
 const EpisodesPage = lazy(() => import('./pages/EpisodesPage'));
 const StudioPage = lazy(() => import('./pages/StudioPage'));
+const CanvasPage = lazy(() => import('./pages/CanvasPage'));
+const PlazaPage = lazy(() => import('./pages/PlazaPage'));
 
 export default function App() {
   return (
@@ -18,8 +20,10 @@ export default function App() {
         <Routes>
           <Route element={<AppLayout />}>
             <Route path="/" element={<HomePage />} />
-            <Route path="/idea" element={<IdeaPage />} />
+            <Route path="/creative" element={<CreativePage />} />
             <Route path="/create" element={<CreatePage />} />
+            <Route path="/canvas" element={<CanvasPage />} />
+            <Route path="/plaza" element={<PlazaPage />} />
             <Route path="/project/:id/outline" element={<OutlinePage />} />
             <Route
               path="/project/:id/assets"
