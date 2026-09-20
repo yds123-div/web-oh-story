@@ -198,6 +198,12 @@ export type PatchSegmentBody = {
   title?: string;
 };
 
+export type CreateSegmentBody = {
+  prompt: string;
+  durationSec: number;
+  title: string;
+};
+
 export type VideoTaskBody = {
   model: ModelId;
 };

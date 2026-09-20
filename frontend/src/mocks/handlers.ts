@@ -8,6 +8,7 @@ import {
   createEpisodeSplitTask,
   createOutlineTask,
   createNovelTask,
+  createSegmentRecord,
   createSegmentVideoTask,
   createCreativeTask,
   finalizeOutlineRecord,
@@ -245,6 +246,16 @@ export const handlers = [
       return HttpResponse.json({ message: '片段不存在' }, { status: 404 });
     }
     return HttpResponse.json(updated);
+  }),
+
+  http.post('/api/episodes/:episodeId/segments', async ({ params, request }) => {
+    await netDelay(80);
+    const body = (await request.json()) as { prompt: string; durationSec: number; title: string };
+    const created = createSegmentRecord(String(params.episodeId), body);
+    if (!created) {
+      return HttpResponse.json({ message: '分集不存在' }, { status: 404 });
+    }
+    return HttpResponse.json(created, { status: 201 });
   }),
 
   http.post('/api/segments/:id/video-tasks', async ({ params, request }) => {

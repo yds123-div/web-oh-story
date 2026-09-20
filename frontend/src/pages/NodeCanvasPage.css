@@ -1,0 +1,463 @@
+.node-canvas-page {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  background: var(--ant-color-bg-layout);
+  overflow: hidden;
+}
+
+.canvas-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 8px 14px;
+  background: var(--ant-color-bg-elevated);
+  border-bottom: 1px solid var(--ant-color-border-secondary);
+  z-index: 20;
+  overflow-x: auto;
+}
+
+.back-btn {
+  font-size: 17px;
+  padding: 2px 8px;
+  border-radius: 8px;
+  color: var(--ant-color-text-secondary);
+  background: transparent;
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition: 0.15s;
+}
+
+.back-btn:hover {
+  color: var(--ant-color-text);
+  background: var(--ant-color-bg-elevated);
+}
+
+.canvas-title {
+  font-size: 13px;
+  font-weight: 700;
+  white-space: nowrap;
+  color: var(--ant-color-text);
+}
+
+.canvas-tools {
+  display: flex;
+  gap: 5px;
+  align-items: center;
+}
+
+.tool-btn {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 9px;
+  border-radius: 8px;
+  border: 1px solid var(--ant-color-border);
+  font-size: 11px;
+  color: var(--ant-color-text-tertiary);
+  white-space: nowrap;
+  background: var(--ant-color-bg-container);
+  transition: 0.12s;
+  cursor: pointer;
+}
+
+.tool-btn:hover {
+  color: var(--ant-color-text);
+  border-color: var(--ant-color-border-secondary);
+}
+
+.tool-btn.hot {
+  color: #c5b3ff;
+  border-color: rgba(139, 92, 246, 0.5);
+  background: rgba(139, 92, 246, 0.14);
+}
+
+.canvas-actions {
+  margin-left: auto;
+  display: flex;
+  gap: 6px;
+  padding-left: 8px;
+}
+
+.action-btn {
+  width: auto;
+  padding: 0 12px;
+  font-size: 11px;
+  border-radius: 8px;
+  border: 1px solid var(--ant-color-border);
+  color: var(--ant-color-text-secondary);
+  background: var(--ant-color-bg-container);
+  cursor: pointer;
+  transition: 0.12s;
+}
+
+.action-btn:hover {
+  color: var(--ant-color-text);
+  border-color: var(--ant-color-border-secondary);
+}
+
+.canvas-container {
+  flex: 1;
+  position: relative;
+  background-image: radial-gradient(circle, var(--ant-color-border) 1px, transparent 1px);
+  background-size: 26px 26px;
+  overflow: hidden;
+}
+
+/* 自定义节点样式 */
+.custom-node {
+  width: 208px;
+  background: var(--ant-color-bg-container);
+  border: 1px solid var(--ant-color-border-secondary);
+  border-radius: 14px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45);
+  cursor: grab;
+  user-select: none;
+  position: relative;
+  transition: 0.15s;
+}
+
+.custom-node:active {
+  cursor: grabbing;
+}
+
+.custom-node:hover {
+  border-color: var(--ant-color-primary);
+}
+
+.custom-node.selected {
+  border-color: #8b5cf6;
+  box-shadow: 0 0 0 2px rgba(139, 92, 246, 0.3);
+}
+
+.node-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--ant-color-border);
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--ant-color-text);
+}
+
+.node-icon {
+  width: 26px;
+  height: 26px;
+  border-radius: 7px;
+  background: var(--ant-color-bg-elevated);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+}
+
+.node-title {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.node-thumb {
+  position: relative;
+  height: 66px;
+  margin: 9px 10px 0;
+  border-radius: 9px;
+  overflow: hidden;
+  background: var(--ant-color-bg-elevated);
+  border: 1px solid var(--ant-color-border);
+}
+
+.node-thumb img,
+.node-thumb video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  pointer-events: none;
+}
+
+.node-body {
+  padding: 9px 12px 6px;
+  font-size: 10.5px;
+  color: var(--ant-color-text-secondary);
+  line-height: 1.7;
+}
+
+.node-status {
+  display: inline-flex;
+  margin: 0 12px 10px;
+  font-size: 9.5px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(78, 207, 141, 0.13);
+  color: #4ecf8d;
+}
+
+.node-status.no {
+  background: var(--ant-color-bg-elevated);
+  color: var(--ant-color-text-tertiary);
+}
+
+.node-status.wip {
+  background: rgba(139, 92, 246, 0.14);
+  color: #a78bfa;
+}
+
+.node-actions {
+  display: flex;
+  gap: 5px;
+  padding: 4px 10px 9px;
+  opacity: 0;
+  transition: 0.15s;
+}
+
+.custom-node:hover .node-actions {
+  opacity: 1;
+}
+
+.node-actions button {
+  width: 24px;
+  height: 24px;
+  border-radius: 7px;
+  background: var(--ant-color-bg-elevated);
+  border: 1px solid var(--ant-color-border);
+  font-size: 11px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--ant-color-text-secondary);
+  cursor: pointer;
+  transition: 0.12s;
+}
+
+.node-actions button:hover {
+  border-color: var(--ant-color-primary);
+  color: #c5b8ff;
+}
+
+.node-actions button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* React Flow Handle 样式覆盖 */
+.react-flow__handle {
+  width: 13px;
+  height: 13px;
+  border-radius: 50%;
+  background: var(--ant-color-bg-elevated);
+  border: 2.5px solid #a78bfa;
+  transition: 0.15s;
+}
+
+.react-flow__handle:hover {
+  transform: scale(1.4);
+  box-shadow: 0 0 9px rgba(139, 92, 246, 0.75);
+}
+
+.react-flow__handle.target {
+  left: -7px;
+}
+
+.react-flow__handle.source {
+  right: -7px;
+}
+
+/* 右键菜单 */
+.context-menu {
+  position: fixed;
+  background: var(--ant-color-bg-container);
+  border: 1px solid var(--ant-color-border-secondary);
+  border-radius: 12px;
+  padding: 6px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45);
+  z-index: 200;
+  min-width: 150px;
+}
+
+.context-menu button {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  padding: 9px 12px;
+  border-radius: 8px;
+  font-size: 12.5px;
+  color: var(--ant-color-text-secondary);
+  text-align: left;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  transition: 0.12s;
+}
+
+.context-menu button:hover {
+  background: rgba(139, 92, 246, 0.14);
+  color: var(--ant-color-text);
+}
+
+/* 预览弹窗 */
+.preview-modal {
+  position: fixed;
+  inset: 0;
+  background: rgba(5, 5, 10, 0.62);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 300;
+}
+
+.preview-content {
+  width: 430px;
+  background: var(--ant-color-bg-container);
+  border: 1px solid var(--ant-color-border-secondary);
+  border-radius: 18px;
+  padding: 24px 26px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45);
+}
+
+.preview-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 18px;
+  font-size: 15.5px;
+  font-weight: 700;
+  color: var(--ant-color-text);
+}
+
+.preview-header button {
+  color: var(--ant-color-text-tertiary);
+  font-size: 17px;
+  padding: 4px 8px;
+  border-radius: 8px;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  transition: 0.12s;
+}
+
+.preview-header button:hover {
+  color: var(--ant-color-text);
+  background: var(--ant-color-bg-elevated);
+}
+
+.preview-body {
+  border-radius: 14px;
+  overflow: hidden;
+  background: #07070d;
+  border: 1px solid var(--ant-color-border);
+}
+
+.preview-body video,
+.preview-body img {
+  width: 100%;
+  display: block;
+}
+
+/* React Flow 样式覆盖 */
+.react-flow__minimap {
+  background: rgba(21, 21, 31, 0.72) !important;
+  border: 1px solid var(--ant-color-border-secondary) !important;
+  border-radius: 10px !important;
+}
+
+.react-flow__controls {
+  background: var(--ant-color-bg-container) !important;
+  border: 1px solid var(--ant-color-border-secondary) !important;
+  border-radius: 10px !important;
+}
+
+.react-flow__controls-button {
+  background: var(--ant-color-bg-elevated) !important;
+  border-bottom: 1px solid var(--ant-color-border) !important;
+  color: var(--ant-color-text-secondary) !important;
+}
+
+.react-flow__controls-button:hover {
+  background: var(--ant-color-bg-elevated) !important;
+  color: var(--ant-color-text) !important;
+}
+
+.react-flow__edge-path {
+  stroke: #8b5cf6;
+  stroke-width: 2;
+  fill: none;
+  opacity: 0.72;
+  transition: 0.15s;
+}
+
+.react-flow__edge-path:hover {
+  stroke-width: 3.5;
+  opacity: 1;
+}
+
+.react-flow__handle {
+  width: 13px;
+  height: 13px;
+  border-radius: 50%;
+  background: var(--ant-color-bg-elevated);
+  border: 2.5px solid #a78bfa;
+}
+
+.react-flow__handle:hover {
+  transform: scale(1.4);
+  box-shadow: 0 0 9px rgba(139, 92, 246, 0.75);
+}
+
+/* 组面板 */
+.group-panel {
+  position: absolute;
+  bottom: 20px;
+  left: 20px;
+  background: var(--ant-color-bg-container);
+  border: 1px solid var(--ant-color-border-secondary);
+  border-radius: 12px;
+  padding: 12px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45);
+  z-index: 100;
+  min-width: 200px;
+}
+
+.group-panel-header {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--ant-color-text-secondary);
+  margin-bottom: 8px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--ant-color-border);
+}
+
+.group-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px;
+  border-radius: 8px;
+  font-size: 11px;
+  color: var(--ant-color-text-secondary);
+  margin-bottom: 4px;
+  transition: 0.12s;
+}
+
+.group-item:hover {
+  background: var(--ant-color-bg-elevated);
+}
+
+.group-item button {
+  padding: 4px 10px;
+  border-radius: 6px;
+  border: 1px solid var(--ant-color-border);
+  background: var(--ant-color-bg-elevated);
+  color: var(--ant-color-text-secondary);
+  font-size: 10px;
+  cursor: pointer;
+  transition: 0.12s;
+}
+
+.group-item button:hover {
+  border-color: var(--ant-color-primary);
+  color: #c5b8ff;
+}

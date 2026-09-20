@@ -1,6 +1,6 @@
 import type { WorkflowStep } from '../types/api';
 
-export type WorkflowPage = 'outline' | 'assets' | 'episodes';
+export type WorkflowPage = 'outline' | 'assets' | 'episodes' | 'studio';
 
 export function workflowRedirect(
   projectId: string,
@@ -15,6 +15,9 @@ export function workflowRedirect(
   }
   if (requested === 'episodes' && unlockedStep < 3) {
     return `/project/${projectId}/assets`;
+  }
+  if (requested === 'studio' && unlockedStep < 3) {
+    return `/project/${projectId}/episodes`;
   }
   return null;
 }

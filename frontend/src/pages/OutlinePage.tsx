@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { App, Button, Modal, Typography } from 'antd';
 import { useNavigate, useParams } from 'react-router-dom';
 import { WorkflowHeader } from '../components/WorkflowHeader';
-import { finalizeOutline, getOutline, getWorkflow } from '../lib/api';
+import { finalizeOutline, getOutline, getWorkflow, updateScreenplay } from '../lib/api';
 import { useWorkflowStore } from '../stores/workflowStore';
 import type { Asset, Outline } from '../types/api';
 
@@ -66,6 +66,10 @@ export default function OutlinePage() {
   const [outline, setOutline] = useState<Outline | null>(null);
   const [finalizing, setFinalizing] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [editingText, setEditingText] = useState('');
+  const [currentEpisode, setCurrentEpisode] = useState(1);
+  const [decoding, setDecoding] = useState(true);
 
   useEffect(() => {
     let cancelled = false;
@@ -74,6 +78,8 @@ export default function OutlinePage() {
         if (cancelled) return;
         setOutline(data);
         setUnlocked(id, wf.unlockedStep);
+        setEditingText(data.screenplay);
+        setTimeout(() => setDecoding(false), 1500);
       })
       .catch(() => {
         if (!cancelled) message.error('加载大纲失败');
@@ -103,7 +109,37 @@ export default function OutlinePage() {
     }
   };
 
+  const onEditScript = () => {
+    if (editing) {
+      onSaveScript();
+    } else {
+      setEditing(true);
+      setEditingText(outline?.screenplay || '');
+      message.info('进入剧本编辑模式');
+    }
+  };
+
+  const onSaveScript = async () => {
+    if (!outline) return;
+    try {
+      await updateScreenplay(id, editingText);
+      setOutline({ ...outline, screenplay: editingText });
+      setEditing(false);
+      message.success('剧本已保存');
+    } catch {
+      message.error('保存失败');
+    }
+  };
+
   if (!outline) return null;
+
+  const currentScreenplay = currentEpisode === 1 ? outline.screenplay : `第2集：未命名（草稿）
+
+【草稿 · 由大纲自动延展】
+△ 依第1集结尾钩子（黑屏字幕）延展：林晚被木叶高层约谈，监视任务坐实；止水暗中现身提醒。
+△ 待导演智能体完成分集拆分决策后，本集剧本将正式化并进入片段编辑。
+
+提示：切换回第1集可查看正式剧本；点击「✎ 编辑」可人工撰写第2集草稿。`;
 
   return (
     <div className="ds-flowPage">
@@ -121,21 +157,28 @@ export default function OutlinePage() {
       <div className="ds-outlineGrid">
         <div className="ds-chatPanel">
           <div className="ph">
-            🎙 智能体剧组 · 创作会议 <span className="live">解读完成</span>
+            🎙 智能体剧组 · 创作会议{' '}
+            <span className={decoding ? 'live' : 'completed'}>
+              {decoding ? '解读中' : '解读完成'}
+            </span>
           </div>
-          {AGENTS.map((agent) => (
+          {AGENTS.map((agent, agentIndex) => (
             <div key={agent.name}>
               <div className="ds-agentName">
                 <span className={`ds-av ${agent.cls}`}>{agent.ab}</span>
                 {agent.name} <span className="role">{agent.role}</span>
               </div>
-              {agent.msgs.map((msg) =>
+              {agent.msgs.map((msg, msgIndex) =>
                 msg.startsWith('SYS:') ? (
-                  <div key={msg} className="ds-msg sys">
+                  <div key={msg} className="ds-msg sys" style={{ animationDelay: `${(agentIndex * agent.msgs.length + msgIndex) * 0.5}s` }}>
                     — {msg.slice(4)} —
                   </div>
                 ) : (
-                  <div key={msg} className="ds-msg">
+                  <div
+                    key={msg}
+                    className="ds-msg"
+                    style={{ animationDelay: `${(agentIndex * agent.msgs.length + msgIndex) * 0.5}s` }}
+                  >
                     {msg}
                   </div>
                 ),
@@ -201,8 +244,49 @@ export default function OutlinePage() {
           </div>
 
           <div className="ds-docPanel">
-            <h4>📜 剧本内容</h4>
-            <div className="ds-screenplay">{outline.screenplay}</div>
+            <h4>
+              📜 剧本内容
+              <span className="edit" onClick={onEditScript}>
+                {editing ? '💾 保存' : '✎ 编辑'}
+              </span>
+              <span style={{ display: 'inline-flex', gap: '6px', marginLeft: '12px' }}>
+                <button
+                  className={`ds-chip${currentEpisode === 1 ? ' on' : ''}`}
+                  onClick={() => setCurrentEpisode(1)}
+                  style={{ padding: '4px 13px', fontSize: '11px' }}
+                >
+                  第1集 · 异世囚笼
+                </button>
+                <button
+                  className={`ds-chip${currentEpisode === 2 ? ' on' : ''}`}
+                  onClick={() => setCurrentEpisode(2)}
+                  style={{ padding: '4px 13px', fontSize: '11px' }}
+                >
+                  第2集 · 未命名 <span style={{ opacity: 0.6 }}>草稿</span>
+                </button>
+              </span>
+            </h4>
+            {editing ? (
+              <textarea
+                value={editingText}
+                onChange={(e) => setEditingText(e.target.value)}
+                style={{
+                  width: '100%',
+                  minHeight: '300px',
+                  resize: 'vertical',
+                  fontSize: '12.5px',
+                  lineHeight: 2,
+                  borderRadius: '12px',
+                  padding: '12px',
+                  fontFamily: 'inherit',
+                }}
+                spellCheck={false}
+              />
+            ) : (
+              <div className="ds-screenplay" style={currentEpisode === 2 ? { color: 'var(--ant-color-text-tertiary)' } : undefined}>
+                {currentScreenplay}
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -211,6 +295,8 @@ export default function OutlinePage() {
         <span className="msg">
           {outline.finalized ? (
             <span style={{ color: 'var(--ant-color-success)' }}>✓ 剧本已定稿，可进入资产步骤</span>
+          ) : decoding ? (
+            '智能体剧组正在解读剧本…'
           ) : (
             '智能体剧组已完成解读：大纲 / 摘要 / 角色·场景·道具 / 剧本内容 已生成'
           )}

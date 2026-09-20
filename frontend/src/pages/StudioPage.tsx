@@ -3,8 +3,10 @@ import { App, Button, Modal, Progress, Select } from 'antd';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useTask } from '../hooks/useTask';
 import {
+  createSegment,
   getEpisode,
   listAssets,
+  listEpisodes,
   listModels,
   listSegments,
   patchSegment,
@@ -67,6 +69,9 @@ export default function StudioPage() {
   const [models, setModels] = useState<Model[]>([]);
   const [cur, setCur] = useState(0);
   const [model, setModel] = useState<ModelId>('seedance-2.5');
+  const [style, setStyle] = useState('赛博朋克电影');
+  const [ratio, setRatio] = useState('9:16');
+  const [resolution, setResolution] = useState('720P');
   const [editing, setEditing] = useState(false);
   const [draftPrompt, setDraftPrompt] = useState('');
   const [openShot, setOpenShot] = useState<string | null>(null);
@@ -75,10 +80,26 @@ export default function StudioPage() {
   const [genTaskId, setGenTaskId] = useState<string | null>(null);
   const [exportOpen, setExportOpen] = useState(false);
   const [exportTaskId, setExportTaskId] = useState<string | null>(null);
+  const [exportResolution, setExportResolution] = useState('720P');
+  const [exportFormat, setExportFormat] = useState('MP4');
+  const [exportWatermark, setExportWatermark] = useState('带平台角标');
+  const [exportRange, setExportRange] = useState('整集');
   const [download, setDownload] = useState<{ url: string; name: string } | null>(null);
+  const [globalSettingOpen, setGlobalSettingOpen] = useState(false);
+  const [globalSetting, setGlobalSetting] = useState('【全局设定】画面风格：赛博朋克电影。全程人物边界独立，自然表演，人物无穿插、无穿透；全程禁止出现字幕（黑屏字幕分镜除外）、禁止角色变脸、变装、形象突变；杜绝肢体畸形、扭曲、残缺等人体结构错误；禁止画面闪烁、跳变、卡顿、帧异常；全程无背景音乐、无 BGM，只保留对白与现场环境声。\n\n（此设定注入第1集全部 3 个片段的每一次生成）');
   const [playing, setPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [cursor, setCursor] = useState(0);
+  const [episodes, setEpisodes] = useState<Episode[]>([]);
+  const [audioTracks, setAudioTracks] = useState<Array<{ name: string; duration: number; voice: string; status: string }>>([
+    { name: 'c01 林晚 · 独白', duration: 4, voice: '细腻柔软 · 气息带颤', status: '已合成' },
+    { name: 'c04 鼬 · 质问', duration: 4, voice: '冷硬偏沉 · 字正腔圆', status: '已合成' },
+    { name: 'c05 林晚 · 否认', duration: 7, voice: '急促带颤 · 快速语速', status: '待生成' },
+    { name: '环境声 · 夜风/衣料', duration: 37, voice: '现场底声 · 无 BGM', status: '已合成' },
+  ]);
+  const [multiMode, setMultiMode] = useState(false);
+  const [selectedSegments, setSelectedSegments] = useState<Set<number>>(new Set());
+  const [dragFrom, setDragFrom] = useState<number | null>(null);
 
   const segment = segments[cur];
   const totalDur = segments.reduce((a, s) => a + s.durationSec, 0);
@@ -110,20 +131,38 @@ export default function StudioPage() {
   const generating = genTask != null && genTask.status !== 'failed' && genTask.status !== 'succeeded';
   const exporting = exportTask != null && exportTask.status !== 'failed' && exportTask.status !== 'succeeded';
 
+  const genProgressSteps = [
+    '排队中…',
+    '注入全局负面设定…',
+    '资产一致性对齐…',
+    `生成关键帧（${style} · ${ratio}）…`,
+    `视频合成 ${models.find((m) => m.id === model)?.name ?? model}…`,
+    '音轨：对白 + 现场环境声…',
+  ];
+  const getGenProgressText = (progress: number, status: string): string => {
+    if (status === 'pending') return genProgressSteps[0];
+    if (status === 'failed') return '生成失败';
+    if (status === 'succeeded') return '✓ 生成完成';
+    const stepIndex = Math.min(genProgressSteps.length - 1, Math.floor(progress / 100 * genProgressSteps.length));
+    return genProgressSteps[stepIndex];
+  };
+
   useEffect(() => {
     let cancelled = false;
     const boot = async () => {
-      const [ep, segs, assetData, modelData] = await Promise.all([
+      const [ep, segs, assetData, modelData, episodeData] = await Promise.all([
         getEpisode(episodeId),
         listSegments(episodeId),
         listAssets(id),
         listModels(),
+        listEpisodes(id),
       ]);
       if (cancelled) return;
       setEpisode(ep);
       setSegments(segs.segments);
       setAssets(assetData.assets);
       setModels(modelData.models);
+      setEpisodes(episodeData.episodes);
       if (modelData.models[0]) setModel(modelData.models[0].id);
     };
     void boot().catch(() => {
@@ -160,6 +199,89 @@ export default function StudioPage() {
     }),
     [assets],
   );
+
+  const toggleSegmentSelect = (index: number) => {
+    setSelectedSegments((prev) => {
+      const next = new Set(prev);
+      if (next.has(index)) {
+        next.delete(index);
+      } else {
+        next.add(index);
+      }
+      return next;
+    });
+  };
+
+  const exitMultiMode = () => {
+    setMultiMode(false);
+    setSelectedSegments(new Set());
+  };
+
+  const handleBatchAction = (action: string) => {
+    const selected = Array.from(selectedSegments);
+    if (selected.length === 0) {
+      message.warning('请先勾选要批量操作的片段');
+      return;
+    }
+    if (action === 'batch_regen') {
+      message.success(`已提交 ${selected.length} 个片段重新生成（演示：即时完成）`);
+      exitMultiMode();
+    } else if (action === 'batch_delete') {
+      if (selected.length >= segments.length) {
+        message.warning('至少保留 1 个片段');
+        return;
+      }
+      const newSegments = segments.filter((_, i) => !selected.includes(i));
+      setSegments(newSegments);
+      setCur(0);
+      message.success(`已删除 ${selected.length} 个片段`);
+      exitMultiMode();
+    } else if (action === 'batch_export') {
+      message.success(`已加入导出队列：选中 ${selected.length} 个片段将拼接导出`);
+      exitMultiMode();
+    } else if (action === 'exit_multi') {
+      exitMultiMode();
+    }
+  };
+
+  const handleDragStart = (index: number) => {
+    setDragFrom(index);
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+  };
+
+  const handleDrop = (targetIndex: number) => {
+    if (dragFrom === null || dragFrom === targetIndex) return;
+    const newSegments = [...segments];
+    const [moved] = newSegments.splice(dragFrom, 1);
+    newSegments.splice(targetIndex, 0, moved);
+    setSegments(newSegments);
+    setCur(targetIndex);
+    setDragFrom(null);
+    message.success(`片段顺序已调整：移至第 ${targetIndex + 1} 位`);
+  };
+
+  const addNewSegment = async () => {
+    if (segments.length >= 8) {
+      message.warning('演示上限：单集最多 8 个片段');
+      return;
+    }
+    try {
+      const newSegment = await createSegment(episodeId, {
+        prompt: '（新片段 · 点击编辑提示词，@ 引用角色 / 场景 / 素材）',
+        durationSec: 4,
+        title: '新片段 · 待编排',
+      });
+      const newSegments = [...segments, newSegment];
+      setSegments(newSegments);
+      setCur(newSegments.length - 1);
+      message.success(`片段 ${newSegment.no} 已创建（默认 4s · 4-15s 限制）`);
+    } catch {
+      message.error('创建片段失败');
+    }
+  };
 
   const insertAsset = (asset: Asset) => {
     const at = promptRef.current?.selectionStart ?? cursor;
@@ -205,7 +327,7 @@ export default function StudioPage() {
   const onExport = async () => {
     setDownload(null);
     try {
-      const { taskId } = await submitEpisodeExportTask(episodeId, { resolution: '720P', format: 'MP4' });
+      const { taskId } = await submitEpisodeExportTask(episodeId, { resolution: exportResolution, format: exportFormat, watermark: exportWatermark });
       setExportTaskId(taskId);
     } catch {
       message.error('提交合成任务失败');
@@ -260,18 +382,65 @@ export default function StudioPage() {
           ‹
         </button>
         <div className="ds-selBox">
-          集：<b>第{episode.number}集 · {episode.title}</b>
+          <Select
+            size="small"
+            value={episodeId}
+            onChange={(value) => navigate(`/project/${id}/episode/${value}`)}
+            options={episodes.map((ep) => ({
+              value: ep.id,
+              label: `第${ep.number}集 · ${ep.title}`,
+            }))}
+            style={{ minWidth: 160 }}
+          />
         </div>
         <span className="st">
           总片段数：<b>{segments.length}</b> ｜ 总时长：<b>{formatClock(totalDur)}</b>
         </span>
         <div className="right">
+          <Button className="ds-ghost ds-pill" size="small" onClick={() => setGlobalSettingOpen(true)}>
+            ⚙ 全局设定
+          </Button>
           <Select
             size="small"
             value={model}
             onChange={setModel}
             options={models.map((m) => ({ value: m.id, label: m.name }))}
-            style={{ minWidth: 160 }}
+            style={{ minWidth: 140 }}
+          />
+          <Select
+            size="small"
+            value={style}
+            onChange={setStyle}
+            options={[
+              { value: '赛博朋克电影', label: '🎨 赛博朋克电影' },
+              { value: '国漫写实', label: '🎨 国漫写实' },
+              { value: '赛璐璐动画', label: '🎨 赛璐璐动画' },
+              { value: '水墨国风', label: '🎨 水墨国风' },
+            ]}
+            style={{ minWidth: 140 }}
+          />
+          <Select
+            size="small"
+            value={ratio}
+            onChange={setRatio}
+            options={[
+              { value: '9:16', label: '9:16' },
+              { value: '16:9', label: '16:9' },
+              { value: '1:1', label: '1:1' },
+            ]}
+            style={{ minWidth: 90 }}
+          />
+          <Select
+            size="small"
+            value={resolution}
+            onChange={setResolution}
+            options={[
+              { value: '480P', label: '480P' },
+              { value: '720P', label: '720P' },
+              { value: '1080P', label: '1080P (会员)' },
+              { value: '4K', label: '4K (会员)' },
+            ]}
+            style={{ minWidth: 90 }}
           />
           <Button className="ds-ghost ds-pill" size="small" onClick={() => setExportOpen(true)}>
             ⬇ 合成
@@ -281,7 +450,7 @@ export default function StudioPage() {
 
       <div className="ds-studioBody">
         <aside className="ds-libCol">
-          <div className="h">资产库</div>
+          <div className="h">资产库 <span className="add" onClick={() => message.info('演示：添加资产功能待实现')}>＋</span></div>
           {(['character', 'scene', 'prop', 'material'] as const).map((type) => (
             <div key={type}>
               <div className="ds-libSec">
@@ -367,7 +536,7 @@ export default function StudioPage() {
               <div className="ds-progWrap">
                 <Progress percent={genTask?.progress ?? 0} strokeColor={{ from: '#8b5cf6', to: '#6366f1' }} />
                 <div className="progTxt">
-                  {genTask?.status === 'pending' ? '排队中…' : `生成中… 模型 ${models.find((m) => m.id === model)?.name ?? model}`}
+                  {getGenProgressText(genTask?.progress ?? 0, genTask?.status ?? 'pending')}
                 </div>
               </div>
             ) : null}
@@ -504,16 +673,38 @@ export default function StudioPage() {
               </span>
             </div>
             <div className="ds-prevMeta">
-              <span>9:16 · 720P</span>
+              <span>{ratio} · {segment.generated ? '480P' : resolution}</span>
               <span>
                 片段 {segment.no} · {segment.generated ? '真实生成结果' : '尚未生成'}
               </span>
             </div>
           </div>
+          <div className="ds-audPanel">
+            <div className="h">
+              🎙 音画同出 · 音轨
+              <span className="go" onClick={() => { message.loading('音画同出：按台词语音标注生成配音并与画面对齐…'); setTimeout(() => { setAudioTracks(audioTracks.map(t => ({ ...t, status: '已合成' }))); message.success('配音生成完成：对白 + 环境声已对齐画面时轴'); }, 1600); }}>
+                生成配音
+              </span>
+            </div>
+            <div className="ds-audList">
+              {audioTracks.map((track, idx) => (
+                <div key={idx} className="ds-audRow">
+                  <span className="nm" title={track.name}>{track.name}</span>
+                  <span className="wave">
+                    {Array.from({ length: 26 }, (_, i) => (
+                      <i key={i} style={{ height: `${3 + Math.round(Math.random() * 13)}px` }} />
+                    ))}
+                  </span>
+                  <button className="pl" onClick={() => message.info(`试听：${track.voice}（演示无声）`)}>▶</button>
+                  <span className="st2">{track.status}</span>
+                </div>
+              ))}
+            </div>
+          </div>
         </aside>
       </div>
 
-      <div className="ds-tlBar">
+      <div className={`ds-tlBar${multiMode ? ' multi' : ''}`}>
         <button type="button" className="tlPlay" onClick={togglePlay}>
           {playing ? '⏸' : '▶'}
         </button>
@@ -525,14 +716,19 @@ export default function StudioPage() {
             <button
               key={s.id}
               type="button"
-              className={`tlClip${i === cur ? ' sel' : ''}${s.generated ? '' : ' emptyC'}`}
-              onClick={() => setCur(i)}
+              draggable={!multiMode}
+              onDragStart={() => handleDragStart(i)}
+              onDragOver={handleDragOver}
+              onDrop={() => handleDrop(i)}
+              className={`tlClip${i === cur ? ' sel' : ''}${s.generated ? '' : ' emptyC'}${selectedSegments.has(i) ? ' checked' : ''}`}
+              onClick={() => (multiMode ? toggleSegmentSelect(i) : setCur(i))}
             >
+              {multiMode && <span className="chk2" onClick={(e) => { e.stopPropagation(); toggleSegmentSelect(i); }}>✓</span>}
               <div className="im">
                 {s.generated && s.videoUrl ? (
                   <>
                     <video src={`${s.videoUrl}#t=1`} muted playsInline preload="metadata" />
-                    <span className="resTag">480P</span>
+                    <span className="resTag">{resolution}</span>
                   </>
                 ) : (
                   <span className="no">{s.no}</span>
@@ -548,6 +744,26 @@ export default function StudioPage() {
             </button>
           ))}
         </div>
+        <button type="button" className="tlNew" onClick={addNewSegment}>
+          ＋<span>新建片段</span>
+        </button>
+        <button type="button" className="tlMulti" onClick={() => setMultiMode(!multiMode)}>
+          {multiMode ? `批量操作（已选 ${selectedSegments.size}）` : '批量操作'}
+        </button>
+        {multiMode && (
+          <Select
+            size="small"
+            style={{ minWidth: 140 }}
+            placeholder="选择操作"
+            onChange={(value) => handleBatchAction(value)}
+            options={[
+              { value: 'batch_regen', label: '批量重新生成' },
+              { value: 'batch_delete', label: '批量删除片段' },
+              { value: 'batch_export', label: '批量导出选中' },
+              { value: 'exit_multi', label: '退出多选' },
+            ]}
+          />
+        )}
       </div>
 
       <Modal
@@ -591,11 +807,58 @@ export default function StudioPage() {
       >
         <div className="ds-fRow">
           <label>导出范围</label>
-          <div>整集（片段 1-{segments.length} · {formatClock(totalDur)}）</div>
+          <Select
+            size="small"
+            value={exportRange}
+            onChange={setExportRange}
+            options={[
+              { value: '整集', label: `整集（片段 1-${segments.length} · ${formatClock(totalDur)}）` },
+              { value: '当前片段', label: `仅当前片段（片段 ${segment.no} · ${formatClock(segment.durationSec)}）` },
+            ]}
+            style={{ minWidth: 200 }}
+          />
+        </div>
+        <div className="ds-fRow ds-f2">
+          <div>
+            <label>分辨率</label>
+            <Select
+              size="small"
+              value={exportResolution}
+              onChange={setExportResolution}
+              options={[
+                { value: '720P', label: '720P' },
+                { value: '1080P', label: '1080P (会员)' },
+                { value: '4K', label: '4K (会员)' },
+              ]}
+              style={{ minWidth: 120 }}
+            />
+          </div>
+          <div>
+            <label>格式</label>
+            <Select
+              size="small"
+              value={exportFormat}
+              onChange={setExportFormat}
+              options={[
+                { value: 'MP4', label: 'MP4' },
+                { value: 'MOV', label: 'MOV' },
+              ]}
+              style={{ minWidth: 120 }}
+            />
+          </div>
         </div>
         <div className="ds-fRow">
-          <label>分辨率 / 格式</label>
-          <div>720P · MP4</div>
+          <label>水印</label>
+          <Select
+            size="small"
+            value={exportWatermark}
+            onChange={setExportWatermark}
+            options={[
+              { value: '无水印（会员）', label: '无水印（会员）' },
+              { value: '带平台角标', label: '带平台角标' },
+            ]}
+            style={{ minWidth: 120 }}
+          />
         </div>
         <div style={{ fontSize: 11, color: 'var(--ant-color-text-tertiary)', marginBottom: 12 }}>
           合成消耗按片段时长计费；未生成片段将自动跳过
@@ -613,6 +876,36 @@ export default function StudioPage() {
         {download ? (
           <div style={{ fontSize: 12, color: '#4ecf8d', marginTop: 8 }}>✓ 成片已就绪：{download.name}</div>
         ) : null}
+      </Modal>
+
+      <Modal
+        open={globalSettingOpen}
+        className="ds-modal"
+        title="⚙ 全局设定（负面约束）"
+        onCancel={() => setGlobalSettingOpen(false)}
+        footer={[
+          <Button key="cancel" className="ds-ghost ds-pill" onClick={() => setGlobalSettingOpen(false)}>
+            取消
+          </Button>,
+          <Button
+            key="save"
+            type="primary"
+            className="ds-grad ds-pill"
+            onClick={() => {
+              message.success('全局设定已保存，将注入后续所有生成');
+              setGlobalSettingOpen(false);
+            }}
+          >
+            保存
+          </Button>,
+        ]}
+      >
+        <textarea
+          className="ds-gpText"
+          value={globalSetting}
+          onChange={(e) => setGlobalSetting(e.target.value)}
+          rows={6}
+        />
       </Modal>
     </div>
   );

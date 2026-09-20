@@ -559,7 +559,9 @@ function seedDemoContent(): void {
   const outline = nmingOutline(DEMO_PROJECT_ID, '逆命木叶', false);
   outlines.set(DEMO_PROJECT_ID, outline);
   putAssets(nmingAssets(DEMO_PROJECT_ID));
-  workflows.set(DEMO_PROJECT_ID, defaultWorkflow(DEMO_PROJECT_ID));
+  workflows.set(DEMO_PROJECT_ID, { ...defaultWorkflow(DEMO_PROJECT_ID), unlockedStep: 3, outlineFinalized: true, assetsCompleted: true });
+  episodes.set(DEMO_PROJECT_ID, nmingEpisodes(DEMO_PROJECT_ID));
+  putSegments(nmingSegments(DEMO_PROJECT_ID));
 }
 
 export function resetDb(): void {
@@ -740,6 +742,32 @@ export function patchSegmentRecord(
   if (body.shots !== undefined) found.shots = body.shots.map((s) => ({ ...s }));
   if (body.title !== undefined) found.title = body.title;
   return cloneSegment(found);
+}
+
+export function createSegmentRecord(
+  episodeId: string,
+  body: { prompt: string; durationSec: number; title: string },
+): Segment | undefined {
+  const episode = findEpisode(episodeId);
+  if (!episode) return undefined;
+  const existing = listSegmentRecords(episodeId) ?? [];
+  const nextNo = existing.length + 1;
+  const newSegment: Segment = {
+    id: `${episodeId}-seg-${nextNo}`,
+    episodeId,
+    projectId: episode.projectId,
+    no: nextNo,
+    title: body.title,
+    durationSec: body.durationSec,
+    generated: false,
+    videoUrl: null,
+    prompt: body.prompt,
+    shots: [],
+    model: null,
+    charCount: body.prompt.length,
+  };
+  segments.set(newSegment.id, newSegment);
+  return cloneSegment(newSegment);
 }
 
 export function listModelRecords(): Model[] {

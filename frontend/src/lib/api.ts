@@ -3,6 +3,7 @@ import type {
   Asset,
   AssetListResponse,
   CreateProjectBody,
+  CreateSegmentBody,
   CreditsResponse,
   Episode,
   EpisodeListResponse,
@@ -111,6 +112,13 @@ export function listSegments(episodeId: string): Promise<SegmentListResponse> {
 
 export function patchSegment(segmentId: string, body: PatchSegmentBody): Promise<Segment> {
   return apiFetch(`/api/segments/${segmentId}`, { method: 'PATCH', body: JSON.stringify(body) });
+}
+
+export function createSegment(episodeId: string, body: CreateSegmentBody): Promise<Segment> {
+  return apiFetch(`/api/episodes/${episodeId}/segments`, {
+    method: 'POST',
+    body: JSON.stringify(body),
+  });
 }
 
 export function submitSegmentVideoTask(segmentId: string, body: VideoTaskBody): Promise<SubmitTaskResponse> {
