@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { App, Button, Modal, Progress, Switch, Tag } from 'antd';
+import { App, Button, Image, Modal, Progress, Switch, Tag } from 'antd';
 import { useNavigate, useParams } from 'react-router-dom';
 import { WorkflowHeader } from '../components/WorkflowHeader';
 import { useTask } from '../hooks/useTask';
@@ -161,12 +161,15 @@ function AssetCard({
         ]}
         width={470}
       >
-        <div style={{ borderRadius: 12, overflow: 'hidden', background: 'var(--panel2)', maxHeight: 280, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <div style={{ borderRadius: 12, overflow: 'hidden', background: 'var(--panel2)', maxHeight: 350, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           {displayImageUrl ? (
-            <img
+            <Image
               src={displayImageUrl}
               alt={asset.name}
-              style={{ width: '100%', objectFit: 'cover', ...(displayFilter ? { filter: displayFilter } : {}) }}
+              style={{ width: '100%', height: '100%', objectFit: 'contain', ...(displayFilter ? { filter: displayFilter } : {}) }}
+              preview={{
+                mask: '🔍 点击放大',
+              }}
             />
           ) : (
             <div style={{ fontSize: 84, padding: 34 }}>{asset.emoji ?? '⬚'}</div>
