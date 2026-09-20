@@ -18,6 +18,11 @@ body {
   border-bottom: 1px solid var(--ant-color-border-secondary);
   line-height: 56px;
   padding-inline: 20px;
+  overflow: hidden;
+}
+.ds-app .ant-layout-header .ant-flex {
+  flex-wrap: nowrap;
+  min-width: 0;
 }
 .ds-app ::-webkit-scrollbar {
   width: 8px;
@@ -167,6 +172,25 @@ html[data-theme='light'] .ds-credit {
 }
 .ds-themeBtn:hover {
   border-color: #8b5cf6;
+}
+
+@media (max-width: 1400px) {
+  .ds-brand .bt span {
+    display: none;
+  }
+  .ant-btn.ds-pill:not(.ds-vip) {
+    display: none;
+  }
+  .ant-btn.ds-vip {
+    padding-inline: 10px;
+    font-size: 11px;
+  }
+}
+
+@media (max-width: 1100px) {
+  .ds-app .ant-layout-header {
+    padding-inline: 12px;
+  }
 }
 
 .ant-btn-primary.ds-grad {

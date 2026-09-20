@@ -10,3 +10,7 @@
 - [ ] 框选成组，组面板显示组内容
 - [ ] 打组复用：模板重新执行（toast 反馈）
 - [ ] 节点画布整页与 demo `node.html` 并排肉眼比对通过
+
+## Comments
+
+- 2026-09-20 code-review 发现：issue 文字写「框选成组」，但 demo `node.html:285` 本身只支持 Ctrl+点击多选（无 marquee 框选）。按 spec D1「demo 为验收标准」，实现采用 Ctrl+点击多选，与 demo 一致；组面板在 demo 计数基础上额外列出成员节点名，满足「显示组内容」。

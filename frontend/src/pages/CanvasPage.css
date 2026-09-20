@@ -108,7 +108,24 @@
   gap: 4px;
 }
 
+.workCoverText {
+  position: relative;
+  z-index: 1;
+  max-width: 100%;
+  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.8);
+}
+
+.workCoverName {
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  word-break: break-word;
+  max-width: 100%;
+}
+
 .workCover .sub {
+  display: block;
   font-size: 10.5px;
   font-weight: 400;
   opacity: 0.75;
@@ -230,11 +247,24 @@
 
 .searchBox input {
   flex: 1;
+  min-width: 0;
   background: transparent;
   border: none;
   outline: none;
   color: var(--ant-color-text);
   font-size: 12px;
+}
+
+.searchBox input::placeholder {
+  color: var(--ant-color-text-tertiary);
+}
+
+.workshopEmpty {
+  grid-column: 1 / -1;
+  text-align: center;
+  padding: 48px 16px;
+  color: var(--ant-color-text-tertiary);
+  font-size: 13px;
 }
 
 /* Modal */

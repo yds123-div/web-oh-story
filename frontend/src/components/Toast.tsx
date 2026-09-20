@@ -6,6 +6,10 @@ interface ToastProps {
   onClose?: () => void;
 }
 
+function withSparkle(message: string): string {
+  return message.startsWith('✦') ? message : `✦ ${message}`;
+}
+
 export function Toast({ message, onClose }: ToastProps) {
   const [visible, setVisible] = useState(true);
 
@@ -13,7 +17,7 @@ export function Toast({ message, onClose }: ToastProps) {
     const timer = setTimeout(() => {
       setVisible(false);
       setTimeout(() => onClose?.(), 300);
-    }, 3000);
+    }, 2400);
 
     return () => clearTimeout(timer);
   }, [onClose]);
@@ -22,7 +26,7 @@ export function Toast({ message, onClose }: ToastProps) {
 
   return (
     <div className="toast">
-      {message}
+      {withSparkle(message)}
     </div>
   );
 }

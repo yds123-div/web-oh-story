@@ -2,19 +2,99 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import './CanvasPage.css';
 import { Toast, useToast, showToast } from '../components/Toast';
+import { demoAssetUrl } from '../lib/demoAssets';
 
 interface Canvas {
   id: string;
   name: string;
   ratio: string;
   cover?: string;
+  coverGradient?: string;
+  subtitle?: string;
+  nameLines?: string[];
   tags?: string[];
+  categories?: string[];
   status: 'in-progress' | 'archived';
   segments?: number;
   duration?: string;
   isTemplate?: boolean;
   usageCount?: string;
 }
+
+const DEFAULT_MY_CANVASES: Canvas[] = [
+  {
+    id: '1',
+    name: '逆命木叶',
+    ratio: '9:16',
+    cover: 'corridor.jpg',
+    coverGradient: 'linear-gradient(150deg,#1c2440,#3a2f6b 55%,#141a33)',
+    subtitle: '第1集 · 异世囚笼',
+    tags: ['进行中'],
+    status: 'in-progress',
+    segments: 3,
+    duration: '00:37',
+  },
+  {
+    id: '2',
+    name: '火影乱斗',
+    ratio: '16:9',
+    coverGradient: 'linear-gradient(150deg,#2b1b3d,#43307a 55%,#1c2a52)',
+    status: 'archived',
+    segments: 4,
+    duration: '00:46',
+  },
+];
+
+const SHARED_CANVASES: Canvas[] = [
+  {
+    id: 't1',
+    name: 'ONE MOVE GOD MODE',
+    nameLines: ['ONE MOVE', 'GOD MODE'],
+    ratio: '9:16',
+    coverGradient: 'linear-gradient(150deg,#0f2b4d,#1d4a7a 60%,#0c1f3a)',
+    tags: ['EXCLUSIVE'],
+    categories: ['精选画布', '专业影视'],
+    status: 'in-progress',
+    isTemplate: true,
+    usageCount: '12.8w 使用',
+  },
+  {
+    id: 't2',
+    name: '机甲废土 SCRAP KING',
+    nameLines: ['机甲废土', 'SCRAP KING'],
+    ratio: '16:9',
+    coverGradient: 'linear-gradient(150deg,#3a2a12,#6b4a1a 60%,#241a0c)',
+    categories: ['专业影视'],
+    status: 'in-progress',
+    isTemplate: true,
+    usageCount: '8.3w 使用',
+  },
+  {
+    id: 't3',
+    name: 'BEASTLY LORD',
+    nameLines: ['BEASTLY', 'LORD'],
+    ratio: '9:16',
+    coverGradient: 'linear-gradient(150deg,#4d1b24,#7a3040 60%,#2b0c14)',
+    categories: ['精选画布'],
+    status: 'in-progress',
+    isTemplate: true,
+    usageCount: '6.1w 使用',
+  },
+  {
+    id: 't4',
+    name: '披萨外送员的诸神黄昏',
+    nameLines: ['披萨外送员的', '诸神黄昏'],
+    ratio: '16:9',
+    coverGradient: 'linear-gradient(150deg,#12303a,#1a4a55 60%,#0a1e24)',
+    categories: ['教育生活', '声音剧场'],
+    status: 'in-progress',
+    isTemplate: true,
+    usageCount: '5.7w 使用',
+  },
+];
+
+const CATEGORIES = ['全部', '精选画布', '教育生活', '专业影视', '声音剧场'];
+const DEFAULT_COVER_GRADIENT = 'linear-gradient(150deg,#241a3d,#3a2a5c)';
 
 export default function CanvasPage() {
   const navigate = useNavigate();
@@ -23,67 +103,9 @@ export default function CanvasPage() {
   const [canvasName, setCanvasName] = useState('');
   const [selectedRatio, setSelectedRatio] = useState('9:16');
   const [selectedCategory, setSelectedCategory] = useState('全部');
+  const [searchQuery, setSearchQuery] = useState('');
 
-  // 我的画布数据
-  const [myCanvases, setMyCanvases] = useState<Canvas[]>([
-    {
-      id: '1',
-      name: '逆命木叶',
-      ratio: '9:16',
-      cover: 'corridor.jpg',
-      tags: ['进行中'],
-      status: 'in-progress',
-      segments: 3,
-      duration: '00:37',
-    },
-    {
-      id: '2',
-      name: '火影乱斗',
-      ratio: '16:9',
-      status: 'archived',
-      segments: 4,
-      duration: '00:46',
-    },
-  ]);
-
-  // 创作工坊画布数据
-  const sharedCanvases: Canvas[] = [
-    {
-      id: 't1',
-      name: 'ONE MOVE GOD MODE',
-      ratio: '9:16',
-      tags: ['EXCLUSIVE'],
-      status: 'in-progress',
-      isTemplate: true,
-      usageCount: '12.8w 使用',
-    },
-    {
-      id: 't2',
-      name: '机甲废土 SCRAP KING',
-      ratio: '16:9',
-      status: 'in-progress',
-      isTemplate: true,
-      usageCount: '8.3w 使用',
-    },
-    {
-      id: 't3',
-      name: 'BEASTLY LORD',
-      ratio: '9:16',
-      status: 'in-progress',
-      isTemplate: true,
-      usageCount: '6.1w 使用',
-    },
-    {
-      id: 't4',
-      name: '披萨外送员的诸神黄昏',
-      ratio: '16:9',
-      status: 'in-progress',
-      isTemplate: true,
-      usageCount: '5.7w 使用',
-    },
-  ];
-
-  const categories = ['全部', '精选画布', '教育生活', '专业影视', '声音剧场'];
+  const [myCanvases, setMyCanvases] = useState<Canvas[]>(DEFAULT_MY_CANVASES);
 
   const handleCreateCanvas = () => {
     if (!canvasName.trim()) {
@@ -95,6 +117,7 @@ export default function CanvasPage() {
       id: Date.now().toString(),
       name: canvasName.trim(),
       ratio: selectedRatio,
+      coverGradient: DEFAULT_COVER_GRADIENT,
       status: 'in-progress',
       segments: 0,
       duration: '00:00',
@@ -106,17 +129,27 @@ export default function CanvasPage() {
     showToast(`画布「${newCanvas.name}」已创建（${selectedRatio}）`);
   };
 
-  const handleOpenCanvas = (canvasId: string) => {
-    navigate(`/canvas/${canvasId}`);
+  const handleOpenCanvas = (canvas: Canvas) => {
+    if (canvas.status === 'archived') {
+      showToast(`演示：打开归档画布「${canvas.name}」`);
+      return;
+    }
+    navigate(`/canvas/${canvas.id}`);
   };
 
   const handleUseTemplate = () => {
+    navigate('/create');
+  };
+
+  const handleCopyTemplateToast = () => {
     showToast('演示：复制他人画布到我的项目');
   };
 
-  const filteredSharedCanvases = sharedCanvases.filter((canvas) => {
-    const matchesCategory = selectedCategory === '全部' || canvas.tags?.includes(selectedCategory);
-    return matchesCategory;
+  const query = searchQuery.trim().toLowerCase();
+  const filteredSharedCanvases = SHARED_CANVASES.filter((canvas) => {
+    const matchesCategory = selectedCategory === '全部' || canvas.categories?.includes(selectedCategory);
+    const matchesSearch = !query || canvas.name.toLowerCase().includes(query);
+    return matchesCategory && matchesSearch;
   });
 
   return (
@@ -144,14 +177,12 @@ export default function CanvasPage() {
               <div
                 className="workCover"
                 style={{
-                  background: canvas.cover
-                    ? 'linear-gradient(150deg,#1c2440,#3a2f6b 55%,#141a33)'
-                    : 'linear-gradient(150deg,#241a3d,#3a2a5c)',
+                  background: canvas.coverGradient ?? DEFAULT_COVER_GRADIENT,
                 }}
               >
                 {canvas.cover && (
                   <img
-                    src={canvas.cover}
+                    src={demoAssetUrl(canvas.cover)}
                     style={{
                       position: 'absolute',
                       inset: 0,
@@ -163,9 +194,15 @@ export default function CanvasPage() {
                     alt=""
                   />
                 )}
-                <span style={{ position: 'relative', zIndex: 1, textShadow: '0 2px 8px rgba(0,0,0,.8)' }}>
-                  {canvas.name}
+                <span className="workCoverText">
+                  <span className="workCoverName">{canvas.name}</span>
                   <span className="sub">
+                    {canvas.subtitle && (
+                      <>
+                        {canvas.subtitle}
+                        <br />
+                      </>
+                    )}
                     {canvas.segments} 片段 · {canvas.duration} · {canvas.ratio}
                   </span>
                 </span>
@@ -176,10 +213,17 @@ export default function CanvasPage() {
                 ))}
               </div>
               <div className="workOps">
-                <button className="pri" onClick={() => handleOpenCanvas(canvas.id)}>
+                <button
+                  className={canvas.status === 'archived' ? undefined : 'pri'}
+                  onClick={() => handleOpenCanvas(canvas)}
+                >
                   打开画布
                 </button>
-                <button onClick={() => navigate('/outline')}>三步工作流</button>
+                {canvas.status === 'archived' ? (
+                  <button onClick={() => showToast('演示：该画布已归档')}>已归档</button>
+                ) : (
+                  <button onClick={() => navigate('/outline')}>三步工作流</button>
+                )}
               </div>
             </div>
           ))}
@@ -188,7 +232,7 @@ export default function CanvasPage() {
         <div className="secHead" style={{marginTop:'30px'}}><h3>🎨 创作工坊 · 他人分享的画布</h3></div>
 
         <div className="chips">
-          {categories.map((category) => (
+          {CATEGORIES.map((category) => (
             <button
               key={category}
               className={`chip ${selectedCategory === category ? 'on' : ''}`}
@@ -198,40 +242,59 @@ export default function CanvasPage() {
             </button>
           ))}
           <div className="searchBox">
-            🔍 描述你想要找的画布 / 资产
+            <span>🔍</span>
+            <input
+              type="search"
+              placeholder="描述你想要找的画布 / 资产"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+            />
           </div>
         </div>
 
         <div className="canvasGrid">
-          {filteredSharedCanvases.map((canvas) => (
-            <div key={canvas.id} className="workCard" onClick={handleUseTemplate}>
-              <div
-                className="workCover"
-                style={{
-                  background: 'linear-gradient(150deg,#0f2b4d,#1d4a7a 60%,#0c1f3a)',
-                }}
-              >
-                {canvas.tags?.map((tag) => (
-                  <span key={tag} className="tag">
-                    {tag}
+          {filteredSharedCanvases.length === 0 ? (
+            <div className="workshopEmpty">没有符合条件的画布</div>
+          ) : (
+            filteredSharedCanvases.map((canvas) => (
+              <div key={canvas.id} className="workCard" onClick={handleCopyTemplateToast}>
+                <div
+                  className="workCover"
+                  style={{
+                    background: canvas.coverGradient ?? DEFAULT_COVER_GRADIENT,
+                  }}
+                >
+                  {canvas.tags?.map((tag) => (
+                    <span key={tag} className="tag">
+                      {tag}
+                    </span>
+                  ))}
+                  <span className="workCoverName">
+                    {canvas.nameLines
+                      ? canvas.nameLines.map((line, i) => (
+                          <span key={line}>
+                            {i > 0 && <br />}
+                            {line}
+                          </span>
+                        ))
+                      : canvas.name}
                   </span>
-                ))}
-                {canvas.name}
-                <div className="tplOps">
-                  <span className="cnt">{canvas.usageCount}</span>
-                  <button
-                    className="use"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleUseTemplate();
-                    }}
-                  >
-                    用此创作
-                  </button>
+                  <div className="tplOps">
+                    <span className="cnt">🔥 {canvas.usageCount}</span>
+                    <button
+                      className="use"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleUseTemplate();
+                      }}
+                    >
+                      用此创作
+                    </button>
+                  </div>
                 </div>
               </div>
-            </div>
-          ))}
+            ))
+          )}
         </div>
       </div>
 

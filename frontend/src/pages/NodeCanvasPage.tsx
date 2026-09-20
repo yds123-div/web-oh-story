@@ -1,16 +1,22 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type Dispatch, type SetStateAction } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   ReactFlow,
   Background,
-  Controls,
   MiniMap,
   addEdge,
   useNodesState,
   useEdgesState,
+  useNodes,
+  ViewportPortal,
+  BaseEdge,
+  EdgeLabelRenderer,
+  getBezierPath,
   type Connection,
   type Edge,
+  type EdgeProps,
   type Node,
+  type ReactFlowInstance,
   MarkerType,
   BackgroundVariant,
   Handle,
@@ -19,6 +25,8 @@ import {
 import '@xyflow/react/dist/style.css';
 import './NodeCanvasPage.css';
 import { Toast, useToast, showToast } from '../components/Toast';
+import { demoAssetUrl } from '../lib/demoAssets';
+import { hasEquivalentEdge, isValidConnection } from '../lib/edgeValidation';
 
 // 节点类型定义
 type NodeType = 'script' | 'sub' | 'sb' | 'img' | 'vid' | 'merge' | 'dyn';
@@ -286,32 +294,305 @@ const INITIAL_EDGES: Edge[] = [
   { id: 'e-vid3-merge', source: 'vid3', target: 'merge', markerEnd: { type: MarkerType.ArrowClosed } },
 ];
 
+const QUICK_CARDS = [
+  { icon: '📄', title: '剧本节点', desc: '剧本解析 · 大纲' },
+  { icon: '🧊', title: '主体生成', desc: '角色形象资产' },
+  { icon: '🎬', title: '分镜生成', desc: '分集 · 片段拆分' },
+  { icon: '🖼', title: '图像生成', desc: '关键帧 · 场景图' },
+  { icon: '🎥', title: '视频生成', desc: '片段视频合成' },
+];
+
+const MODELS = [
+  { name: 'Seedance 2.5', desc: '均衡 · 运镜稳定 · 适合短剧对峙戏', tag: '推荐' },
+  { name: 'Minimax H3 Max', desc: '高保真 · 表演细腻 · 高积分消耗', tag: '' },
+  { name: 'Wan 3.0', desc: '轻量快速 · 低积分 · 草稿迭代', tag: '' },
+];
+
+function clonePipelineNodes(): Node<NodeData>[] {
+  return INITIAL_NODES.map((node) => ({
+    ...node,
+    position: { ...node.position },
+    data: { ...node.data },
+  }));
+}
+
+function clonePipelineEdges(): Edge[] {
+  return INITIAL_EDGES.map((edge) => ({ ...edge, type: 'bezierDelete' }));
+}
+
+/** Ctrl/Cmd 按住为多选 toggle，否则单选替换。 */
+function toggleSelection(prev: string[], id: string, additive: boolean): string[] {
+  if (!additive) return [id];
+  return prev.includes(id) ? prev.filter((n) => n !== id) : [...prev, id];
+}
+
+type NodeAction = 'preview' | 'duplicate' | 'delete';
+type PreviewPoint = { x: number; y: number };
+
+const nodeActionRef = {
+  current: (_id: string, _action: NodeAction, _point?: PreviewPoint) => {},
+};
+const setSelectedNodesRef: { current: Dispatch<SetStateAction<string[]>> } = {
+  current: () => {},
+};
+const closePreviewRef = { current: () => {} };
+const getNodeLabelRef = { current: (id: string) => id };
+const setEdgesRef: { current: Dispatch<SetStateAction<Edge[]>> } = {
+  current: () => {},
+};
+
+const NAMED_TOOL_TOAST: Record<string, string> = {
+  vid: '视频生成',
+  img: '图片生成',
+  aud: '音频生成',
+  txt: '文本',
+};
+
+function CanvasCustomNode({ data, id, selected }: { data: NodeData; id: string; selected?: boolean }) {
+  const handleSelect = (e: React.MouseEvent) => {
+    closePreviewRef.current();
+    setSelectedNodesRef.current((prev) => toggleSelection(prev, id, e.ctrlKey || e.metaKey));
+  };
+
+  return (
+    <div
+      className={`custom-node ${selected ? 'selected' : ''}`}
+      onMouseDown={handleSelect}
+    >
+      <Handle type="target" position={Position.Left} className="port in" />
+      <div className="node-header" style={{ borderBottomColor: TYPE_COLOR[data.type] || TYPE_COLOR.dyn }}>
+        <span className="node-icon">{data.icon}</span>
+        <span className="node-title">{data.label}</span>
+      </div>
+      {(data.img || data.vid) && (
+        <div className="node-thumb">
+          {data.img ? (
+            <img src={demoAssetUrl(data.img)} alt="" draggable={false} />
+          ) : (
+            <video src={demoAssetUrl(data.vid)} preload="metadata" muted />
+          )}
+        </div>
+      )}
+      <div className="node-body" dangerouslySetInnerHTML={{ __html: data.body }} />
+      <span className={`node-status ${data.statusClass}`}>{data.status}</span>
+      <div className="node-actions">
+        <button
+          title="画布快捷预览"
+          onClick={(e) => {
+            e.stopPropagation();
+            nodeActionRef.current(id, 'preview', { x: e.clientX, y: e.clientY });
+          }}
+          disabled={!data.img && !data.vid}
+        >
+          ▶
+        </button>
+        <button title="复制节点" onClick={() => nodeActionRef.current(id, 'duplicate')}>
+          ⧉
+        </button>
+        <button title="删除节点" onClick={() => nodeActionRef.current(id, 'delete')}>
+          🗑
+        </button>
+      </div>
+      <Handle type="source" position={Position.Right} className="port out" />
+    </div>
+  );
+}
+
+function DeletableBezierEdge({
+  id,
+  source,
+  target,
+  sourceX,
+  sourceY,
+  targetX,
+  targetY,
+  sourcePosition,
+  targetPosition,
+  markerEnd,
+}: EdgeProps) {
+  const [edgePath, labelX, labelY] = getBezierPath({
+    sourceX,
+    sourceY,
+    sourcePosition,
+    targetX,
+    targetY,
+    targetPosition,
+  });
+
+  return (
+    <>
+      <BaseEdge
+        id={id}
+        path={edgePath}
+        markerEnd={markerEnd}
+        style={{ stroke: '#8b5cf6', strokeWidth: 2, opacity: 0.72 }}
+      />
+      <EdgeLabelRenderer>
+        <button
+          type="button"
+          className="edge-delete"
+          style={{
+            transform: `translate(-50%, -50%) translate(${labelX}px, ${labelY}px)`,
+          }}
+          onClick={(e) => {
+            e.stopPropagation();
+            setEdgesRef.current((eds) => eds.filter((edge) => edge.id !== id));
+            showToast(`连线已删除：${getNodeLabelRef.current(source)} ✕ ${getNodeLabelRef.current(target)}`);
+          }}
+        >
+          ×
+        </button>
+      </EdgeLabelRenderer>
+    </>
+  );
+}
+
+function GroupBoxes({ groups }: { groups: GroupTemplate[] }) {
+  const rfNodes = useNodes();
+
+  return (
+    <ViewportPortal>
+      {groups.map((group) => {
+        const members = rfNodes.filter((n) => group.nodeIds.includes(n.id));
+        if (members.length === 0) return null;
+        const widths = members.map((n) => n.measured?.width ?? n.width ?? 208);
+        const heights = members.map((n) => n.measured?.height ?? n.height ?? 140);
+        const x1 = Math.min(...members.map((n) => n.position.x)) - 16;
+        const y1 = Math.min(...members.map((n) => n.position.y)) - 28;
+        const x2 = Math.max(...members.map((n, i) => n.position.x + widths[i])) + 16;
+        const y2 = Math.max(...members.map((n, i) => n.position.y + heights[i])) + 14;
+        return (
+          <div
+            key={group.id}
+            className="grpBox"
+            style={{
+              transform: `translate(${x1}px, ${y1}px)`,
+              width: x2 - x1,
+              height: y2 - y1,
+            }}
+          >
+            <span className="grpLabel">
+              📦 {group.name} · {group.nodeIds.length} 节点 · 已存为模板
+            </span>
+          </div>
+        );
+      })}
+    </ViewportPortal>
+  );
+}
+
+const NODE_TYPES = { custom: CanvasCustomNode };
+const EDGE_TYPES = { bezierDelete: DeletableBezierEdge };
+
+const MINIMAP_CHIP_W = 6;
+const MINIMAP_CHIP_H = 5;
+
+function MiniMapChip({
+  id,
+  x,
+  y,
+  width,
+  height,
+  color,
+  onClick,
+}: {
+  id: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  color?: string;
+  onClick?: (event: React.MouseEvent, id: string) => void;
+}) {
+  const ref = useRef<SVGRectElement>(null);
+  const [unit, setUnit] = useState(1);
+
+  useLayoutEffect(() => {
+    const svg = ref.current?.ownerSVGElement;
+    if (!svg || svg.clientWidth <= 0) return;
+    setUnit(svg.viewBox.baseVal.width / svg.clientWidth);
+  }, [x, y, width, height]);
+
+  const chipW = MINIMAP_CHIP_W * unit;
+  const chipH = MINIMAP_CHIP_H * unit;
+  const radius = 2 * unit;
+
+  return (
+    <rect
+      ref={ref}
+      className="minimap-chip"
+      x={x + Math.max(0, (width - chipW) / 2)}
+      y={y + Math.max(0, (height - chipH) / 2)}
+      width={chipW}
+      height={chipH}
+      rx={radius}
+      ry={radius}
+      fill={color}
+      onClick={onClick ? (event) => onClick(event, id) : undefined}
+    />
+  );
+}
+
 export default function NodeCanvasPage() {
   const navigate = useNavigate();
-  const [nodes, setNodes, onNodesChange] = useNodesState(INITIAL_NODES);
-  const [edges, setEdges, onEdgesChange] = useEdgesState(INITIAL_EDGES);
+  const [nodes, setNodes, onNodesChange] = useNodesState<Node<NodeData>>([]);
+  const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
+  const flowRef = useRef<ReactFlowInstance<Node<NodeData>, Edge> | null>(null);
+  const lastZoomRef = useRef(1);
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
-  const [previewNode, setPreviewNode] = useState<Node<NodeData> | null>(null);
+  const [preview, setPreview] = useState<{ node: Node<NodeData>; x: number; y: number } | null>(null);
   const [selectedNodes, setSelectedNodes] = useState<string[]>([]);
   const [groups, setGroups] = useState<GroupTemplate[]>([]);
+  const [showQuickEntry, setShowQuickEntry] = useState(true);
+  const [modelName, setModelName] = useState('Seedance 2.5');
+  const [modelMenuOpen, setModelMenuOpen] = useState(false);
   const { toast, closeToast } = useToast();
+  const nodesRef = useRef(nodes);
+  nodesRef.current = nodes;
+  setSelectedNodesRef.current = setSelectedNodes;
+  setEdgesRef.current = setEdges;
+  closePreviewRef.current = () => setPreview(null);
+  getNodeLabelRef.current = (id) =>
+    (nodesRef.current.find((n) => n.id === id)?.data as NodeData | undefined)?.label ?? id;
+
+  useEffect(() => {
+    const onDoc = (e: MouseEvent) => {
+      const t = e.target as HTMLElement;
+      if (!t.closest('.mini-prev') && !t.closest('.node-actions')) {
+        setPreview(null);
+      }
+      if (!t.closest('.model-sel-wrap')) {
+        setModelMenuOpen(false);
+      }
+    };
+    document.addEventListener('click', onDoc);
+    return () => document.removeEventListener('click', onDoc);
+  }, []);
 
   const onConnect = useCallback(
     (params: Connection) => {
-      // 连线校验：只允许合法端口连接
-      if (params.source && params.target) {
-        setEdges((eds) =>
-          addEdge(
-            {
-              ...params,
-              markerEnd: { type: MarkerType.ArrowClosed },
-            },
-            eds
-          )
-        );
+      if (!isValidConnection(params)) {
+        showToast('仅允许从源端口连向目标端口，且不能连接节点自身');
+        return;
       }
+      const { source, target } = params;
+      setEdges((eds) => {
+        if (hasEquivalentEdge(eds, source, target)) {
+          showToast('连线已存在（或反向存在）');
+          return eds;
+        }
+        showToast(`连线已创建：${getNodeLabelRef.current(source)} → ${getNodeLabelRef.current(target)}`);
+        return addEdge(
+          {
+            ...params,
+            type: 'bezierDelete',
+            markerEnd: { type: MarkerType.ArrowClosed },
+          },
+          eds,
+        );
+      });
     },
-    [setEdges]
+    [setEdges],
   );
 
   const onPaneContextMenu = useCallback(
@@ -349,13 +630,14 @@ export default function NodeCanvasPage() {
 
       setNodes((nds) => [...nds, newNode]);
       closeContextMenu();
+      showToast(`已放置节点：${item.label}`);
     },
     [contextMenu, setNodes, closeContextMenu]
   );
 
   const handleNodeAction = useCallback(
-    (nodeId: string, action: 'preview' | 'duplicate' | 'delete') => {
-      const node = nodes.find((n) => n.id === nodeId);
+    (nodeId: string, action: NodeAction, point?: PreviewPoint) => {
+      const node = nodesRef.current.find((n) => n.id === nodeId);
       if (!node) return;
 
       const nodeData = node.data as NodeData;
@@ -363,10 +645,16 @@ export default function NodeCanvasPage() {
       switch (action) {
         case 'preview':
           if (nodeData.img || nodeData.vid) {
-            setPreviewNode(node);
+            setPreview({
+              node,
+              x: point?.x ?? window.innerWidth / 2,
+              y: point?.y ?? window.innerHeight / 2,
+            });
+          } else {
+            showToast('该节点暂无可预览的媒体');
           }
           break;
-        case 'duplicate':
+        case 'duplicate': {
           const duplicatedNode: Node<NodeData> = {
             ...node,
             id: `${node.id}-copy-${Date.now()}`,
@@ -377,15 +665,20 @@ export default function NodeCanvasPage() {
             },
           };
           setNodes((nds) => [...nds, duplicatedNode]);
+          showToast(`节点已复制：${nodeData.label}`);
           break;
+        }
         case 'delete':
           setNodes((nds) => nds.filter((n) => n.id !== nodeId));
           setEdges((eds) => eds.filter((e) => e.source !== nodeId && e.target !== nodeId));
+          setSelectedNodes((prev) => prev.filter((id) => id !== nodeId));
+          showToast(`节点已删除：${nodeData.label}`);
           break;
       }
     },
-    [nodes, setNodes, setEdges]
+    [setNodes, setEdges]
   );
+  nodeActionRef.current = handleNodeAction;
 
   // 工具栏功能处理
   const handleToolAction = useCallback(
@@ -393,6 +686,8 @@ export default function NodeCanvasPage() {
       if (selectedNodes.length === 0) {
         if (tool === 'group') {
           showToast('打组复用：请 Ctrl+点击 多选 2 个以上节点');
+        } else if (NAMED_TOOL_TOAST[tool]) {
+          showToast(`请先点击选中一个节点，再调用「${NAMED_TOOL_TOAST[tool]}」`);
         } else {
           showToast('请先点击选中一个节点，再调用该功能');
         }
@@ -627,12 +922,14 @@ export default function NodeCanvasPage() {
             showToast('打组复用：请 Ctrl+点击 多选 2 个以上节点');
             return;
           }
-          const newGroup: GroupTemplate = {
-            id: `group-${Date.now()}`,
-            name: `组 ${groups.length + 1}`,
-            nodeIds: [...selectedNodes],
-          };
-          setGroups((prev) => [...prev, newGroup]);
+          setGroups((prev) => [
+            ...prev,
+            {
+              id: `group-${Date.now()}`,
+              name: `组 ${prev.length + 1}`,
+              nodeIds: [...selectedNodes],
+            },
+          ]);
           setSelectedNodes([]);
           showToast('已打组 ' + selectedNodes.length + ' 个节点并保存为模板（左下角可一键重复执行）');
           break;
@@ -642,6 +939,68 @@ export default function NodeCanvasPage() {
       }
     },
     [selectedNodes, nodes, setNodes, setEdges]
+  );
+
+  // 重置画布到预置管线（restorePipeline）或完全清空（clearCanvas）的共享逻辑
+  const resetCanvasState = useCallback(
+    (message: string, opts: { clear?: boolean } = {}) => {
+      const clear = opts.clear ?? false;
+      setShowQuickEntry(clear);
+      setNodes(clear ? [] : clonePipelineNodes());
+      setEdges(clear ? [] : clonePipelineEdges());
+      setGroups([]);
+      setSelectedNodes([]);
+      setPreview(null);
+      closeContextMenu();
+      showToast(message);
+      requestAnimationFrame(() => {
+        flowRef.current?.setViewport(clear ? { x: 0, y: 0, zoom: 1 } : { x: 16, y: 10, zoom: 1 });
+        lastZoomRef.current = 1;
+      });
+    },
+    [setNodes, setEdges, closeContextMenu]
+  );
+
+  const relayoutPipeline = useCallback(() => {
+    resetCanvasState('已按剧情重排管线布局');
+  }, [resetCanvasState]);
+
+  const generatePipeline = useCallback(() => {
+    resetCanvasState('已根据第1集剧情生成画布管线（21 条矢量连线）');
+  }, [resetCanvasState]);
+
+  const clearCanvas = useCallback(() => {
+    resetCanvasState('画布已清空，恢复快速入口', { clear: true });
+  }, [resetCanvasState]);
+
+  const nudgeZoom = useCallback((delta: number) => {
+    const current = flowRef.current?.getZoom() ?? 1;
+    const next = Math.max(0.5, Math.min(1.6, Math.round((current + delta) * 10) / 10));
+    void flowRef.current?.zoomTo(next);
+    lastZoomRef.current = next;
+    showToast(`画布缩放 ${Math.round(next * 100)}%`);
+  }, []);
+
+  const placeQuickNode = useCallback(
+    (index: number) => {
+      const card = QUICK_CARDS[index];
+      const newNode: Node<NodeData> = {
+        id: `dyn-${Date.now()}`,
+        type: 'custom',
+        position: { x: 200 + index * 220, y: 180 },
+        data: {
+          label: card.title,
+          icon: card.icon,
+          type: 'dyn',
+          body: card.desc,
+          status: 'READY',
+          statusClass: 'ok',
+        },
+      };
+      setNodes((nds) => [...nds, newNode]);
+      showToast(`已放置节点：${card.title}`);
+    },
+    [setNodes],
   );
 
   // 执行组模板
@@ -700,66 +1059,6 @@ export default function NodeCanvasPage() {
     [nodes, edges, setNodes, setEdges]
   );
 
-  const nodeTypes = useMemo(
-    () => ({
-      custom: ({ data, id, selected }: { data: NodeData; id: string; selected?: boolean }) => {
-        const handleSelect = (e: React.MouseEvent) => {
-          if (e.ctrlKey || e.metaKey) {
-            if (selected) {
-              setSelectedNodes((prev) => prev.filter((n) => n !== id));
-            } else {
-              setSelectedNodes((prev) => [...prev, id]);
-            }
-          } else {
-            setSelectedNodes([id]);
-          }
-        };
-
-        return (
-          <div
-            className={`custom-node ${selected ? 'selected' : ''}`}
-            style={{ borderColor: TYPE_COLOR[data.type] || TYPE_COLOR.dyn }}
-            onMouseDown={handleSelect}
-          >
-            <Handle type="target" position={Position.Left} className="port in" />
-            <div className="node-header">
-              <span className="node-icon">{data.icon}</span>
-              <span className="node-title">{data.label}</span>
-            </div>
-            {(data.img || data.vid) && (
-              <div className="node-thumb">
-                {data.img ? (
-                  <img src={data.img} alt="" draggable={false} />
-                ) : (
-                  <video src={data.vid} preload="metadata" muted />
-                )}
-              </div>
-            )}
-            <div className="node-body" dangerouslySetInnerHTML={{ __html: data.body }} />
-            <span className={`node-status ${data.statusClass}`}>{data.status}</span>
-            <div className="node-actions">
-              <button
-                title="画布快捷预览"
-                onClick={() => handleNodeAction(id, 'preview')}
-                disabled={!data.img && !data.vid}
-              >
-                ▶
-              </button>
-              <button title="复制节点" onClick={() => handleNodeAction(id, 'duplicate')}>
-                ⧉
-              </button>
-              <button title="删除节点" onClick={() => handleNodeAction(id, 'delete')}>
-                🗑
-              </button>
-            </div>
-            <Handle type="source" position={Position.Right} className="port out" />
-          </div>
-        );
-      },
-    }),
-    [handleNodeAction]
-  );
-
   return (
     <div className="node-canvas-page">
       <div className="canvas-toolbar">
@@ -767,6 +1066,41 @@ export default function NodeCanvasPage() {
           ‹
         </button>
         <span className="canvas-title">逆命木叶 · 第1集「异世囚笼」</span>
+        <div className="model-sel-wrap">
+          <button
+            type="button"
+            className="model-sel"
+            onClick={(e) => {
+              e.stopPropagation();
+              setModelMenuOpen((open) => !open);
+            }}
+          >
+            模型 <b>{modelName}</b> ▾
+          </button>
+          {modelMenuOpen && (
+            <div className="model-menu">
+              {MODELS.map((model) => (
+                <button
+                  key={model.name}
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setModelName(model.name);
+                    setModelMenuOpen(false);
+                    showToast(`模型已切换：${model.name}（影响后续生成调用）`);
+                  }}
+                >
+                  <span className="mn">
+                    {model.tag ? <span className="mTag">{model.tag}</span> : null}
+                    {model.name}
+                    {model.name === modelName ? <span className="cur">✓ 当前</span> : null}
+                  </span>
+                  <span className="md">{model.desc}</span>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
         <div className="canvas-tools">
           <button className={`tool-btn ${selectedNodes.length > 0 ? 'hot' : ''}`} onClick={() => handleToolAction('vid')}>🎥 视频生成</button>
           <button className={`tool-btn ${selectedNodes.length > 0 ? 'hot' : ''}`} onClick={() => handleToolAction('img')}>🖼 图片生成</button>
@@ -782,10 +1116,10 @@ export default function NodeCanvasPage() {
           <button className={`tool-btn ${selectedNodes.length > 0 ? 'hot' : ''}`} onClick={() => handleToolAction('group')}>📦 打组复用</button>
         </div>
         <div className="canvas-actions">
-          <button className="action-btn" onClick={() => {}}>
+          <button className="action-btn" onClick={relayoutPipeline}>
             ↻ 重排
           </button>
-          <button className="action-btn" onClick={() => {}}>
+          <button className="action-btn" onClick={clearCanvas}>
             🧹 清空
           </button>
         </div>
@@ -798,38 +1132,107 @@ export default function NodeCanvasPage() {
           onNodesChange={onNodesChange}
           onEdgesChange={onEdgesChange}
           onConnect={onConnect}
-          onPaneContextMenu={onPaneContextMenu}
-          onPaneClick={() => {
-            setSelectedNodes([]);
-            closeContextMenu();
+          onInit={(instance) => {
+            flowRef.current = instance;
           }}
-          nodeTypes={nodeTypes}
-          fitView
+          onPaneContextMenu={onPaneContextMenu}
+          onPaneClick={(event) => {
+            closeContextMenu();
+            setPreview(null);
+            setModelMenuOpen(false);
+            const target = event.target as HTMLElement;
+            if (target.closest('.react-flow__node')) return;
+            setSelectedNodes([]);
+          }}
+          onNodeClick={(event, node) => {
+            setSelectedNodes((prev) => toggleSelection(prev, node.id, event.ctrlKey || event.metaKey));
+          }}
+          nodeTypes={NODE_TYPES}
+          edgeTypes={EDGE_TYPES}
+          defaultViewport={{ x: 0, y: 0, zoom: 1 }}
           minZoom={0.5}
           maxZoom={1.6}
           defaultEdgeOptions={{
-            type: 'smoothstep',
+            type: 'bezierDelete',
             animated: false,
             markerEnd: { type: MarkerType.ArrowClosed },
           }}
+          onMoveEnd={(_, viewport) => {
+            if (Math.abs(viewport.zoom - lastZoomRef.current) >= 0.05) {
+              lastZoomRef.current = viewport.zoom;
+              showToast(`画布缩放 ${Math.round(viewport.zoom * 100)}%`);
+            }
+          }}
         >
           <Background variant={BackgroundVariant.Dots} gap={16} size={1} />
-          <Controls />
           <MiniMap
+            className="canvas-minimap"
             nodeColor={(node) => {
               const nodeData = node.data as NodeData;
               return TYPE_COLOR[nodeData.type] || TYPE_COLOR.dyn;
             }}
+            nodeComponent={MiniMapChip}
+            nodeStrokeWidth={0}
+            maskColor="rgba(18, 14, 32, 0.16)"
+            maskStrokeColor="#c5b3ff"
+            maskStrokeWidth={1.5}
+            pannable
+            zoomable={false}
             position="bottom-right"
+            ariaLabel="MINIMAP"
+            style={{ width: 184, height: 78 }}
           />
+          <GroupBoxes groups={groups} />
         </ReactFlow>
+
+        <div className="canvas-zoom">
+          <button type="button" className="zBtn" onClick={() => nudgeZoom(0.1)}>＋</button>
+          <button type="button" className="zBtn" onClick={() => nudgeZoom(-0.1)}>−</button>
+          <button type="button" className="zBtn zBtn-reset" onClick={clearCanvas}>⟲</button>
+        </div>
+
+        {showQuickEntry && (
+          <>
+            {nodes.length === 0 && (
+              <div className="canvas-tip">
+                <span className="cur">🖱</span>
+                <span className="rb">右击</span>
+                唤起菜单放置基础节点，或选择快速入口
+              </div>
+            )}
+            <div className="quick-wrap">
+              <div className="quick-row">
+                {QUICK_CARDS.map((card, index) => (
+                  <button key={card.title} type="button" className="qCard" onClick={() => placeQuickNode(index)}>
+                    <div className="ic">{card.icon}</div>
+                    <b>{card.title}</b>
+                    <i>{card.desc}</i>
+                  </button>
+                ))}
+              </div>
+              <button type="button" className="gen-pipeline-btn" onClick={generatePipeline}>
+                ✨ 根据剧情生成画布 · 第1集「异世囚笼」
+              </button>
+              <div className="quick-hint">
+                生成 剧本 → 主体/场景 → 分镜 → 关键帧 → 片段视频 → 整集合成 的完整管线图（矢量箭头 · 可手动修正）
+              </div>
+            </div>
+          </>
+        )}
 
         {groups.length > 0 && (
           <div className="group-panel">
-            <div className="group-panel-header">📦 已保存的组模板</div>
             {groups.map((group) => (
               <div key={group.id} className="group-item">
-                <span>📦 {group.name} · {group.nodeIds.length} 节点</span>
+                <span className="group-item-info">
+                  📦 {group.name} · {group.nodeIds.length} 节点
+                  <i className="group-members">
+                    {group.nodeIds
+                      .map((id) => (nodes.find((n) => n.id === id)?.data as NodeData | undefined)?.label)
+                      .filter(Boolean)
+                      .join('、')}
+                  </i>
+                </span>
                 <button onClick={() => executeGroup(group)}>▶ 执行</button>
               </div>
             ))}
@@ -860,23 +1263,31 @@ export default function NodeCanvasPage() {
           </div>
         )}
 
-        {previewNode && (
+        {preview && (
           <div
-            className="preview-modal"
-            onClick={() => setPreviewNode(null)}
+            className="mini-prev"
+            style={{
+              left: Math.min(preview.x + 14, window.innerWidth - 280),
+              top: Math.min(preview.y + 10, window.innerHeight - 250),
+            }}
+            onMouseDown={(e) => e.stopPropagation()}
           >
-            <div className="preview-content" onClick={(e) => e.stopPropagation()}>
-              <div className="preview-header">
-                <span>{(previewNode.data as NodeData).label}</span>
-                <button onClick={() => setPreviewNode(null)}>×</button>
-              </div>
-              <div className="preview-body">
-                {(previewNode.data as NodeData).vid ? (
-                  <video src={(previewNode.data as NodeData).vid} controls autoPlay muted loop />
-                ) : (
-                  <img src={(previewNode.data as NodeData).img} alt="" />
-                )}
-              </div>
+            {(preview.node.data as NodeData).vid ? (
+              <video
+                className="mv"
+                src={demoAssetUrl((preview.node.data as NodeData).vid)}
+                controls
+                autoPlay
+                muted
+                loop
+                playsInline
+              />
+            ) : (
+              <img className="mi" src={demoAssetUrl((preview.node.data as NodeData).img)} alt="" />
+            )}
+            <div className="cap">
+              <span>{(preview.node.data as NodeData).label}</span>
+              <span>画布快捷预览</span>
             </div>
           </div>
         )}
