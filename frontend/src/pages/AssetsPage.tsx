@@ -283,7 +283,7 @@ export default function AssetsPage() {
       const newItem: LibItem = {
         id: `material-${Date.now()}`,
         name: `素材 ${libItems.filter((i) => i.type === 'material').length + 1} · 参考图`,
-        imageUrl: '/demo-assets/corridor.jpg',
+        imageUrl: `${import.meta.env.BASE_URL}demo-assets/corridor.jpg`,
         filter: 'saturate(1.3) hue-rotate(25deg)',
         type: 'material',
       };

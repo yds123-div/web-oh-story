@@ -1,0 +1,27 @@
+# DeepSFV 生产部署 —— frontend 开发容器（dev 模式，MSW mock，无需后端）
+# 用法：docker compose up -d   →  http://115.190.62.87:3000
+services:
+  frontend:
+    image: deepsfv-frontend:dev
+    container_name: deepsfv-frontend
+    ports:
+      - "8081:5173"
+    environment:
+      # 文件监听使用轮询模式
+      - CHOKIDAR_USEPOLLING=true
+      # 外网经云 nginx /deepsfv-dev/ 路径代理（隧道 18081 -> 8081），需要子路径 base
+      - VITE_BASE=/deepsfv-dev/
+    volumes:
+      # 源码挂载：宿主机改代码 → 容器内热更新
+      - ./frontend:/app
+      # 匿名卷隔离容器内 node_modules，避免被宿主机目录覆盖
+      - frontend_node_modules:/app/node_modules
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: "2"      # 2 核
+          memory: 4g     # 4G 内存
+
+volumes:
+  frontend_node_modules:

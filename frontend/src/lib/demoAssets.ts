@@ -2,5 +2,5 @@
 export function demoAssetUrl(file?: string): string | undefined {
   if (!file) return file;
   if (/^(?:https?:)?\/\//i.test(file) || file.startsWith('/')) return file;
-  return `/demo-assets/${file}`;
+  return `${import.meta.env.BASE_URL}demo-assets/${file}`;
 }

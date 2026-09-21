@@ -18,6 +18,15 @@ import type {
 const GB = 1024 * 1024 * 1024;
 const DEMO_PROJECT_ID = 'proj-nming-muye';
 
+// 示例资源挂在 Vite base 下（本地 /demo-assets，服务器 /deepsfv-dev/demo-assets）
+const DA = `${import.meta.env.BASE_URL}demo-assets`;
+
+// crypto.randomUUID 仅在安全上下文可用；HTTP + IP 访问的生产环境里会 undefined
+function randomId(): string {
+  if (typeof crypto.randomUUID === 'function') return crypto.randomUUID();
+  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
 type TaskKind = 'outline' | 'novel' | 'image' | 'episode-split' | 'video' | 'export' | 'creative-image' | 'creative-video';
 
 type InternalTask = TaskStatus & {
@@ -38,7 +47,7 @@ function seedProjects(): Project[] {
     {
       id: DEMO_PROJECT_ID,
       name: '逆命木叶',
-      coverUrl: '/demo-assets/corridor.jpg',
+      coverUrl: `${DA}/corridor.jpg`,
       updatedAt: '2026-09-17T18:20:00.000Z',
       status: 'in_progress',
       statusText: '进行中',
@@ -103,8 +112,8 @@ function nmingAssets(projectId: string): Asset[] {
       consistencyLocked: true,
       status: 'pending',
       alts: [
-        { name: '默认形象', imageUrl: '/demo-assets/linwan.png', filter: '' },
-        { name: '和服·雨夜湿发', imageUrl: '/demo-assets/linwan.png', filter: 'brightness(.82) saturate(1.25) hue-rotate(14deg) contrast(1.08)' },
+        { name: '默认形象', imageUrl: `${DA}/linwan.png`, filter: '' },
+        { name: '和服·雨夜湿发', imageUrl: `${DA}/linwan.png`, filter: 'brightness(.82) saturate(1.25) hue-rotate(14deg) contrast(1.08)' },
       ],
       currentAlt: 0,
       refs: ['c01 独白', 'c03 走位', 'c05 过肩近景', 'c06 泛红特写'],
@@ -121,8 +130,8 @@ function nmingAssets(projectId: string): Asset[] {
       consistencyLocked: true,
       status: 'pending',
       alts: [
-        { name: '默认形象', imageUrl: '/demo-assets/itachi.png', filter: '' },
-        { name: '任务夜行装', imageUrl: '/demo-assets/itachi.png', filter: 'brightness(.8) contrast(1.25) saturate(.85)' },
+        { name: '默认形象', imageUrl: `${DA}/itachi.png`, filter: '' },
+        { name: '任务夜行装', imageUrl: `${DA}/itachi.png`, filter: 'brightness(.8) contrast(1.25) saturate(.85)' },
       ],
       currentAlt: 0,
       refs: ['c02 衣摆显露', 'c03 阴影走位', 'c04 质问中景', 'c06 悲凉特写'],
@@ -243,7 +252,7 @@ function nmingSegments(projectId: string): Segment[] {
       title: '穿越惊惶 · 扶柱独白',
       durationSec: 13,
       generated: true,
-      videoUrl: '/demo-assets/clip1.mp4',
+      videoUrl: `${DA}/clip1.mp4`,
       prompt: seg1Prompt,
       charCount: 420,
       model: 'seedance-2.5',
@@ -274,7 +283,7 @@ function nmingSegments(projectId: string): Segment[] {
       title: '质问与否认',
       durationSec: 14,
       generated: true,
-      videoUrl: '/demo-assets/clip2.mp4',
+      videoUrl: `${DA}/clip2.mp4`,
       prompt: seg2Prompt,
       charCount: 742,
       model: 'seedance-2.5',
@@ -362,7 +371,7 @@ function officialTemplates(): Template[] {
       name: '星环之外',
       subtitle: '自由画布 · 9:16',
       tags: ['科幻', '废土'],
-      coverUrl: '/demo-assets/corridor.jpg',
+      coverUrl: `${DA}/corridor.jpg`,
       coverFilter: 'hue-rotate(200deg) saturate(1.5) brightness(.9)',
       style: '赛博朋克电影',
       aspectRatio: '9:16',
@@ -374,7 +383,7 @@ function officialTemplates(): Template[] {
       name: '末日血源',
       subtitle: '原创短剧 · 12集',
       tags: ['大女主', '废土'],
-      coverUrl: '/demo-assets/corridor.jpg',
+      coverUrl: `${DA}/corridor.jpg`,
       coverFilter: 'hue-rotate(-30deg) saturate(1.8) contrast(1.2)',
       style: '赛博朋克电影',
       aspectRatio: '9:16',
@@ -386,7 +395,7 @@ function officialTemplates(): Template[] {
       name: '真千金觉醒',
       subtitle: '原创短剧 · 8集',
       tags: ['复仇', '爽文'],
-      coverUrl: '/demo-assets/linwan.png',
+      coverUrl: `${DA}/linwan.png`,
       coverFilter: 'saturate(1.5) brightness(1.05)',
       style: '国漫写实',
       aspectRatio: '9:16',
@@ -398,7 +407,7 @@ function officialTemplates(): Template[] {
       name: '致命记忆',
       subtitle: '原创短剧 · 10集',
       tags: ['大女主', '悬疑烧脑'],
-      coverUrl: '/demo-assets/itachi.png',
+      coverUrl: `${DA}/itachi.png`,
       coverFilter: 'hue-rotate(220deg) contrast(1.25)',
       style: '赛博朋克电影',
       aspectRatio: '9:16',
@@ -410,7 +419,7 @@ function officialTemplates(): Template[] {
       name: '谋断大秦',
       subtitle: '原创短剧 · 15集',
       tags: ['权谋', '爽文'],
-      coverUrl: '/demo-assets/itachi.png',
+      coverUrl: `${DA}/itachi.png`,
       coverFilter: 'sepia(.55) contrast(1.15)',
       style: '国漫写实',
       aspectRatio: '9:16',
@@ -422,7 +431,7 @@ function officialTemplates(): Template[] {
       name: '归途无声',
       subtitle: '原创短剧 · 6集',
       tags: ['治愈', '大女主'],
-      coverUrl: '/demo-assets/linwan.png',
+      coverUrl: `${DA}/linwan.png`,
       coverFilter: 'brightness(1.15) saturate(.85)',
       style: '国漫写实',
       aspectRatio: '9:16',
@@ -434,7 +443,7 @@ function officialTemplates(): Template[] {
       name: '龙脉觉醒',
       subtitle: '原创短剧 · 9集',
       tags: ['大女主', '逆袭'],
-      coverUrl: '/demo-assets/corridor.jpg',
+      coverUrl: `${DA}/corridor.jpg`,
       coverFilter: 'saturate(1.6) hue-rotate(30deg)',
       style: '国漫写实',
       aspectRatio: '9:16',
@@ -465,7 +474,7 @@ function nmingEpisodes(projectId: string): Episode[] {
       status: 'split',
       segmentCount: 3,
       durationSec: 37,
-      coverUrl: '/demo-assets/corridor.jpg',
+      coverUrl: `${DA}/corridor.jpg`,
       summary: '片段1 穿越惊惶(13s) ｜ 片段2 质问与否认(14s) ｜ 片段3 预言·警告·无力挽留(10s)',
       segments: [
         { no: 1, title: '穿越惊惶', durationSec: 13 },
@@ -498,9 +507,9 @@ function defaultWorkflow(projectId: string): WorkflowState {
 }
 
 function imageUrlFor(asset: Asset): string | null {
-  if (asset.id.endsWith('-char-linwan')) return '/demo-assets/linwan.png';
-  if (asset.id.endsWith('-char-itachi')) return '/demo-assets/itachi.png';
-  if (asset.id.endsWith('-scene-corridor')) return '/demo-assets/corridor.jpg';
+  if (asset.id.endsWith('-char-linwan')) return `${DA}/linwan.png`;
+  if (asset.id.endsWith('-char-itachi')) return `${DA}/itachi.png`;
+  if (asset.id.endsWith('-scene-corridor')) return `${DA}/corridor.jpg`;
   return null;
 }
 
@@ -599,7 +608,7 @@ export function addProject(input: {
   style?: string;
 }): Project {
   const project: Project = {
-    id: `proj-${crypto.randomUUID()}`,
+    id: `proj-${randomId()}`,
     name: input.name,
     coverUrl: null,
     updatedAt: nowIso(),
@@ -831,7 +840,7 @@ function finishTask(task: InternalTask): void {
     const segment = segments.get(task.segmentId);
     if (segment) {
       segment.generated = true;
-      segment.videoUrl = `/demo-assets/clip${segment.no}.mp4`;
+      segment.videoUrl = `${import.meta.env.BASE_URL}demo-assets/clip${segment.no}.mp4`;
       segment.model = task.model ?? segment.model;
       task.result = { segmentId: segment.id, videoUrl: segment.videoUrl, model: segment.model };
     }
@@ -843,17 +852,17 @@ function finishTask(task: InternalTask): void {
     const name = project?.name ?? 'DeepSFV';
     const epNo = episode?.number ?? 1;
     task.result = {
-      downloadUrl: '/demo-assets/clip1.mp4',
+      downloadUrl: `${DA}/clip1.mp4`,
       fileName: `${name}_第${epNo}集_720P.mp4`,
     };
   }
   if (task.kind === 'creative-image') {
-    const mediaUrl = Math.random() < 0.5 ? '/demo-assets/linwan.png' : '/demo-assets/itachi.png';
+    const mediaUrl = Math.random() < 0.5 ? `${DA}/linwan.png` : `${DA}/itachi.png`;
     task.result = { mediaUrl, kind: 'image' };
     return;
   }
   if (task.kind === 'creative-video') {
-    task.result = { mediaUrl: '/demo-assets/clip1.mp4', kind: 'video' };
+    task.result = { mediaUrl: `${DA}/clip1.mp4`, kind: 'video' };
     return;
   }
 }
@@ -882,7 +891,7 @@ function createTask(
   kind: TaskKind,
   extra: { projectId?: string; assetId?: string; segmentId?: string; episodeId?: string; model?: ModelId },
 ): TaskStatus {
-  const taskId = `task-${crypto.randomUUID()}`;
+  const taskId = `task-${randomId()}`;
   const task: InternalTask = {
     taskId,
     status: 'pending',

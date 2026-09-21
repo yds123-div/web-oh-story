@@ -647,7 +647,7 @@ export default function StudioPage() {
                 <video
                   ref={videoRef}
                   src={segment.videoUrl}
-                  poster="/demo-assets/corridor.jpg"
+                  poster={`${import.meta.env.BASE_URL}demo-assets/corridor.jpg`}
                   playsInline
                   onTimeUpdate={(e) => setCurrentTime(e.currentTarget.currentTime)}
                   onEnded={() => setPlaying(false)}

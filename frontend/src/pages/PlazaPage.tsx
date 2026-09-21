@@ -4,13 +4,16 @@ import type { PlazaAsset, PlazaCategory, Project } from '../types/api';
 
 const { Text } = Typography;
 
+// 示例资源挂在 Vite base 下（服务器为 /deepsfv-dev/demo-assets/）
+const DA = `${import.meta.env.BASE_URL}demo-assets`;
+
 // 模拟资产数据
 const MOCK_ASSETS: PlazaAsset[] = [
   {
     id: '1',
     category: 'character',
     name: '林晚-默认形象',
-    imageUrl: 'linwan.png',
+    imageUrl: `${DA}/linwan.png`,
     videoUrl: null,
     height: 300,
     meta: '角色立绘 · 9:16 · 4K',
@@ -20,7 +23,7 @@ const MOCK_ASSETS: PlazaAsset[] = [
     id: '2',
     category: 'scene',
     name: '木叶长廊-月夜',
-    imageUrl: 'corridor.jpg',
+    imageUrl: `${DA}/corridor.jpg`,
     videoUrl: null,
     height: 200,
     meta: '场景 · 16:9 · 2K',
@@ -30,7 +33,7 @@ const MOCK_ASSETS: PlazaAsset[] = [
     id: '3',
     category: 'character',
     name: '宇智波鼬-默认形象',
-    imageUrl: 'itachi.png',
+    imageUrl: `${DA}/itachi.png`,
     videoUrl: null,
     height: 300,
     meta: '角色立绘 · 9:16 · 4K',
@@ -41,7 +44,7 @@ const MOCK_ASSETS: PlazaAsset[] = [
     category: 'video',
     name: '片段1 · 扶柱独白',
     imageUrl: null,
-    videoUrl: 'clip1.mp4',
+    videoUrl: `${DA}/clip1.mp4`,
     height: 200,
     meta: '视频 · 13s · 480P',
     tag: 'ai',
@@ -51,7 +54,7 @@ const MOCK_ASSETS: PlazaAsset[] = [
     category: 'video',
     name: '片段2 · 质问与否认',
     imageUrl: null,
-    videoUrl: 'clip2.mp4',
+    videoUrl: `${DA}/clip2.mp4`,
     height: 200,
     meta: '视频 · 14s · 480P',
     tag: 'ai',
@@ -61,7 +64,7 @@ const MOCK_ASSETS: PlazaAsset[] = [
     category: 'video',
     name: '片段3 · 预言警告',
     imageUrl: null,
-    videoUrl: 'clip3.mp4',
+    videoUrl: `${DA}/clip3.mp4`,
     height: 200,
     meta: '视频 · 13s · 480P',
     tag: 'ai',
@@ -70,7 +73,7 @@ const MOCK_ASSETS: PlazaAsset[] = [
     id: '7',
     category: 'material',
     name: '月夜参考-构图A',
-    imageUrl: 'corridor.jpg',
+    imageUrl: `${DA}/corridor.jpg`,
     videoUrl: null,
     height: 160,
     meta: '素材参考 · 上传',
@@ -81,7 +84,7 @@ const MOCK_ASSETS: PlazaAsset[] = [
     id: '8',
     category: 'material',
     name: '和服姿态参考',
-    imageUrl: 'linwan.png',
+    imageUrl: `${DA}/linwan.png`,
     videoUrl: null,
     height: 240,
     meta: '素材参考 · 上传',
@@ -92,7 +95,7 @@ const MOCK_ASSETS: PlazaAsset[] = [
     id: '9',
     category: 'material',
     name: '忍者服盔甲参考',
-    imageUrl: 'itachi.png',
+    imageUrl: `${DA}/itachi.png`,
     videoUrl: null,
     height: 240,
     meta: '素材参考 · 上传',

@@ -5,6 +5,8 @@ const apiProxyTarget = process.env.VITE_API_PROXY ?? 'http://localhost:8080';
 const enableProxy = process.env.VITE_ENABLE_PROXY === 'true';
 
 export default defineConfig({
+  // 外网经 nginx 路径代理部署时设置（服务器 compose 传入 VITE_BASE=/deepsfv-dev/）
+  base: process.env.VITE_BASE ?? '/',
   plugins: [react()],
   server: {
     port: 5173,

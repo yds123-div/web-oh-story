@@ -18,7 +18,7 @@ const NodeCanvasPage = lazy(() => import('./pages/NodeCanvasPage'));
 
 export default function App() {
   return (
-    <BrowserRouter>
+    <BrowserRouter basename={import.meta.env.BASE_URL}>
       <Suspense fallback={null}>
         <Routes>
           <Route element={<AppLayout />}>

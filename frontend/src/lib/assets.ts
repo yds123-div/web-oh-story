@@ -9,9 +9,10 @@ export function filterAssetsByType(assets: Asset[], filter: AssetFilter): Asset[
 
 export function assetPreviewUrl(asset: Asset): string | null {
   if (asset.imageUrl) return asset.imageUrl;
-  if (asset.id.endsWith('-char-linwan')) return '/demo-assets/linwan.png';
-  if (asset.id.endsWith('-char-itachi')) return '/demo-assets/itachi.png';
-  if (asset.id.endsWith('-scene-corridor')) return '/demo-assets/corridor.jpg';
+  const base = `${import.meta.env.BASE_URL}demo-assets`;
+  if (asset.id.endsWith('-char-linwan')) return `${base}/linwan.png`;
+  if (asset.id.endsWith('-char-itachi')) return `${base}/itachi.png`;
+  if (asset.id.endsWith('-scene-corridor')) return `${base}/corridor.jpg`;
   return null;
 }
 
