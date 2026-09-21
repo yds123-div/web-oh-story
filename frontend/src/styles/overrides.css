@@ -178,7 +178,7 @@ html[data-theme='light'] .ds-credit {
   .ds-brand .bt span {
     display: none;
   }
-  .ant-btn.ds-pill:not(.ds-vip) {
+  .ant-layout-header .ant-btn.ds-pill:not(.ds-vip) {
     display: none;
   }
   .ant-btn.ds-vip {
