@@ -37,3 +37,13 @@ pnpm-debug.log*
 # Temporary files
 *.tmp
 .cache/
+
+# Backend runtime data
+backend/data/*.sqlite
+backend/data/*.sqlite-wal
+backend/data/*.sqlite-shm
+backend/data/oss/
+
+# Docker image tarballs
+deesfv-frontend-dev.tar
+*.tar

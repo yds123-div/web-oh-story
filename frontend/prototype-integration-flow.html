@@ -1,0 +1,719 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>DeepSFV · 对接后整体流程原型</title>
+<style>
+  :root{
+    --bg:#0c0c14; --side:#090910; --card:#15151e; --card2:#1a1a25;
+    --line:rgba(255,255,255,.07); --line2:rgba(255,255,255,.12);
+    --text:#f1f1f5; --muted:#8b8b9a; --faint:#5d5d6e;
+    --purple:#8b5cf6; --purple2:#a855f7; --purple-soft:rgba(139,92,246,.14);
+    --amber:#f59e0b; --amber-soft:rgba(245,158,11,.13);
+    --green:#34d399; --red:#f87171;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%}
+  body{background:var(--bg);color:var(--text);font-family:"PingFang SC","Microsoft YaHei",system-ui,sans-serif;font-size:14px;overflow:hidden}
+  .grad-text{background:linear-gradient(90deg,#c4b5fd,#f0abfc);-webkit-background-clip:text;background-clip:text;color:transparent}
+
+  /* ---------- 整体骨架 ---------- */
+  .app{display:flex;height:100vh}
+  .sidebar{width:78px;flex:none;background:var(--side);border-right:1px solid var(--line);display:flex;flex-direction:column;align-items:center;padding:18px 0 14px}
+  .logo-d{width:46px;height:46px;border-radius:14px;background:linear-gradient(135deg,#7c3aed,#a855f7);display:flex;align-items:center;justify-content:center;font-size:22px;font-weight:800;color:#fff;box-shadow:0 6px 18px rgba(124,58,237,.45)}
+  .nav{margin-top:26px;display:flex;flex-direction:column;gap:8px;width:100%;align-items:center}
+  .nav-item{width:52px;padding:9px 0;border-radius:14px;display:flex;flex-direction:column;align-items:center;gap:3px;color:var(--faint);cursor:pointer;font-size:11px}
+  .nav-item svg{width:21px;height:21px}
+  .nav-item.active{background:linear-gradient(135deg,rgba(124,58,237,.25),rgba(168,85,247,.18));color:#c4b5fd;border:1px solid rgba(139,92,246,.35)}
+  .nav-item.off{opacity:.4;cursor:not-allowed}
+  .main{flex:1;display:flex;flex-direction:column;min-width:0}
+
+  /* ---------- 顶栏 ---------- */
+  .topbar{height:64px;flex:none;border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;padding:0 24px}
+  .brand{display:flex;align-items:center;gap:11px}
+  .brand-mark{width:34px;height:34px;border-radius:10px;background:linear-gradient(135deg,#7c3aed,#ec4899);display:flex;align-items:center;justify-content:center;font-weight:800;font-size:17px}
+  .brand b{font-size:18px;letter-spacing:.5px}
+  .top-actions{display:flex;align-items:center;gap:12px}
+  .pill{border-radius:99px;padding:7px 15px;font-size:13px;display:inline-flex;align-items:center;gap:6px;cursor:pointer}
+  .pill.vip{border:1px solid rgba(245,158,11,.5);color:#fbbf24;background:rgba(245,158,11,.08)}
+  .pill.credit{background:#241a3d;color:#c4b5fd;font-weight:600}
+  .icon-btn{width:38px;height:38px;border-radius:11px;border:1px solid var(--line);background:transparent;color:var(--muted);display:flex;align-items:center;justify-content:center;cursor:pointer;position:relative}
+  .icon-btn svg{width:18px;height:18px}
+  .dot-red{position:absolute;top:8px;right:9px;width:7px;height:7px;border-radius:50%;background:#ef4444;border:1.5px solid var(--bg)}
+  .avatar{width:38px;height:38px;border-radius:50%;background:linear-gradient(135deg,#6366f1,#a855f7);display:flex;align-items:center;justify-content:center;font-weight:700;cursor:pointer}
+  .dev-toggle{font-size:12px;color:var(--faint);border:1px dashed var(--line2);background:transparent;border-radius:8px;padding:6px 10px;cursor:pointer}
+  .dev-toggle.on{color:#c4b5fd;border-color:rgba(139,92,246,.5);background:var(--purple-soft)}
+
+  /* ---------- 内容 ---------- */
+  .content{flex:1;overflow:auto;padding:26px 32px 96px;position:relative}
+  .stepper{display:flex;align-items:center;gap:0;margin:2px auto 26px;max-width:980px}
+  .st-step{display:flex;align-items:center;gap:9px;cursor:pointer;color:var(--faint);font-size:13px}
+  .st-dot{width:30px;height:30px;border-radius:50%;border:1.5px solid var(--line2);display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;background:var(--card)}
+  .st-step.done{color:var(--muted)}
+  .st-step.done .st-dot{background:var(--purple-soft);border-color:var(--purple);color:#c4b5fd}
+  .st-step.current{color:#fff;font-weight:600}
+  .st-step.current .st-dot{background:linear-gradient(135deg,#7c3aed,#a855f7);border-color:transparent;box-shadow:0 0 0 4px rgba(139,92,246,.18)}
+  .st-line{flex:1;height:1.5px;background:var(--line2);margin:0 12px;min-width:24px}
+  .st-line.done{background:linear-gradient(90deg,var(--purple),rgba(139,92,246,.3))}
+
+  .page{max-width:1100px;margin:0 auto;animation:fade .35s ease}
+  @keyframes fade{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+  .page-head{margin-bottom:20px}
+  .page-head h1{font-size:24px;font-weight:700}
+  .page-head p{color:var(--muted);margin-top:7px;font-size:13.5px}
+
+  .card-box{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:20px 22px}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+  .grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
+  .section-title{display:flex;align-items:center;gap:8px;font-size:15px;font-weight:600;margin-bottom:14px}
+  .section-title .more{margin-left:auto;font-size:12px;color:var(--faint);font-weight:400}
+
+  /* 首页项目卡 */
+  .proj-add{border:1.5px dashed var(--line2);border-radius:18px;min-height:230px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;color:var(--muted);cursor:pointer;background:rgba(255,255,255,.015);transition:.2s}
+  .proj-add:hover{border-color:var(--purple);color:#c4b5fd;background:var(--purple-soft)}
+  .proj-add .plus{width:42px;height:42px;border-radius:50%;border:1.5px solid currentColor;display:flex;align-items:center;justify-content:center;font-size:22px}
+  .proj-card{border-radius:18px;overflow:hidden;border:1px solid var(--line);background:var(--card);cursor:pointer;transition:.2s}
+  .proj-card:hover{transform:translateY(-3px);border-color:rgba(139,92,246,.45)}
+  .proj-cover{height:130px;background:
+    radial-gradient(120% 140% at 0% 0%,rgba(124,58,237,.55),transparent 55%),
+    radial-gradient(120% 140% at 100% 100%,rgba(236,72,153,.4),transparent 55%),#171326;
+    display:flex;align-items:flex-end;padding:14px}
+  .proj-cover .big{font-size:30px;font-weight:800;letter-spacing:2px}
+  .proj-info{padding:14px 16px}
+  .proj-info h3{font-size:16px;margin-bottom:6px}
+  .proj-info .meta{display:flex;gap:7px;flex-wrap:wrap}
+  .tag{font-size:11px;border-radius:99px;padding:2.5px 10px;background:var(--purple-soft);color:#c4b5fd}
+  .tag.amber{background:var(--amber-soft);color:#fbbf24}
+  .tag.gray{background:rgba(255,255,255,.06);color:var(--muted)}
+  .tag.green{background:rgba(52,211,153,.13);color:var(--green)}
+
+  /* 表单 */
+  .field{margin-bottom:15px}
+  .field label{display:block;font-size:13px;color:var(--muted);margin-bottom:7px}
+  .input,.textarea{width:100%;background:var(--bg);border:1px solid var(--line2);border-radius:11px;padding:11px 14px;color:var(--text);font-size:14px;font-family:inherit;resize:none}
+  .input:focus,.textarea:focus{outline:none;border-color:var(--purple)}
+  .chips{display:flex;gap:8px;flex-wrap:wrap}
+  .chip{border:1px solid var(--line2);border-radius:10px;padding:7px 14px;font-size:13px;color:var(--muted);cursor:pointer;background:var(--bg)}
+  .chip.on{border-color:var(--purple);color:#ddd6fe;background:var(--purple-soft)}
+  .mode-tabs{display:flex;gap:0;border:1px solid var(--line2);border-radius:12px;overflow:hidden;width:max-content;margin-bottom:18px}
+  .mode-tab{padding:9px 22px;font-size:13.5px;color:var(--muted);cursor:pointer;background:var(--card)}
+  .mode-tab.on{background:var(--purple-soft);color:#ddd6fe;font-weight:600}
+  .mode-tab.disabled{cursor:not-allowed;opacity:.5}
+
+  /* 资产 */
+  .cat-row{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:20px}
+  .cat{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:15px 17px;cursor:pointer}
+  .cat.on{border-color:rgba(139,92,246,.55);background:linear-gradient(135deg,rgba(124,58,237,.16),rgba(168,85,247,.07))}
+  .cat .n{font-size:22px;font-weight:700;margin-top:8px}
+  .cat .l{font-size:13px;color:var(--muted)}
+  .asset-card{background:var(--card);border:1px solid var(--line);border-radius:16px;overflow:hidden}
+  .asset-img{height:230px;background:#0e0e16;position:relative;display:flex;align-items:center;justify-content:center;overflow:hidden}
+  .asset-img img{width:100%;height:100%;object-fit:cover}
+  .asset-img .waiting{position:absolute;inset:0;background:rgba(12,12,20,.55);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;color:#fbbf24;font-size:12.5px;backdrop-filter:blur(1px)}
+  .spin{width:26px;height:26px;border:2.5px solid rgba(245,158,11,.25);border-top-color:var(--amber);border-radius:50%;animation:rot 1s linear infinite}
+  .spin.purple{border-color:rgba(139,92,246,.25);border-top-color:var(--purple)}
+  @keyframes rot{to{transform:rotate(360deg)}}
+  .asset-body{padding:14px 16px}
+  .asset-body h4{font-size:15px;display:flex;align-items:center;gap:8px;margin-bottom:7px}
+  .asset-body p{font-size:12.5px;color:var(--muted);line-height:1.65;margin-bottom:12px}
+  .btn{border-radius:11px;padding:9px 18px;font-size:13.5px;cursor:pointer;border:1px solid transparent;font-family:inherit;display:inline-flex;align-items:center;gap:7px}
+  .btn.primary{background:linear-gradient(135deg,#7c3aed,#a855f7);color:#fff;font-weight:600}
+  .btn.ghost{background:transparent;border-color:var(--line2);color:var(--muted)}
+  .btn.amber{background:var(--amber-soft);color:#fbbf24;border-color:rgba(245,158,11,.4)}
+  .btn.block{width:100%;justify-content:center}
+  .btn:disabled{opacity:.45;cursor:not-allowed}
+
+  /* 分镜 */
+  .shot{display:flex;gap:18px;background:var(--card);border:1px solid var(--line);border-radius:16px;padding:16px 18px;margin-bottom:14px}
+  .shot-no{width:40px;height:40px;flex:none;border-radius:12px;background:var(--purple-soft);color:#c4b5fd;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:15px}
+  .shot-main{flex:1;min-width:0}
+  .shot-main h4{font-size:14.5px;margin-bottom:7px}
+  .shot-tags{display:flex;gap:7px;margin-bottom:10px;flex-wrap:wrap}
+  .prompt-box{background:var(--bg);border:1px solid var(--line);border-radius:11px;padding:11px 13px;font-size:12.5px;color:var(--muted);line-height:1.65;margin-bottom:11px}
+  .prompt-box.ready{color:#d4d4dd}
+  .shot-actions{display:flex;gap:9px;flex-wrap:wrap}
+
+  /* 工作台 */
+  .track-row{display:flex;align-items:center;gap:15px;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px 18px;margin-bottom:11px}
+  .track-row .idx{width:32px;height:32px;border-radius:10px;background:var(--purple-soft);color:#c4b5fd;display:flex;align-items:center;justify-content:center;font-weight:700;flex:none}
+  .track-row .info{flex:1}
+  .track-row .info b{font-size:14px}
+  .track-row .info p{font-size:12px;color:var(--faint);margin-top:3px}
+  .stat{text-align:center;padding:18px 10px}
+  .stat .v{font-size:30px;font-weight:800}
+  .stat .l{font-size:12.5px;color:var(--muted);margin-top:6px}
+
+  .notice{display:flex;gap:11px;background:var(--purple-soft);border:1px solid rgba(139,92,246,.35);border-radius:13px;padding:13px 16px;font-size:13px;line-height:1.7;color:#d4c8f7;margin-top:16px}
+  .notice.amber{background:var(--amber-soft);border-color:rgba(245,158,11,.35);color:#fcd34d}
+
+  /* 弹窗 */
+  .mask{position:fixed;inset:0;background:rgba(5,5,10,.65);backdrop-filter:blur(3px);display:flex;align-items:center;justify-content:center;z-index:60;animation:fade .2s}
+  .modal{width:520px;max-width:92vw;background:var(--card2);border:1px solid var(--line2);border-radius:20px;padding:26px 28px;box-shadow:0 30px 80px rgba(0,0,0,.6)}
+  .modal h3{font-size:18px;margin-bottom:20px}
+  .modal-foot{display:flex;justify-content:flex-end;gap:10px;margin-top:8px}
+
+  /* toast */
+  #toasts{position:fixed;top:78px;left:50%;transform:translateX(-50%);z-index:80;display:flex;flex-direction:column;gap:9px;align-items:center}
+  .toast{background:#1e1e2a;border:1px solid var(--line2);border-radius:12px;padding:11px 18px;font-size:13.5px;display:flex;align-items:center;gap:9px;box-shadow:0 10px 30px rgba(0,0,0,.5);animation:down .25s}
+  @keyframes down{from{opacity:0;transform:translateY(-10px)}to{opacity:1}}
+  .toast .ic{width:19px;height:19px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;flex:none}
+  .toast.ok .ic{background:rgba(52,211,153,.18);color:var(--green)}
+  .toast.info .ic{background:var(--purple-soft);color:#c4b5fd}
+  .toast.warn .ic{background:var(--amber-soft);color:var(--amber)}
+
+  /* 底部步骤条 */
+  .bottombar{position:absolute;left:0;right:0;bottom:0;height:74px;border-top:1px solid var(--line);background:rgba(12,12,20,.92);backdrop-filter:blur(8px);display:flex;align-items:center;justify-content:space-between;padding:0 32px}
+  .bottombar .hint{font-size:12.5px;color:var(--faint)}
+  .bottombar .bts{display:flex;gap:11px}
+
+  /* 开发抽屉 */
+  .drawer{position:fixed;top:0;right:0;bottom:0;width:460px;max-width:94vw;background:#0e0e17;border-left:1px solid var(--line2);z-index:90;transform:translateX(100%);transition:.28s;display:flex;flex-direction:column}
+  .drawer.on{transform:none}
+  .drawer-head{padding:18px 20px;border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between}
+  .drawer-head b{font-size:15px}
+  .drawer-body{flex:1;overflow:auto;padding:14px 18px}
+  .wire{background:#12121c;border:1px solid var(--line);border-radius:12px;padding:12px 14px;margin-bottom:12px}
+  .wire .path{font-size:12.5px;font-weight:700;color:#c4b5fd;margin-bottom:7px}
+  .wire pre{font-family:Consolas,monospace;font-size:11.5px;color:#9ca3af;white-space:pre-wrap;word-break:break-all;line-height:1.55}
+  .wire .res-ok{color:var(--green)}
+  .wire .res-bad{color:var(--amber)}
+  ::-webkit-scrollbar{width:8px;height:8px}::-webkit-scrollbar-thumb{background:#2a2a38;border-radius:8px}
+</style>
+</head>
+<body>
+<div class="app">
+  <!-- 侧栏 -->
+  <aside class="sidebar">
+    <div class="logo-d">D</div>
+    <nav class="nav" id="sideNav"></nav>
+  </aside>
+  <div class="main">
+    <header class="topbar">
+      <div class="brand"><span class="brand-mark">D</span><b>DeepSFV</b></div>
+      <div class="top-actions">
+        <button class="dev-toggle" id="devToggle" onclick="toggleDev()">🛠 开发模式</button>
+        <span class="icon-btn" title="主题">☀️</span>
+        <span class="pill vip">⚡ 开通会员</span>
+        <span class="pill credit">◆ 940</span>
+        <span class="icon-btn" title="通知">🔔<span class="dot-red"></span></span>
+        <span class="avatar">赵</span>
+      </div>
+    </header>
+    <main class="content" id="content">
+      <div class="stepper" id="stepper"></div>
+      <div id="page"></div>
+      <div class="bottombar">
+        <span class="hint" id="hint"></span>
+        <div class="bts">
+          <button class="btn ghost" id="prevBtn" onclick="prevStep()">上一步</button>
+          <button class="btn primary" id="nextBtn" onclick="nextStep()">下一步</button>
+        </div>
+      </div>
+    </main>
+  </div>
+</div>
+
+<div id="toasts"></div>
+<div id="modalRoot"></div>
+
+<!-- 开发模式抽屉 -->
+<aside class="drawer" id="drawer">
+  <div class="drawer-head"><b>网络报文 · 前端适配层视角</b><button class="btn ghost" onclick="toggleDev()">关闭</button></div>
+  <div class="drawer-body" id="drawerBody"></div>
+</aside>
+
+<script>
+/* =====================================================================
+ * 状态
+ * ===================================================================== */
+const STEPS = [
+  { key:'home',   name:'首页' },
+  { key:'create', name:'创作提交' },
+  { key:'script', name:'剧本' },
+  { key:'assets', name:'资产' },
+  { key:'shots',  name:'分镜' },
+  { key:'bench',  name:'工作台' },
+];
+const S = {
+  token:null, step:0, dev:false,
+  projectCreated:false, scriptSubmitted:false,
+  extracting:false, extracted:false,
+  videoPrompts:{},      // shotId -> true
+  videoPending:{},      // shotId -> true（等待 key）
+};
+
+/* =====================================================================
+ * 模拟后端调用（正式实施时换成真实 fetch：POST + JSON body + 信封）
+ * 每次调用记录报文供开发抽屉查看
+ * ===================================================================== */
+const wires = [];
+function backend(path, body){
+  const envelope = { code:200, data:mockData(path, body), message:'' };
+  wires.unshift({ path, body, envelope });
+  if (wires.length > 30) wires.pop();
+  return envelope.data;
+}
+function mockData(path){
+  if(path==='/api/login/login') return { token:'eyJhbGciOiJIUzI1NiJ9.silent.xxxx', name:'admin', id:1 };
+  return true;
+}
+
+/* =====================================================================
+ * Toast
+ * ===================================================================== */
+function toast(text, type='ok'){
+  const el = document.createElement('div');
+  el.className = 'toast ' + type;
+  const ic = type==='ok'?'✓':type==='warn'?'!':'i';
+  el.innerHTML = `<span class="ic">${ic}</span><span>${text}</span>`;
+  document.getElementById('toasts').appendChild(el);
+  setTimeout(()=>{ el.style.opacity='0'; el.style.transition='opacity .4s'; setTimeout(()=>el.remove(),400); }, 2600);
+}
+
+/* =====================================================================
+ * 侧栏
+ * ===================================================================== */
+const NAV_ICONS = {
+  home:'<path d="M3 11.5 12 4l9 7.5M5.5 10v9.5h13V10"/>',
+  idea:'<path d="M9 18h6M10 21h4M12 3a6 6 0 0 0-3.5 10.8c.6.5 1 1.3 1 2.2h5c0-.9.4-1.7 1-2.2A6 6 0 0 0 12 3Z"/>',
+  create:'<path d="M3 8h18M3 8l2-3h14l2 3M3 8v11h18V8M9 12h6M9 16h6"/>',
+  canvas:'<circle cx="12" cy="12" r="9"/><circle cx="8" cy="10" r="1.2"/><circle cx="16" cy="9" r="1.2"/><circle cx="15" cy="15" r="1.2"/><circle cx="9" cy="15" r="1.2"/>',
+  assets:'<path d="M12 3 3 7.5v9L12 21l9-4.5v-9L12 3ZM3 7.5l9 4.5 9-4.5M12 12v9"/>',
+  space:'<path d="M12 3 4 7v10l8 4 8-4V7l-8-4ZM12 3v9M4 7l8 4 8-4"/>',
+  team:'<circle cx="9" cy="8.5" r="3.2"/><path d="M3.5 20c.6-3.2 3-5 5.5-5s4.9 1.8 5.5 5"/><path d="M16 5.6a3 3 0 0 1 0 5.6M17.5 15.2c2 .8 3.2 2.6 3.6 4.8"/>',
+};
+const NAV = [
+  ['home','首页',true],['idea','创意',false],['create','创作',true],['canvas','画布',false],
+  ['assets','资产',true],['space','空间',false],['team','团队',false],
+];
+function renderNav(){
+  document.getElementById('sideNav').innerHTML = NAV.map(([k,label,on])=>`
+    <div class="nav-item ${S.step>=0 && STEPS[S.step].key===k?'active':''} ${on?'':'off'}"
+      title="${on?'':label+'（二期）'}"
+      ${on?`onclick="jumpNav('${k}')"`:''}>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">${NAV_ICONS[k]}</svg>
+      ${label}
+    </div>`).join('');
+}
+function jumpNav(k){
+  const i = STEPS.findIndex(s=>s.key===k);
+  if(i>=0){ S.step=i; renderAll(); }
+}
+
+/* =====================================================================
+ * Stepper
+ * ===================================================================== */
+function renderStepper(){
+  document.getElementById('stepper').innerHTML = STEPS.map((st,i)=>{
+    const cls = i<S.step?'done':i===S.step?'current':'';
+    const line = i<STEPS.length-1 ? `<div class="st-line ${i<S.step?'done':''}"></div>` : '';
+    return `<div class="st-step ${cls}" onclick="goStep(${i})">
+      <span class="st-dot">${i<S.step?'✓':i+1}</span>${st.name}</div>${line}`;
+  }).join('');
+}
+function goStep(i){ if(i<=S.step || canEnter(i)){ S.step=i; renderAll(); } }
+
+/* 能否进入某步（前置条件） */
+function canEnter(i){
+  if(i===1) return S.projectCreated;
+  if(i===2) return S.scriptSubmitted;
+  if(i>=3) return S.scriptSubmitted;
+  return true;
+}
+
+/* =====================================================================
+ * 页面渲染
+ * ===================================================================== */
+const SCRIPT_TEXT = `第一集《异世囚笼》
+现代女孩林晚意外穿越到木叶村，成为一名普通村落成员。由于知晓宇智波鼬即将背负罪名走向毁灭的悲惨宿命，她试图用自己的预知能力去拯救对方。
+深夜的木质长廊上，林晚叫住了独自经过的宇智波鼬……`;
+
+function renderPage(){
+  const pages = [pageHome, pageCreate, pageScript, pageAssets, pageShots, pageBench];
+  document.getElementById('page').innerHTML = pages[S.step]();
+  renderBottom();
+}
+
+/* ---- ① 首页 ---- */
+function pageHome(){
+  return `<div class="page">
+    <div class="page-head">
+      <h1>空间 · <span class="grad-text">个人</span></h1>
+      <p>个人项目卡 · 重命名 / 归档 · 数据全部来自后端，刷新不丢失</p>
+    </div>
+    <div class="grid3">
+      ${S.projectCreated ? `
+        <div class="proj-card" onclick="goStep(1)">
+          <div class="proj-cover"><span class="big grad-text">逆命木叶</span></div>
+          <div class="proj-info">
+            <h3>逆命木叶</h3>
+            <div class="meta">
+              <span class="tag">女频 · 轻小说</span>
+              <span class="tag">3D 写实</span>
+              <span class="tag">9:16</span>
+              ${S.extracted?'<span class="tag green">资产已就绪</span>':''}
+            </div>
+          </div>
+        </div>` : ''}
+      <div class="proj-add" onclick="openCreateModal()">
+        <span class="plus">＋</span>
+        <span>新建项目</span>
+        <span style="font-size:12px;color:var(--faint)">从一个故事开始</span>
+      </div>
+    </div>
+  </div>`;
+}
+
+/* 新建项目弹窗 */
+function openCreateModal(){
+  document.getElementById('modalRoot').innerHTML = `
+  <div class="mask" onclick="closeModal()">
+    <div class="modal" onclick="event.stopPropagation()">
+      <h3>✨ 新建短剧项目</h3>
+      <div class="field"><label>项目名称</label><input class="input" id="m-name" value="逆命木叶"></div>
+      <div class="field"><label>故事类型</label>
+        <div class="chips" id="m-type">
+          <span class="chip on">女频·轻小说</span><span class="chip">男频·玄幻</span>
+          <span class="chip">都市情感</span><span class="chip">悬疑推理</span>
+        </div></div>
+      <div class="grid2">
+        <div class="field"><label>视频风格</label>
+          <div class="chips"><span class="chip on">赛博朋克电影</span><span class="chip">3D 写实</span></div></div>
+        <div class="field"><label>画面比例</label>
+          <div class="chips"><span class="chip on">9:16 竖屏</span><span class="chip">16:9</span></div></div>
+      </div>
+      <div class="field"><label>生成模型</label>
+        <div class="chips"><span class="chip on">S 2.0-fast</span><span class="chip">Minimax-H3</span></div></div>
+      <div class="modal-foot">
+        <button class="btn ghost" onclick="closeModal()">取消</button>
+        <button class="btn primary" onclick="confirmCreate()">创建项目</button>
+      </div>
+    </div>
+  </div>`;
+  bindChips();
+}
+function bindChips(){
+  document.querySelectorAll('#modalRoot .chips').forEach(box=>{
+    box.querySelectorAll('.chip').forEach(c=>c.onclick=()=>{
+      box.querySelectorAll('.chip').forEach(x=>x.classList.remove('on'));
+      c.classList.add('on');
+    });
+  });
+}
+function closeModal(){ document.getElementById('modalRoot').innerHTML=''; }
+function confirmCreate(){
+  const name = document.getElementById('m-name').value.trim() || '未命名项目';
+  backend('/api/project/addProject',{ name, type:'女频·轻小说', artStyle:'赛博朋克电影', videoRatio:'9:16', videoModel:'S 2.0-fast' });
+  S.projectCreated = true;
+  closeModal();
+  toast('项目「'+name+'」已创建并保存到后端');
+  renderAll();
+}
+
+/* ---- ② 创作提交 ---- */
+function pageCreate(){
+  if(!S.projectCreated){ setTimeout(()=>goStep(0),0); return ''; }
+  return `<div class="page">
+    <div class="page-head">
+      <h1>创作</h1>
+      <p>粘贴剧本或上传文件，提交后进入剧本工作台</p>
+    </div>
+    <div class="mode-tabs">
+      <div class="mode-tab on">📜 剧本模式</div>
+      <div class="mode-tab disabled" title="二期">📖 小说模式（二期）</div>
+    </div>
+    <div class="card-box">
+      <div class="field">
+        <label>剧本文本</label>
+        <textarea class="textarea" id="scriptInput" rows="11">${SCRIPT_TEXT}</textarea>
+      </div>
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <span class="btn ghost">📎 上传 .txt / .docx</span>
+        <button class="btn primary" onclick="submitScript()">提交剧本 →</button>
+      </div>
+    </div>
+  </div>`;
+}
+function submitScript(){
+  const content = document.getElementById('scriptInput').value;
+  backend('/api/script/addScript',{ projectId:'proj-1', name:'第1集·异世囚笼', content });
+  S.scriptSubmitted = true;
+  toast('剧本已保存到后端');
+  renderAll();
+}
+
+/* ---- ③ 剧本列表（剧本 = 分集） ---- */
+function pageScript(){
+  if(!S.scriptSubmitted){ setTimeout(()=>goStep(1),0); return ''; }
+  return `<div class="page">
+    <div class="page-head">
+      <h1>剧本列表</h1>
+      <p>对接后概念映射：<b>每个剧本就是一集</b> —— 原"分集列表"直接展示后端剧本</p>
+    </div>
+    <div class="card-box">
+      <div class="section-title">📁 项目《逆命木叶》的剧本
+        <span class="more">共 1 个剧本 · 1 集</span>
+      </div>
+      <div class="shot" style="margin-bottom:0">
+        <div class="shot-no">1</div>
+        <div class="shot-main">
+          <h4>第1集 · 异世囚笼</h4>
+          <div class="shot-tags">
+            <span class="tag">已保存</span>
+            <span class="tag ${S.extracted?'green':S.extracting?'amber':'gray'}">
+              ${S.extracted?'资产已提取':S.extracting?'AI 提取中…':'资产未提取'}
+            </span>
+            <span class="tag gray">约 120 字</span>
+          </div>
+          <div class="prompt-box">${escHtml(SCRIPT_TEXT.slice(0,70))}……</div>
+          <div class="shot-actions">
+            ${S.extracted||S.extracting ? '' :
+              `<button class="btn primary" onclick="startExtract()">🤖 AI 提取资产</button>`}
+            <button class="btn ghost">✏️ 编辑剧本</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>`;
+}
+function startExtract(){ goStep(3); doExtract(); }
+
+/* ---- ④ 资产工坊 ---- */
+function pageAssets(){
+  if(!S.scriptSubmitted){ setTimeout(()=>goStep(2),0); return ''; }
+  const counts = S.extracted ? {role:2,scene:1,prop:0,mat:0} : {role:0,scene:0,prop:0,mat:0};
+  return `<div class="page">
+    <div class="page-head">
+      <h1>角色、场景和道具</h1>
+      <p>资产来自剧本 AI 提取或手工创建，类型枚举与后端一一对应</p>
+    </div>
+    <div class="cat-row">
+      <div class="cat on"><div class="l">👥 全部角色</div><div class="n">${counts.role}</div></div>
+      <div class="cat"><div class="l">🏞 全部场景</div><div class="n">${counts.scene}</div></div>
+      <div class="cat"><div class="l">📦 全部道具</div><div class="n">${counts.prop}</div></div>
+      <div class="cat"><div class="l">🗂 全部素材</div><div class="n">${counts.mat}</div></div>
+    </div>
+    ${S.extracting ? `
+      <div class="card-box" style="display:flex;align-items:center;gap:18px;padding:34px">
+        <div class="spin purple" style="width:34px;height:34px;border-width:3px"></div>
+        <div>
+          <b style="font-size:15px">AI 正在通读剧本，提取角色与场景…</b>
+          <p style="color:var(--muted);font-size:12.5px;margin-top:5px">异步任务进行中（文本模型可用）</p>
+        </div>
+      </div>` : ''}
+    ${S.extracted ? `<div class="grid3">
+      ${assetCard('林晚','主角','现代穿越者，成为木叶孤女，知晓结局试图拯救鼬，却陷入权力旋涡。','public/demo-assets/linwan.png')}
+      ${assetCard('宇智波鼬','主角','背负灭族悲剧的忍者，心思深沉，因任务与宿命被迫推开林晚。','public/demo-assets/itachi.png')}
+      ${sceneCard()}
+    </div>` : ''}
+    ${!S.extracted && !S.extracting ? `
+      <div class="card-box" style="text-align:center;padding:44px">
+        <p style="color:var(--muted);margin-bottom:16px">还没有资产。对剧本执行 AI 提取，一键生成角色与场景。</p>
+        <button class="btn primary" onclick="doExtract()">🤖 AI 提取资产</button>
+      </div>` : ''}
+  </div>`;
+}
+function assetCard(name,role,desc,img){
+  return `<div class="asset-card">
+    <div class="asset-img">
+      <img src="${img}" alt="${name}">
+      <div class="waiting">
+        <span>🔑 图像生成 key 到位后</span>
+        <span>将以此为参考重新生成标准形象</span>
+      </div>
+    </div>
+    <div class="asset-body">
+      <h4>${name} <span class="tag">${role}</span><span class="tag amber">形象待生成</span></h4>
+      <p>${desc}</p>
+      <button class="btn amber block" onclick="keySoon()">✨ 生成形象</button>
+    </div>
+  </div>`;
+}
+function sceneCard(){
+  return `<div class="asset-card">
+    <div class="asset-img">
+      <img src="public/demo-assets/corridor.jpg" alt="木叶长廊">
+      <div class="waiting"><span>🔑 图像 key 到位后重新生成</span></div>
+    </div>
+    <div class="asset-body">
+      <h4>木叶深夜长廊 <span class="tag">场景</span><span class="tag amber">待生成</span></h4>
+      <p>架空忍者村的木质建筑长廊，清冷月光与沉重阴影，宿命感的核心场景。</p>
+      <button class="btn amber block" onclick="keySoon()">✨ 生成场景图</button>
+    </div>
+  </div>`;
+}
+function doExtract(){
+  if(S.extracting || S.extracted) return;
+  backend('/api/script/extractAssets',{ scriptIds:['scr-1'] });
+  S.extracting = true;
+  renderAll();
+  // 模拟异步任务：文本模型可用，约 1.6s 完成
+  setTimeout(()=>{
+    backend('/api/script/pollScriptAssets',{ ids:['scr-1'] });
+    S.extracting = false; S.extracted = true;
+    toast('提取完成：角色 ×2、场景 ×1');
+    renderAll();
+  },1600);
+}
+function keySoon(){
+  backend('/api/assetsGenerate/generateAssets',{ id:'ast-1' });
+  toast('图像生成接口已就绪，key 到位即可生成','warn');
+}
+
+/* ---- ⑤ 分镜 ---- */
+const SHOTS = [
+  { n:1, desc:'长廊夜景：林晚独自伫立，月光透过木窗洒下', cam:'远景', move:'固定机位', dur:'4s' },
+  { n:2, desc:'林晚回头，叫住长廊尽头经过的宇智波鼬', cam:'中景', move:'缓慢推进', dur:'3s' },
+  { n:3, desc:'两人对视，鼬神色冷漠，林晚欲言又止', cam:'近景', move:'轻微手持', dur:'5s' },
+];
+function pageShots(){
+  return `<div class="page">
+    <div class="page-head">
+      <h1>分镜工作区</h1>
+      <p>原"片段"编辑 · 每个分镜对应一条视频任务，数据实时持久化</p>
+    </div>
+    ${SHOTS.map(sh=>{
+      const ready = S.videoPrompts[sh.n], pending = S.videoPending[sh.n];
+      return `<div class="shot">
+        <div class="shot-no">${sh.n}</div>
+        <div class="shot-main">
+          <h4>${sh.desc}</h4>
+          <div class="shot-tags">
+            <span class="tag gray">${sh.cam}</span>
+            <span class="tag gray">${sh.move}</span>
+            <span class="tag gray">时长 ${sh.dur}</span>
+            ${pending?'<span class="tag amber">视频待 key 生成</span>':ready?'<span class="tag green">提示词已生成</span>':''}
+          </div>
+          <div class="prompt-box ${ready?'ready':''}">
+            ${ready ? genPromptText(sh) : '视频提示词未生成（由文本 AI 自动撰写）'}
+          </div>
+          <div class="shot-actions">
+            ${ready?'':`<button class="btn primary" onclick="genPrompt(${sh.n})">🤖 生成视频提示词</button>`}
+            <button class="btn ${ready?'amber':'ghost'}" onclick="genVideo(${sh.n})">🎬 生成视频</button>
+          </div>
+        </div>
+      </div>`;
+    }).join('')}
+  </div>`;
+}
+function genPromptText(sh){
+  return `电影感${sh.cam}，${sh.move}，${sh.desc}，清冷月光在木质长廊投下阴影，冷蓝色调，浅景深，氛围压抑克制`;
+}
+function genPrompt(n){
+  backend('/api/production/workbench/generateVideoPrompt',{ trackId:'sb-'+n });
+  S.videoPrompts[n] = true;
+  toast('分镜 '+n+' 的视频提示词已生成（文本模型）');
+  renderAll();
+}
+function genVideo(n){
+  backend('/api/production/workbench/generateVideo',{ trackId:'sb-'+n });
+  S.videoPending[n] = true;
+  toast('视频生成接口已就绪，视频 key 到位即可生成','warn');
+  renderAll();
+}
+
+/* ---- ⑥ 工作台 ---- */
+function pageBench(){
+  const done = Object.keys(S.videoPrompts).length;
+  return `<div class="page">
+    <div class="page-head">
+      <h1>工作台</h1>
+      <p>视频轨道总览 · 批量生成 · 导出成片</p>
+    </div>
+    <div class="card-box" style="margin-bottom:16px">
+      <div class="grid3" style="gap:0">
+        <div class="stat"><div class="v grad-text">3</div><div class="l">分镜总数</div></div>
+        <div class="stat" style="border-left:1px solid var(--line);border-right:1px solid var(--line)">
+          <div class="v" style="color:var(--amber)">${3-done}</div><div class="l">待生成提示词</div></div>
+        <div class="stat"><div class="v" style="color:var(--green)">0</div><div class="l">已生成视频</div></div>
+      </div>
+    </div>
+    <div class="grid2" style="align-items:start">
+      <div class="card-box">
+        <div class="section-title">🎞 视频轨道</div>
+        ${SHOTS.map(sh=>{
+          const ready = S.videoPrompts[sh.n], pending = S.videoPending[sh.n];
+          return `<div class="track-row">
+            <span class="idx">${sh.n}</span>
+            <span class="info"><b>${sh.desc.slice(0,16)}…</b>
+            <p>${ready?'提示词已就绪':'提示词未生成'} · ${pending?'视频等待 key':'视频未生成'}</p></span>
+            <span class="tag ${pending?'amber':ready?'green':'gray'}">${pending?'待视频 key':ready?'可生成':'待提示词'}</span>
+          </div>`;
+        }).join('')}
+      </div>
+      <div>
+        <div class="card-box">
+          <div class="section-title">📦 导出成片</div>
+          <p style="color:var(--muted);font-size:13px;line-height:1.7;margin-bottom:14px">
+            全部视频生成后，可将本集分镜按顺序合成为一个视频，并打包导出 zip（含剧本与资产）。</p>
+          <button class="btn ghost block" disabled>导出第 1 集（需先完成视频）</button>
+        </div>
+        <div class="notice">✅ 本地主线已全部接通：项目 → 剧本 → 资产 → 分镜 → 工作台，全部走真实后端。</div>
+        <div class="notice amber">🔑 图像 / 视频生成接口已接好，等对应 API key 到位，无需改代码即可完整产出成片。</div>
+      </div>
+    </div>
+  </div>`;
+}
+
+/* =====================================================================
+ * 底部条
+ * ===================================================================== */
+const HINTS = [
+  '点击「新建项目」开始',
+  '粘贴剧本后提交',
+  '对剧本执行 AI 提取',
+  '查看提取出的资产',
+  '用文本 AI 生成视频提示词',
+  '主线完成 🎉',
+];
+function renderBottom(){
+  document.getElementById('hint').textContent = HINTS[S.step];
+  document.getElementById('prevBtn').disabled = S.step===0;
+  const next = document.getElementById('nextBtn');
+  const locked =
+    (S.step===0 && !S.projectCreated) ||
+    (S.step===1 && !S.scriptSubmitted);
+  next.disabled = locked;
+  next.textContent = S.step===STEPS.length-1 ? '已完成 ✓' : '下一步';
+}
+function nextStep(){
+  if(S.step===0 && !S.projectCreated){ openCreateModal(); return; }
+  if(S.step===1 && !S.scriptSubmitted){ submitScript(); return; }
+  if(S.step===2 && !S.extracted){ /* 允许直接进入资产页自行提取 */ }
+  if(S.step<STEPS.length-1){ S.step++; renderAll(); }
+}
+function prevStep(){ if(S.step>0){ S.step--; renderAll(); } }
+
+/* =====================================================================
+ * 开发抽屉
+ * ===================================================================== */
+function toggleDev(){
+  S.dev = !S.dev;
+  document.getElementById('drawer').classList.toggle('on',S.dev);
+  document.getElementById('devToggle').classList.toggle('on',S.dev);
+  if(S.dev) renderDrawer();
+}
+function renderDrawer(){
+  document.getElementById('drawerBody').innerHTML = wires.length===0
+    ? '<p style="color:var(--faint);font-size:13px">暂无请求。在页面里操作后这里会显示 POST 路径、JSON body 与 {code,data,message} 信封。</p>'
+    : wires.map(w=>`
+      <div class="wire">
+        <div class="path">POST ${w.path}</div>
+        <pre>请求体：${JSON.stringify(w.body)}</pre>
+        <pre class="${w.envelope.code===200?'res-ok':'res-bad'}">响应信封：${JSON.stringify(w.envelope)}</pre>
+      </div>`).join('');
+}
+
+/* =====================================================================
+ * 工具 & 渲染入口
+ * ===================================================================== */
+function escHtml(s){ return s.replace(/&/g,'&amp;').replace(/</g,'&lt;'); }
+function renderAll(){ renderNav(); renderStepper(); renderPage(); if(S.dev) renderDrawer(); }
+
+/* 启动：静默登录（无登录页，用户无感） */
+backend('/api/login/login',{ username:'admin', password:'admin123' });
+S.token = 'eyJhbGciOiJIUzI1NiJ9.silent.xxxx';
+renderAll();
+</script>
+</body>
+</html>
