@@ -5,7 +5,7 @@ import { createRoot } from 'react-dom/client';
 import { App as AntApp, ConfigProvider } from 'antd';
 import zhCN from 'antd/locale/zh_CN';
 import App from './App';
-import { setNetworkErrorHandler, setUnauthorizedHandler } from './lib/http';
+import { NETWORK_UNREACHABLE_MESSAGE, setNetworkErrorHandler, setUnauthorizedHandler } from './lib/http';
 import { silentLogin } from './lib/auth';
 import { hogeeDarkTheme, hogeeLightTheme } from './theme';
 import { useThemeAttribute, useThemeStore } from './stores/themeStore';
@@ -32,7 +32,7 @@ function GlobalFeedbackBridge({ loginError }: { loginError: string | null }) {
       message.error('登录已失效（401），请重新获取访问令牌');
     });
     setNetworkErrorHandler(() => {
-      message.error('无法连接后端服务，请确认后端已启动（默认端口 10588）');
+      message.error(NETWORK_UNREACHABLE_MESSAGE);
     });
     return () => {
       setUnauthorizedHandler(null);
@@ -55,11 +55,17 @@ async function enableMocking() {
   });
 }
 
+const LOGIN_TIMEOUT_MS = 10_000;
+
 /** 启动即静默登录（默认账号），失败不阻塞渲染、给出可见错误 */
 async function bootstrap(): Promise<string | null> {
   await enableMocking();
   try {
-    await silentLogin();
+    // 加超时兜底：后端挂起时不让应用白屏，带着占位 token 继续渲染
+    await Promise.race([
+      silentLogin(),
+      new Promise<never>((_, reject) => setTimeout(() => reject(new Error('后端登录接口无响应')), LOGIN_TIMEOUT_MS)),
+    ]);
   } catch (err) {
     return err instanceof Error && err.message ? err.message : '未知错误';
   }

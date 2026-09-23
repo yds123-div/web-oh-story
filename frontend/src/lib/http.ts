@@ -20,8 +20,10 @@ export class ApiError extends Error {
 }
 
 /** 网络错误 / 后端不可达（fetch 本身失败，区别于业务失败） */
+export const NETWORK_UNREACHABLE_MESSAGE = '无法连接后端服务，请确认后端已启动（默认端口 10588）';
+
 export class NetworkError extends Error {
-  constructor(message = '无法连接后端服务，请确认后端已启动（默认端口 10588）') {
+  constructor(message = NETWORK_UNREACHABLE_MESSAGE) {
     super(message);
     this.name = 'NetworkError';
   }
