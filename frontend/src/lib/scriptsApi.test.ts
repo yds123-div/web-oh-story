@@ -1,7 +1,15 @@
 import { describe, it, expect } from 'vitest';
 import { http, HttpResponse } from 'msw';
 import { setupServer } from 'msw/node';
-import { addScript, deleteScript, listScripts, projectHasAssets, updateScript } from './api';
+import {
+  addScript,
+  deleteScript,
+  extractScriptAssets,
+  listScripts,
+  pollScriptAssets,
+  projectHasAssets,
+  updateScript,
+} from './api';
 import type { ScriptRow } from './api';
 
 const server = setupServer();
@@ -145,6 +153,44 @@ describe('Scripts API（后端真实契约翻译）', () => {
       await deleteScript('123');
 
       expect(captured).toEqual({ ids: [123] });
+    });
+  });
+
+  describe('extractScriptAssets', () => {
+    it('按后端契约 POST {projectId, scriptIds: number[]}', async () => {
+      let captured: unknown;
+
+      server.use(
+        http.post('/api/script/extractAssets', async ({ request }) => {
+          captured = await request.json();
+          return ok({ message: '开始提取资产' });
+        }),
+      );
+
+      await extractScriptAssets(projectId, ['11', '12']);
+
+      expect(captured).toEqual({ projectId: 12345, scriptIds: [11, 12] });
+    });
+  });
+
+  describe('pollScriptAssets', () => {
+    it('POST {ids: number[]} 并把整数 extractState 翻译为命名状态', async () => {
+      server.use(
+        http.post('/api/script/pollScriptAssets', async ({ request }) => {
+          expect(await request.json()).toEqual({ ids: [11, 12] });
+          return ok([
+            { id: 11, extractState: 1, errorReason: null },
+            { id: 12, extractState: -1, errorReason: 'AI 未返回任何资产' },
+          ]);
+        }),
+      );
+
+      const states = await pollScriptAssets(['11', '12']);
+
+      expect(states).toEqual([
+        { id: '11', extractStatus: 'done', errorReason: null },
+        { id: '12', extractStatus: 'failed', errorReason: 'AI 未返回任何资产' },
+      ]);
     });
   });
 

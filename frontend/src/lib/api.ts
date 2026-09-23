@@ -1,4 +1,5 @@
 import { apiFetch } from './http';
+import { extractStatusFromState, isExtractionActive } from './extractState';
 import type {
   AddScriptBody,
   Asset,
@@ -19,6 +20,7 @@ import type {
   ProjectListResponse,
   ProjectStatistics,
   Script,
+  ScriptExtractState,
   ScriptListResponse,
   Segment,
   SegmentListResponse,
@@ -417,20 +419,9 @@ export type ScriptRow = {
   createTime: number | null;
 };
 
-/** 后端 extractState 整数 → 前端命名状态（五态语义只在此处翻译一次） */
+/** 后端 extractState 整数 → 前端命名状态（翻译表在 extractState.ts，只此一份） */
 function toExtractStatus(state: number | null): Script['extractStatus'] {
-  switch (state) {
-    case 1:
-      return 'done';
-    case 2:
-      return 'waiting';
-    case 0:
-      return 'extracting';
-    case -1:
-      return 'failed';
-    default:
-      return 'none';
-  }
+  return extractStatusFromState(state);
 }
 
 function toScript(row: ScriptRow): Script {
@@ -477,6 +468,99 @@ export async function updateScript(body: UpdateScriptBody): Promise<void> {
 export async function deleteScript(id: string): Promise<void> {
   // 后端 delScript 是批量语义（ids 数组）
   await postJson('/api/script/delScript', { ids: [Number(id)] });
+}
+
+/**
+ * 触发 AI 资产提取：后端收到后把剧本置为等待提取并立即返回，
+ * 后台异步调用真实大模型，完成后写入 o_assets、状态转 done/failed。
+ */
+export async function extractScriptAssets(projectId: string, scriptIds: string[]): Promise<void> {
+  await postJson('/api/script/extractAssets', {
+    projectId: Number(projectId),
+    scriptIds: scriptIds.map(Number),
+  });
+}
+
+/** 轮询提取状态（后端只认 ids 数字数组，不按项目过滤） */
+export async function pollScriptAssets(
+  ids: string[],
+  signal?: AbortSignal,
+): Promise<ScriptExtractState[]> {
+  const rows = await postJson<{ id: number; extractState: number | null; errorReason: string | null }[]>(
+    '/api/script/pollScriptAssets',
+    { ids: ids.map(Number) },
+    { signal },
+  );
+  return (rows ?? []).map((row) => ({
+    id: String(row.id),
+    extractStatus: toExtractStatus(row.extractState),
+    errorReason: row.errorReason ?? null,
+  }));
+}
+
+/** 提取轮询超时（后端任务丢失/队列卡死时兜底，避免无限轮询） */
+export class ExtractionTimeoutError extends Error {
+  constructor(message = '资产提取超时') {
+    super(message);
+    this.name = 'ExtractionTimeoutError';
+  }
+}
+
+/** 可取消的间隔等待（abort 时抛 AbortError，与 fetch 取消一致） */
+function waitForTick(ms: number, signal?: AbortSignal): Promise<void> {
+  return new Promise((resolve, reject) => {
+    if (signal?.aborted) {
+      reject(new DOMException('Aborted', 'AbortError'));
+      return;
+    }
+    const timer = setTimeout(() => {
+      signal?.removeEventListener('abort', onAbort);
+      resolve();
+    }, ms);
+    const onAbort = () => {
+      clearTimeout(timer);
+      reject(new DOMException('Aborted', 'AbortError'));
+    };
+    signal?.addEventListener('abort', onAbort, { once: true });
+  });
+}
+
+/**
+ * 提取轮询编排（异步任务的循环/间隔/超时/终态判定收敛在 API client）：
+ * 立即查一拍并回调 onTick，之后每 intervalMs 轮询，直到所有剧本到达
+ * 终态（done/failed）；超时抛 ExtractionTimeoutError；取消抛 AbortError。
+ * 页面只负责把每拍结果映射到 UI。
+ */
+export async function pollExtractionUntilDone(
+  ids: string[],
+  options: {
+    onTick: (states: ScriptExtractState[]) => void;
+    intervalMs?: number;
+    timeoutMs?: number;
+  },
+  signal?: AbortSignal,
+): Promise<void> {
+  const intervalMs = options.intervalMs ?? 2500;
+  const timeoutMs = options.timeoutMs ?? 5 * 60_000;
+  const startedAt = Date.now();
+
+  for (;;) {
+    const states = await pollScriptAssets(ids, signal);
+    if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
+    options.onTick(states);
+
+    // 全部到达终态（无等待/提取中）即结束；某 id 在响应中缺失（剧本被删）也不再等
+    const pending = ids.filter((id) => {
+      const state = states.find((s) => s.id === id);
+      return state ? isExtractionActive(state.extractStatus) : false;
+    });
+    if (pending.length === 0) return;
+
+    if (Date.now() - startedAt > timeoutMs) {
+      throw new ExtractionTimeoutError();
+    }
+    await waitForTick(intervalMs, signal);
+  }
 }
 
 /**

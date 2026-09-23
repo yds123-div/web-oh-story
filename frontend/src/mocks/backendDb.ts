@@ -5,6 +5,7 @@
  */
 
 import type { ProjectStatistics } from '../types/api';
+import { EXTRACT_STATE } from '../lib/extractState';
 
 export type BackendProjectRow = {
   id: number;
@@ -67,8 +68,16 @@ let assets: BackendAssetRow[] = [];
 let statsByProject = new Map<number, ProjectStatistics>();
 /** o_script 自增 id 计数器（与真实后端一致，非时间戳） */
 let scriptIdSeq = 1;
+/** 异步状态机的待触发定时器：reset 时必须清理，防止残留回调污染下一个用例 */
+let pendingTimers: ReturnType<typeof setTimeout>[] = [];
+
+function schedule(ms: number, fn: () => void): void {
+  pendingTimers.push(setTimeout(fn, ms));
+}
 
 function seed(): void {
+  for (const timer of pendingTimers) clearTimeout(timer);
+  pendingTimers = [];
   scriptIdSeq = 1;
   projects = [
     {
@@ -230,6 +239,57 @@ export function updateBackendScript(
 
 export function deleteBackendScripts(ids: number[]): void {
   scripts = scripts.filter((s) => !ids.includes(s.id));
+}
+
+/** 批量更新提取状态（镜像后端 extractAssets 异步各阶段的 update） */
+export function setBackendScriptExtractState(
+  ids: number[],
+  extractState: number | null,
+  errorReason: string | null = null,
+): void {
+  for (const script of scripts) {
+    if (ids.includes(script.id)) {
+      script.extractState = extractState;
+      script.errorReason = errorReason;
+    }
+  }
+}
+
+/**
+ * 镜像后端异步提取的完整状态机：等待 → 提取中 → 成功（模拟 LLM 写入资产）
+ * / 失败（failReason 有值）。定时器注册登记，reset 时统一清理。
+ */
+export function runExtractStateMachine(
+  projectId: number,
+  ids: number[],
+  options: { failReason?: string } = {},
+): void {
+  setBackendScriptExtractState(ids, EXTRACT_STATE.WAITING);
+  schedule(200, () => {
+    setBackendScriptExtractState(ids, EXTRACT_STATE.EXTRACTING);
+    schedule(200, () => {
+      if (options.failReason) {
+        setBackendScriptExtractState(ids, EXTRACT_STATE.FAILED, options.failReason);
+        return;
+      }
+      // 种子剧本内容是「林晚」片段，模拟真实提取出的角色资产（同名不重复插入）
+      const existingNames = new Set(getBackendAssets(projectId).map((a) => a.name));
+      const extracted = [{ projectId, name: '林晚', type: 'role' as const }].filter(
+        (a) => !existingNames.has(a.name),
+      );
+      if (extracted.length) addBackendAssets(extracted);
+      setBackendScriptExtractState(ids, EXTRACT_STATE.DONE);
+    });
+  });
+}
+
+/** 轮询镜像后端 pollScriptAssets：只回 id/extractState/errorReason */
+export function getBackendScriptStates(
+  ids: number[],
+): { id: number; extractState: number | null; errorReason: string | null }[] {
+  return scripts
+    .filter((s) => ids.includes(s.id))
+    .map((s) => ({ id: s.id, extractState: s.extractState, errorReason: s.errorReason }));
 }
 
 // ===== 资产（仅模拟门控所需的 getAllAssets）=====

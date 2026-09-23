@@ -57,6 +57,20 @@ export default function CreatePage() {
       .catch((err) => message.error(errorMessage(err, '加载项目列表失败')));
   }, [projectIdFromUrl, message]);
 
+  // 免提交逃生口：URL 指定项目、或下拉选中已有项目时，可不提交直接回剧本列表
+  const viewScriptProjectId =
+    projectIdFromUrl ?? (selectedProjectId !== 'new' ? selectedProjectId : null);
+  const viewScriptsLink = viewScriptProjectId ? (
+    <Button
+      size="small"
+      type="link"
+      style={{ padding: 0 }}
+      onClick={() => navigate(`/project/${viewScriptProjectId}/scripts`)}
+    >
+      查看该项目剧本列表 →
+    </Button>
+  ) : null;
+
   const readyHint = useMemo(() => {
     if (!source) return '';
     if (source.kind === 'paste') return `粘贴文本 · ${source.text.length} 字 · 删除后可重新粘贴`;
@@ -150,9 +164,12 @@ export default function CreatePage() {
         <Card className="ds-card" size="small" style={{ marginTop: 14 }} styles={{ body: { padding: '12px 16px' } }}>
           <Flex justify="space-between" align="center" style={{ marginBottom: 8 }}>
             <b style={{ fontSize: 13 }}>📌 项目配置（已保存）</b>
-            <Typography.Text type="secondary" style={{ fontSize: 11 }}>
-              {savedProject.projectType === 'script' ? '剧本项目' : savedProject.projectType}
-            </Typography.Text>
+            <Flex align="center" gap={6}>
+              {viewScriptsLink}
+              <Typography.Text type="secondary" style={{ fontSize: 11 }}>
+                {savedProject.projectType === 'script' ? '剧本项目' : savedProject.projectType}
+              </Typography.Text>
+            </Flex>
           </Flex>
           <Flex gap={8} wrap style={{ fontSize: 12 }}>
             {[
@@ -297,6 +314,9 @@ export default function CreatePage() {
               ]}
             />
           )}
+          {!projectIdFromUrl && viewScriptsLink ? (
+            <div style={{ margin: '-4px 0 12px' }}>{viewScriptsLink}</div>
+          ) : null}
           <Flex gap={8} style={{ marginBottom: 12 }}>
             <div style={{ flex: 1 }}>
               <Typography.Text type="secondary" style={{ fontSize: 11.5, display: 'block', marginBottom: 6 }}>

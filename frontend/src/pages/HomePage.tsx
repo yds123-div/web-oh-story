@@ -147,7 +147,7 @@ export default function HomePage() {
               className="ds-card"
               style={{ overflow: 'hidden', cursor: 'pointer' }}
               styles={{ body: { padding: '12px 14px' } }}
-              onClick={() => navigate(`/create?projectId=${p.id}`)}
+              onClick={() => navigate(`/project/${p.id}/scripts`)}
               cover={
                 <div className="ds-cv">
                   <div

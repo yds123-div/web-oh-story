@@ -1,5 +1,5 @@
-import { render, screen } from '@testing-library/react';
-import { MemoryRouter } from 'react-router-dom';
+import { fireEvent, render, screen } from '@testing-library/react';
+import { ScriptsMarkerRoutes } from '../test/ScriptsMarkerRoutes';
 import { App as AntApp, ConfigProvider } from 'antd';
 import { setupServer } from 'msw/node';
 import { http, HttpResponse } from 'msw';
@@ -20,9 +20,9 @@ function renderPage() {
   return render(
     <ConfigProvider>
       <AntApp>
-        <MemoryRouter>
+        <ScriptsMarkerRoutes initialPath="/">
           <HomePage />
-        </MemoryRouter>
+        </ScriptsMarkerRoutes>
       </AntApp>
     </ConfigProvider>,
   );
@@ -42,6 +42,24 @@ describe('HomePage（真实后端契约）', () => {
     expect(screen.getByText('✎ 重命名')).toBeInTheDocument();
     expect(screen.getByText('🗑 删除')).toBeInTheDocument();
     expect(screen.queryByText('📦 归档')).not.toBeInTheDocument();
+  });
+
+  it('点击项目卡直达该项目剧本列表（而非创作页）', async () => {
+    render(
+      <ConfigProvider>
+        <AntApp>
+          <ScriptsMarkerRoutes initialPath="/">
+            <HomePage />
+          </ScriptsMarkerRoutes>
+        </AntApp>
+      </ConfigProvider>,
+    );
+
+    // 正文标题（卡片内）点击冒泡到卡片
+    const titles = await screen.findAllByText('逆命木叶');
+    fireEvent.click(titles[titles.length - 1]);
+
+    expect(await screen.findByText('scripts-page-marker')).toBeInTheDocument();
   });
 
   it('shows friendly empty state when the backend has no projects', async () => {

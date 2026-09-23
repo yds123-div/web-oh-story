@@ -1,5 +1,5 @@
 import react from '@vitejs/plugin-react';
-import { defineConfig } from 'vitest/config';
+import { configDefaults, defineConfig } from 'vitest/config';
 import { loadEnv } from 'vite';
 
 export default defineConfig(({ mode }) => {
@@ -26,9 +26,12 @@ export default defineConfig(({ mode }) => {
         : undefined,
     },
     test: {
-      environment: 'jsdom',
+      // 自定义 jsdom 环境：修复 AbortSignal 与 Node undici Request 的跨 realm 冲突
+      environment: './src/test/jsdomEnv.ts',
       globals: true,
       setupFiles: './src/test/setup.ts',
+      // lib/llm.test.ts 是 npx tsx 手动运行的真实 LLM 冒烟脚本（非 vitest 套件）
+      exclude: [...configDefaults.exclude, '**/src/lib/llm.test.ts'],
     },
   };
 });

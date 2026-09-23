@@ -1,6 +1,7 @@
-import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react';
 import { useParams } from 'react-router-dom';
 import { listScripts, projectHasAssets } from '../lib/api';
+import { setRecentProjectId } from '../lib/recentProject';
 import { workflowStep, type WorkflowProgress } from '../lib/workflow';
 import type { Script, WorkflowStep } from '../types/api';
 
@@ -23,6 +24,8 @@ function useWorkflowStepQuery(projectId: string | undefined): WorkflowStepState 
 
   useEffect(() => {
     if (!projectId) return;
+    // 进入任一项目工作流页面即记为最近项目，供侧栏「创作」一键回到这里
+    setRecentProjectId(projectId);
     const controller = new AbortController();
     setStep(null);
     setScripts(null);
@@ -48,7 +51,10 @@ function useWorkflowStepQuery(projectId: string | undefined): WorkflowStepState 
     return () => controller.abort();
   }, [projectId, nonce]);
 
-  return { step, scripts, failed, retry: () => setNonce((n) => n + 1) };
+  // useCallback：retry 会进入页面轮询 effect 的依赖，身份必须稳定
+  const retry = useCallback(() => setNonce((n) => n + 1), []);
+
+  return { step, scripts, failed, retry };
 }
 
 const WorkflowStepContext = createContext<WorkflowStepState | null>(null);

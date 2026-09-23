@@ -326,6 +326,13 @@ export type AddScriptBody = {
   content: string;
 };
 
+/** pollScriptAssets 返回的单剧本提取状态（整数 extractState 同样在 API 层翻译） */
+export type ScriptExtractState = {
+  id: string;
+  extractStatus: ScriptExtractStatus;
+  errorReason: string | null;
+};
+
 /** 更新剧本 body（后端 updateScript 四字段全必填，前端无剧本-资产关联编辑，assets 恒发空数组=不动关联） */
 export type UpdateScriptBody = {
   id: string;

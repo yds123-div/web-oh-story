@@ -1,11 +1,19 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { App, Button, Input, Modal, Tag, Typography } from 'antd';
 import { useNavigate, useParams } from 'react-router-dom';
 import { WorkflowHeader } from '../components/WorkflowHeader';
 import { useWorkflowStep } from '../hooks/useWorkflowStep';
-import { deleteScript, fetchProject, updateScript } from '../lib/api';
+import {
+  deleteScript,
+  ExtractionTimeoutError,
+  extractScriptAssets,
+  fetchProject,
+  pollExtractionUntilDone,
+  updateScript,
+} from '../lib/api';
+import { canExtract, isExtractionActive } from '../lib/extractState';
 import { errorMessage } from '../lib/errors';
-import type { Script, ScriptExtractStatus } from '../types/api';
+import type { Script, ScriptExtractState, ScriptExtractStatus } from '../types/api';
 
 /** 命名提取状态 → 展示标签（状态翻译已在 API 层完成，此处只配 UI） */
 function extractStatusTag(status: ScriptExtractStatus) {
@@ -26,7 +34,7 @@ export default function ScriptsPage() {
   const { message, modal } = App.useApp();
   const { id = '' } = useParams();
   const navigate = useNavigate();
-  const { scripts: fetchedScripts } = useWorkflowStep();
+  const { scripts: fetchedScripts, retry } = useWorkflowStep();
   const [scripts, setScripts] = useState<Script[]>([]);
   const [projectName, setProjectName] = useState('');
   const [loading, setLoading] = useState(true);
@@ -34,6 +42,8 @@ export default function ScriptsPage() {
   const [editingName, setEditingName] = useState('');
   const [editingContent, setEditingContent] = useState('');
   const [saving, setSaving] = useState(false);
+  /** 已发起提取请求、等待后端响应的剧本（按钮 loading） */
+  const [pendingKickoff, setPendingKickoff] = useState<Set<string>>(new Set());
 
   // 项目名是页面自身所需（门控查询不含），单独取
   useEffect(() => {
@@ -108,10 +118,93 @@ export default function ScriptsPage() {
     });
   };
 
-  const onExtract = () => {
-    message.info('AI 提取资产将在资产工坊开放（下一阶段接入）');
-    navigate(`/project/${id}/assets`);
+  const onExtract = async (script: Script) => {
+    setPendingKickoff((prev) => new Set(prev).add(script.id));
+    try {
+      // 真实后端：置等待后立即返回，AI 在后台提取
+      await extractScriptAssets(id, [script.id]);
+      // 乐观置等待，轮询 effect 随即启动
+      setScripts(
+        scriptsRef.current.map((s) =>
+          s.id === script.id ? { ...s, extractStatus: 'waiting' } : s,
+        ),
+      );
+    } catch (err) {
+      message.error(errorMessage(err, '触发提取失败'));
+    } finally {
+      setPendingKickoff((prev) => {
+        const next = new Set(prev);
+        next.delete(script.id);
+        return next;
+      });
+    }
   };
+
+  // scriptsRef：onTick 里取最新列表做状态对比，不把整个列表放进轮询依赖
+  const scriptsRef = useRef(scripts);
+  useEffect(() => {
+    scriptsRef.current = scripts;
+  });
+
+  /** 处于提取中的剧本（等待/提取中），驱动轮询 */
+  const activeIds = scripts
+    .filter((s) => isExtractionActive(s.extractStatus))
+    .map((s) => s.id);
+  const activeKey = activeIds.join('|');
+
+  useEffect(() => {
+    if (activeIds.length === 0) return;
+    const controller = new AbortController();
+
+    // 每拍结果映射到 UI；进入终态时提示并重查门控
+    const tick = (states: ScriptExtractState[]) => {
+      const prev = scriptsRef.current;
+      setScripts(
+        prev.map((s) => {
+          const next = states.find((x) => x.id === s.id);
+          return next
+            ? { ...s, extractStatus: next.extractStatus, errorReason: next.errorReason }
+            : s;
+        }),
+      );
+
+      for (const next of states) {
+        const before = prev.find((s) => s.id === next.id);
+        if (!before || before.extractStatus === next.extractStatus) continue;
+        if (next.extractStatus === 'done') {
+          message.success(`《${before.name}》资产提取完成`);
+          // 资产已入库：重查门控状态，三步条与后续页面解锁
+          retry();
+        }
+        if (next.extractStatus === 'failed') {
+          message.error(`《${before.name}》提取失败`);
+        }
+      }
+    };
+
+    // 轮询编排（循环/间隔/超时/终态）收敛在 API client
+    void pollExtractionUntilDone(activeIds, { onTick: tick }, controller.signal).catch(
+      (err: unknown) => {
+        // 取消：静默
+        if (err instanceof DOMException && err.name === 'AbortError') return;
+        if (err instanceof ExtractionTimeoutError) {
+          // 超时兜底：仍在进行中的本地置失败、可重新发起（后端恢复后重提即可）
+          setScripts((prev) =>
+            prev.map((s) =>
+              activeIds.includes(s.id) && isExtractionActive(s.extractStatus)
+                ? { ...s, extractStatus: 'failed', errorReason: '提取超时，请重新发起' }
+                : s,
+            ),
+          );
+          message.warning('资产提取超时，请重新发起');
+        }
+      },
+    );
+
+    return () => controller.abort();
+    // activeKey 变化（发起/完成）时重建；message、retry 身份稳定
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeKey, message, retry]);
 
   return (
     <div className="ds-flowPage">
@@ -197,9 +290,23 @@ export default function ScriptsPage() {
                         提取失败：{script.errorReason}
                       </Typography.Text>
                     ) : null}
+                    {isExtractionActive(script.extractStatus) ? (
+                      <Typography.Text
+                        type="secondary"
+                        style={{ fontSize: 12, display: 'block', marginBottom: 8 }}
+                      >
+                        ⏳ AI 正在通读剧本，提取角色与场景…
+                      </Typography.Text>
+                    ) : null}
                     <div style={{ display: 'flex', gap: 8 }}>
-                      {(script.extractStatus === 'none' || script.extractStatus === 'failed') ? (
-                        <Button size="small" type="primary" className="ds-grad ds-pill" onClick={onExtract}>
+                      {canExtract(script.extractStatus) ? (
+                        <Button
+                          size="small"
+                          type="primary"
+                          className="ds-grad ds-pill"
+                          loading={pendingKickoff.has(script.id)}
+                          onClick={() => void onExtract(script)}
+                        >
                           🤖 AI 提取资产
                         </Button>
                       ) : null}
@@ -229,7 +336,7 @@ export default function ScriptsPage() {
           size="small"
           onClick={() => navigate(`/create?projectId=${id}`)}
         >
-          上一步
+          ＋ 添加剧本
         </Button>
         <Button
           type="primary"

@@ -35,9 +35,11 @@ import {
   getBackendAssets,
   getBackendProjects,
   getBackendScripts,
+  getBackendScriptStates,
   getBackendTaskById,
   getBackendTasks,
   getProjectStatistics,
+  runExtractStateMachine,
   updateBackendProject,
   updateBackendScript,
 } from './backendDb';
@@ -513,6 +515,32 @@ export const handlers = [
     if (invalid) return invalid;
     deleteBackendScripts((body.ids as number[]).map(Number));
     return envelope({ message: '删除剧本成功' }, '删除剧本成功');
+  }),
+
+  http.post('/api/script/extractAssets', async ({ request }) => {
+    await netDelay(80);
+    const body = (await request.json()) as Record<string, unknown>;
+    const invalid = validateBody(body, {
+      scriptIds: 'numberArray',
+      projectId: 'number',
+      groupSize: 'optionalNumber',
+    });
+    if (invalid) return invalid;
+    const scriptIds = body.scriptIds as number[];
+    if (scriptIds.length === 0) {
+      return HttpResponse.json({ message: '请先选择剧本' }, { status: 400 });
+    }
+    // 镜像后端：置等待后立即返回，后台异步走 等待→提取中→成功（模拟 LLM 写资产）
+    runExtractStateMachine(Number(body.projectId), scriptIds);
+    return envelope({ message: '开始提取资产' }, '开始提取资产');
+  }),
+
+  http.post('/api/script/pollScriptAssets', async ({ request }) => {
+    await netDelay(60);
+    const body = (await request.json()) as Record<string,unknown>;
+    const invalid = validateBody(body, { ids: 'numberArray' });
+    if (invalid) return invalid;
+    return envelope(getBackendScriptStates(body.ids as number[]));
   }),
 
   // 门控数据源（getAllAssets：项目全部父资产，排除 clip/audio）

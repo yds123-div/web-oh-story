@@ -1,3 +1,4 @@
+import { vi } from 'vitest';
 import { setupServer } from 'msw/node';
 import {
   addScript,
@@ -5,7 +6,9 @@ import {
   createProject,
   deleteProject,
   deleteScript,
+  extractScriptAssets,
   finalizeOutline,
+  pollScriptAssets,
   getCredits,
   getEpisode,
   getOutline,
@@ -403,6 +406,43 @@ describe('MSW script contracts（镜像后端 zod 校验）', () => {
     await deleteScript(target.id);
     const afterDelete = await listScripts(String(DEMO_PROJECT_ID));
     expect(afterDelete.scripts.some((s) => s.id === target.id)).toBe(false);
+  });
+
+  it('rejects extractAssets missing scriptIds（zod 校验，HTTP 400）', async () => {
+    const res = await fetch('/api/script/extractAssets', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ projectId: DEMO_PROJECT_ID }),
+    });
+    expect(res.status).toBe(400);
+  });
+
+  it('rejects extractAssets with an empty scriptIds array', async () => {
+    await expect(extractScriptAssets(String(DEMO_PROJECT_ID), [])).rejects.toMatchObject({
+      name: 'HttpError',
+      status: 400,
+    });
+  });
+
+  it('runs the waiting → done state machine and writes assets', async () => {
+    const { scripts } = await listScripts(String(DEMO_PROJECT_ID));
+    const scriptId = scripts[0].id;
+
+    await extractScriptAssets(String(DEMO_PROJECT_ID), [scriptId]);
+
+    // 后端先把剧本置为等待(2)即返回
+    const immediate = await pollScriptAssets([scriptId]);
+    expect(['waiting', 'extracting']).toContain(immediate[0].extractStatus);
+
+    // 异步提取完成后状态转 done，且 getAllAssets 能查到 AI 写入的资产
+    await vi.waitFor(
+      async () => {
+        const states = await pollScriptAssets([scriptId]);
+        expect(states[0].extractStatus).toBe('done');
+      },
+      { interval: 100, timeout: 3000 },
+    );
+    await expect(projectHasAssets(String(DEMO_PROJECT_ID))).resolves.toBe(true);
   });
 
   it('projectHasAssets reflects getAllAssets（门控数据源）', async () => {
