@@ -38,6 +38,16 @@ function netDelay(ms: number): Promise<void> {
 }
 
 export const handlers = [
+  // 登录（按后端真实契约：POST + 信封，token 带 Bearer 前缀）
+  http.post('/api/login/login', async () => {
+    await netDelay(60);
+    return HttpResponse.json({
+      code: 200,
+      data: { token: 'Bearer dev-placeholder-token', name: 'admin', id: 1 },
+      message: '登录成功',
+    });
+  }),
+
   http.get('/api/projects', async () => {
     await netDelay(80);
     return HttpResponse.json({

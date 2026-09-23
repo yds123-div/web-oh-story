@@ -5,11 +5,12 @@ import { createRoot } from 'react-dom/client';
 import { App as AntApp, ConfigProvider } from 'antd';
 import zhCN from 'antd/locale/zh_CN';
 import App from './App';
-import { setUnauthorizedHandler } from './lib/http';
+import { setNetworkErrorHandler, setUnauthorizedHandler } from './lib/http';
+import { silentLogin } from './lib/auth';
 import { hogeeDarkTheme, hogeeLightTheme } from './theme';
 import { useThemeAttribute, useThemeStore } from './stores/themeStore';
 
-function Root() {
+function Root({ loginError }: { loginError: string | null }) {
   const mode = useThemeStore((s) => s.mode);
   useThemeAttribute();
   const theme = useMemo(() => (mode === 'light' ? hogeeLightTheme : hogeeDarkTheme), [mode]);
@@ -17,26 +18,36 @@ function Root() {
   return (
     <ConfigProvider locale={zhCN} theme={theme}>
       <AntApp>
-        <UnauthorizedBridge />
+        <GlobalFeedbackBridge loginError={loginError} />
         <App />
       </AntApp>
     </ConfigProvider>
   );
 }
 
-function UnauthorizedBridge() {
+function GlobalFeedbackBridge({ loginError }: { loginError: string | null }) {
   const { message } = AntApp.useApp();
   useEffect(() => {
     setUnauthorizedHandler(() => {
       message.error('登录已失效（401），请重新获取访问令牌');
     });
-    return () => setUnauthorizedHandler(null);
+    setNetworkErrorHandler(() => {
+      message.error('无法连接后端服务，请确认后端已启动（默认端口 10588）');
+    });
+    return () => {
+      setUnauthorizedHandler(null);
+      setNetworkErrorHandler(null);
+    };
   }, [message]);
+  useEffect(() => {
+    if (loginError) message.error(`自动登录失败：${loginError}`);
+  }, [loginError, message]);
   return null;
 }
 
+/** MSW 默认不启动（应用直连真实后端）；设 VITE_ENABLE_MSW=true 时启用浏览器 mock */
 async function enableMocking() {
-  if (import.meta.env.VITE_ENABLE_MSW === 'false') return;
+  if (import.meta.env.VITE_ENABLE_MSW !== 'true') return;
   const { worker } = await import('./mocks/browser');
   await worker.start({
     onUnhandledRequest: 'bypass',
@@ -44,10 +55,21 @@ async function enableMocking() {
   });
 }
 
-void enableMocking().then(() => {
+/** 启动即静默登录（默认账号），失败不阻塞渲染、给出可见错误 */
+async function bootstrap(): Promise<string | null> {
+  await enableMocking();
+  try {
+    await silentLogin();
+  } catch (err) {
+    return err instanceof Error && err.message ? err.message : '未知错误';
+  }
+  return null;
+}
+
+void bootstrap().then((loginError) => {
   createRoot(document.getElementById('root')!).render(
     <StrictMode>
-      <Root />
+      <Root loginError={loginError} />
     </StrictMode>,
   );
 });
