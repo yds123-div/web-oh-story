@@ -301,19 +301,7 @@ export default function IdeaPage() {
       <h2 className="ds-h2">
         创意 <em>· 灵感市场</em>
       </h2>
-      <div className="ds-sub2">
-        爆款模板 · 风格库 · 创意对话 —— 套用即开拍，跳过冷启动
-      </div>
-
-      <div style={{ marginTop: '16px', display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
-        <Button type="primary" className="ds-grad" onClick={() => navigate('/creative/chat')}>
-          💬 新建创意对话（图像 / 视频）
-        </Button>
-        <span style={{ fontSize: '11px', color: 'var(--ant-color-text-tertiary)' }}>
-          对话式生成：提示词 → 参数确认（模型/画质/比例/数量/积分）→ 出图，支持抠图 / 擦除 / 改图 /
-          扩图 / 变清晰
-        </span>
-      </div>
+      <div className="ds-sub2">爆款模板 · 风格库 —— 套用即开拍，跳过冷启动</div>
 
       <div className="ds-secHead">
         <h3>🏆 官方示例</h3>

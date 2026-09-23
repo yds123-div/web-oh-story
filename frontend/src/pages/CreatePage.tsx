@@ -1,10 +1,9 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { App, Button, Flex, Input, Progress, Select, Typography, Tag } from 'antd';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useTask } from '../hooks/useTask';
-import { createProject, listTemplates, submitOutlineTask, submitNovelTask } from '../lib/api';
-import { validateScriptFileContent, validateScriptText, validateNovelFileContent, validateNovelText } from '../lib/scriptValidation';
-import type { Template } from '../types/api';
+import { createProject, submitOutlineTask } from '../lib/api';
+import { validateScriptFileContent, validateScriptText } from '../lib/scriptValidation';
 
 const SAMPLE = `【木叶长廊 内 夜】
 木叶，夜晚长廊，月光冷白。
@@ -12,23 +11,6 @@ const SAMPLE = `【木叶长廊 内 夜】
 林晚（低声独白）：明明只是在家看火影……一睁眼，就来到了这里。
 △ 鼬缓步从阴影走出，红瞳微光，神色淡漠。
 鼬：深夜在此，有何目的。长老安排你，来监视我？`;
-
-const NOVEL_SAMPLE = `第一章 异世囚笼
-
-林晚扶着廊柱，指尖颤抖，眼神茫然又痛苦，身着木叶制式素色和服。
-明明只是在家看火影……一睁眼，就来到了这里。我知道所有人的结局，唯独不知道，自己该怎么活下去。
-
-鼬缓步从阴影走出，红瞳微光，神色淡漠。
-「深夜在此，有何目的。长老安排你，来监视我？」
-
-林晚猛地抬头，眼眶泛红，声音发颤：「我不是来监视你的！鼬，我知道你将要背负什么，我不想看你走向那条绝路！」
-
-鼬淡淡勾起唇角，带着悲凉：「预言？外来之人，不要妄言命运。」
-
-鼬转身，衣摆扫过地面，不留一丝温情。
-「离我远一点，否则，你会被拖入深渊。」
-
-黑屏字幕：我知晓你的悲剧，却无法改写。`;
 
 type ReadySource =
   | { kind: 'paste'; text: string }
@@ -39,17 +21,13 @@ export default function CreatePage() {
   const navigate = useNavigate();
   const [params] = useSearchParams();
   const projectIdFromUrl = params.get('projectId');
-  const templateIdFromUrl = params.get('templateId');
 
-  const [mode, setMode] = useState<'script' | 'novel'>('script');
   const [panel, setPanel] = useState<'empty' | 'paste' | 'ready'>('empty');
   const [paste, setPaste] = useState(SAMPLE);
   const [source, setSource] = useState<ReadySource | null>(null);
   const [fileName, setFileName] = useState('逆命木叶');
   const [taskId, setTaskId] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
-  const [templates, setTemplates] = useState<Template[]>([]);
-  const [templateId, setTemplateId] = useState(templateIdFromUrl ?? '');
   const [category, setCategory] = useState('女频-轻小说');
   const [style, setStyle] = useState('赛博朋克电影');
   const [videoRatio, setVideoRatio] = useState('9:16');
@@ -66,29 +44,6 @@ export default function CreatePage() {
     onFailed: (t) => message.error(t.error ?? '创作任务失败'),
   });
 
-  useEffect(() => {
-    void listTemplates()
-      .then((data) => {
-        setTemplates(data.templates);
-        const tpl = data.templates.find((item) => item.id === templateIdFromUrl);
-        if (!tpl) return;
-        setTemplateId(tpl.id);
-        setFileName(tpl.name);
-        setPaste(tpl.scriptText);
-        setSource({ kind: 'paste', text: tpl.scriptText });
-        setPanel('ready');
-      })
-      .catch(() => undefined);
-  }, [templateIdFromUrl]);
-
-  useEffect(() => {
-    if (mode === 'novel') {
-      setPaste(NOVEL_SAMPLE);
-    } else {
-      setPaste(SAMPLE);
-    }
-  }, [mode]);
-
   const readyHint = useMemo(() => {
     if (!source) return '';
     if (source.kind === 'paste') return `粘贴文本 · ${source.text.length} 字 · 删除后可重新粘贴`;
@@ -98,7 +53,7 @@ export default function CreatePage() {
 
   const onPickFile = async (file: File | undefined) => {
     if (!file) return;
-    const result = mode === 'novel' ? await validateNovelFileContent(file) : await validateScriptFileContent(file);
+    const result = await validateScriptFileContent(file);
     if (!result.ok) {
       message.error(result.message);
       return;
@@ -106,11 +61,11 @@ export default function CreatePage() {
     setSource({ kind: 'file', file, charCount: result.charCount });
     setPanel('ready');
     setFileName(file.name.replace(/\.[^.]+$/, '') || fileName);
-    message.success(mode === 'novel' ? '小说上传成功 · 格式校验通过' : '剧本上传成功 · 格式校验通过');
+    message.success('剧本上传成功 · 格式校验通过');
   };
 
   const onUsePaste = () => {
-    const result = mode === 'novel' ? validateNovelText(paste) : validateScriptText(paste);
+    const result = validateScriptText(paste);
     if (!result.ok) {
       message.error(result.message);
       return;
@@ -131,27 +86,17 @@ export default function CreatePage() {
       if (!projectId) {
         const created = await createProject({
           name: fileName.trim() || '未命名项目',
-          templateId: templateId || undefined,
           aspectRatio: videoRatio,
           style,
         });
         projectId = created.id;
       }
-      if (mode === 'novel') {
-        const body =
-          source.kind === 'paste'
-            ? { sourceType: 'paste' as const, text: source.text }
-            : { sourceType: 'file' as const, fileName: source.file.name };
-        const { taskId: id } = await submitNovelTask(projectId, body);
-        setTaskId(id);
-      } else {
-        const body =
-          source.kind === 'paste'
-            ? { sourceType: 'paste' as const, text: source.text }
-            : { sourceType: 'file' as const, fileName: source.file.name };
-        const { taskId: id } = await submitOutlineTask(projectId, body);
-        setTaskId(id);
-      }
+      const body =
+        source.kind === 'paste'
+          ? { sourceType: 'paste' as const, text: source.text }
+          : { sourceType: 'file' as const, fileName: source.file.name };
+      const { taskId: id } = await submitOutlineTask(projectId, body);
+      setTaskId(id);
     } catch {
       message.error('提交创作任务失败');
     } finally {
@@ -167,14 +112,9 @@ export default function CreatePage() {
       </Typography.Text>
 
       <Flex gap={8} wrap style={{ margin: '16px 0 0' }} align="center">
-        <button type="button" className={`ds-modeChip${mode === 'script' ? ' on' : ''}`} onClick={() => setMode('script')}>
-          📄 剧本模式（≤30万字）
-        </button>
-        <button type="button" className={`ds-modeChip${mode === 'novel' ? ' on' : ''}`} onClick={() => setMode('novel')}>
-          📖 小说模式（≤10万字 · 一键转视频）
-        </button>
+        <button type="button" className="ds-modeChip on">📄 剧本模式（≤30万字）</button>
         <span style={{ fontSize: 11, color: 'var(--ant-color-text-tertiary)', marginLeft: 10 }}>
-          {mode === 'script' ? '上传成品剧本，AI 精编后进入三步工作流' : '小说模式：先解析章节，再由编剧智能体改编为可拍摄剧本'}
+          上传成品剧本，AI 精编后进入三步工作流
         </span>
       </Flex>
 
@@ -183,13 +123,9 @@ export default function CreatePage() {
           {panel === 'empty' ? (
             <Flex vertical align="center" gap={12} style={{ textAlign: 'center', padding: '24px 0' }}>
               <div style={{ fontSize: 28 }}>📄</div>
-              <h4 style={{ margin: 0 }}>
-                {mode === 'novel' ? '上传小说，一键转视频' : '拖拽剧本到这里，或选择上传方式'}
-              </h4>
+              <h4 style={{ margin: 0 }}>拖拽剧本到这里，或选择上传方式</h4>
               <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-                {mode === 'novel'
-                  ? '支持 txt / docx / pdf / md · 单文件 ≤ 10MB · 小说不超过 10 万字（自动章节切分 → 编剧 Agent 改编 → 三步工作流）'
-                  : '支持 txt / pdf / doc / docx / md 格式 · 单文件 ≤ 10MB · 剧本字数不超过 30 万字'}
+                支持 txt / pdf / doc / docx / md 格式 · 单文件 ≤ 10MB · 剧本字数不超过 30 万字
               </Typography.Text>
               <Flex gap={8}>
                 <Button
@@ -202,7 +138,7 @@ export default function CreatePage() {
                     input.click();
                   }}
                 >
-                  ⬆ {mode === 'novel' ? '上传小说' : '上传剧本'}
+                  ⬆ 上传剧本
                 </Button>
                 <Button className="ds-ghost ds-pill" onClick={() => setPanel('paste')}>
                   📋 粘贴文本
@@ -286,26 +222,6 @@ export default function CreatePage() {
           </Typography.Text>
           <Input value={fileName} onChange={(e) => setFileName(e.target.value)} style={{ marginBottom: 12 }} />
           <Typography.Text type="secondary" style={{ fontSize: 11.5, display: 'block', marginBottom: 6 }}>
-            从官方示例开始（可选）
-          </Typography.Text>
-          <Select
-            style={{ width: '100%', marginBottom: 12 }}
-            value={templateId}
-            onChange={(value) => {
-              setTemplateId(value);
-              const tpl = templates.find((item) => item.id === value);
-              if (!tpl) return;
-              setFileName(tpl.name);
-              setPaste(tpl.scriptText);
-              setSource({ kind: 'paste', text: tpl.scriptText });
-              setPanel('ready');
-            }}
-            options={[
-              { value: '', label: '— 不使用示例 —' },
-              ...templates.map((tpl) => ({ value: tpl.id, label: tpl.name })),
-            ]}
-          />
-          <Typography.Text type="secondary" style={{ fontSize: 11.5, display: 'block', marginBottom: 6 }}>
             选择项目
           </Typography.Text>
           <Select style={{ width: '100%', marginBottom: 12 }} defaultValue="默认项目">
@@ -375,7 +291,7 @@ export default function CreatePage() {
             </div>
             <div style={{ flex: 1 }}>
               <Typography.Text type="secondary" style={{ fontSize: 11.5, display: 'block', marginBottom: 6 }}>
-                生图质量 <span style={{ color: '#a78bfa', fontSize: 10 }}>9积分/张</span>
+                生图质量
               </Typography.Text>
               <Select
                 style={{ width: '100%' }}
@@ -394,7 +310,7 @@ export default function CreatePage() {
               <Progress percent={task.progress} strokeColor={{ from: '#8b5cf6', to: '#6366f1' }} />
               <Typography.Text type="secondary" style={{ fontSize: 12 }}>
                 {task.status === 'pending' && '排队中…'}
-                {task.status === 'running' && '小说转剧本中…'}
+                {task.status === 'running' && '剧本精编中…'}
                 {task.status === 'succeeded' && '✓ 大纲任务完成'}
                 {task.status === 'failed' && (task.error ?? '失败')}
               </Typography.Text>
@@ -407,7 +323,7 @@ export default function CreatePage() {
               loading={submitting || (task != null && task.status !== 'failed')}
               onClick={() => void startCreate()}
             >
-              {mode === 'novel' ? '📖 一键转视频 ◆32' : '✦ 立即创作 ◆32'}
+              ✦ 立即创作
             </Button>
           </Flex>
         </div>

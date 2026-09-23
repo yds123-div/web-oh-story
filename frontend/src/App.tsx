@@ -2,10 +2,10 @@ import { lazy, Suspense } from 'react';
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 import { AppLayout } from './layout/AppLayout';
 import { WorkflowGate } from './components/WorkflowGate';
+import { PlaceholderPage } from './pages/PlaceholderPage';
 
 const HomePage = lazy(() => import('./pages/HomePage'));
 const IdeaPage = lazy(() => import('./pages/IdeaPage'));
-const CreativeChatPage = lazy(() => import('./pages/CreativeChatPage'));
 const CreatePage = lazy(() => import('./pages/CreatePage'));
 const OutlinePage = lazy(() => import('./pages/OutlinePage'));
 const AssetsPage = lazy(() => import('./pages/AssetsPage'));
@@ -24,7 +24,15 @@ export default function App() {
           <Route element={<AppLayout />}>
             <Route path="/" element={<HomePage />} />
             <Route path="/idea" element={<IdeaPage />} />
-            <Route path="/creative/chat" element={<CreativeChatPage />} />
+            <Route
+              path="/creative/chat"
+              element={
+                <PlaceholderPage
+                  title="创意对话"
+                  hint="创意对话（对话式生图 / 生视频 / 图片编辑工作流）将在二期接入后端后开放"
+                />
+              }
+            />
             <Route path="/create" element={<CreatePage />} />
             <Route path="/canvas" element={<CanvasPage />} />
             <Route path="/canvas/:id" element={<NodeCanvasPage />} />
