@@ -293,6 +293,40 @@ export type NotificationListResponse = {
   notifications: AppNotification[];
 };
 
+// ---- 剧本（后端 o_script）----
+
+/** 后端 `o_script` 表一行 */
+export type Script = {
+  id: string;
+  projectId: string;
+  name: string;
+  content: string;
+  /** 提取状态：0=未提取, 1=提取中, 2=已提取 */
+  extractState: number;
+  /** 提取失败原因 */
+  errorReason: string | null;
+  /** 创建时间（后端为 number 时间戳，翻译为 ISO 字符串） */
+  createTime: string;
+};
+
+export type ScriptListResponse = {
+  scripts: Script[];
+};
+
+/** 新增剧本 body */
+export type AddScriptBody = {
+  projectId: string;
+  name: string;
+  content: string;
+};
+
+/** 更新剧本 body */
+export type UpdateScriptBody = {
+  id: string;
+  name?: string;
+  content?: string;
+};
+
 export type PlazaAssetCategory = 'character' | 'scene' | 'video' | 'material';
 
 export type PlazaAsset = {

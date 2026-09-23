@@ -8,6 +8,7 @@ const HomePage = lazy(() => import('./pages/HomePage'));
 const IdeaPage = lazy(() => import('./pages/IdeaPage'));
 const CreatePage = lazy(() => import('./pages/CreatePage'));
 const TaskCenterPage = lazy(() => import('./pages/TaskCenterPage'));
+const ScriptsPage = lazy(() => import('./pages/ScriptsPage'));
 const OutlinePage = lazy(() => import('./pages/OutlinePage'));
 const AssetsPage = lazy(() => import('./pages/AssetsPage'));
 const EpisodesPage = lazy(() => import('./pages/EpisodesPage'));
@@ -41,6 +42,7 @@ export default function App() {
             <Route path="/node" element={<NodeCanvasPage />} />
             <Route path="/plaza" element={<PlazaPage />} />
             <Route path="/space" element={<SpacePage />} />
+            <Route path="/project/:id/scripts" element={<ScriptsPage />} />
             <Route path="/project/:id/outline" element={<OutlinePage />} />
             <Route
               path="/project/:id/assets"

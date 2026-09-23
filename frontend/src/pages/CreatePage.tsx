@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { App, Button, Card, Flex, Input, Progress, Select, Typography, Tag } from 'antd';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useTask } from '../hooks/useTask';
-import { createProject, fetchProject, submitOutlineTask } from '../lib/api';
+import { addScript, createProject, fetchProject } from '../lib/api';
 import { DEFAULT_PROJECT_FORM } from '../config/project';
 import { errorMessage } from '../lib/errors';
 import { validateScriptFileContent, validateScriptText } from '../lib/scriptValidation';
@@ -17,7 +17,7 @@ const SAMPLE = `【木叶长廊 内 夜】
 
 type ReadySource =
   | { kind: 'paste'; text: string }
-  | { kind: 'file'; file: File; charCount?: number };
+  | { kind: 'file'; file: File; charCount?: number; text: string };
 
 export default function CreatePage() {
   const { message } = App.useApp();
@@ -73,7 +73,9 @@ export default function CreatePage() {
       message.error(result.message);
       return;
     }
-    setSource({ kind: 'file', file, charCount: result.charCount });
+    // 读取文件内容
+    const text = await file.text();
+    setSource({ kind: 'file', file, charCount: result.charCount, text });
     setPanel('ready');
     setFileName(file.name.replace(/\.[^.]+$/, '') || fileName);
     message.success('剧本上传成功 · 格式校验通过');
@@ -111,14 +113,17 @@ export default function CreatePage() {
         });
         projectId = created.id;
       }
-      const body =
-        source.kind === 'paste'
-          ? { sourceType: 'paste' as const, text: source.text }
-          : { sourceType: 'file' as const, fileName: source.file.name };
-      const { taskId: id } = await submitOutlineTask(projectId, body);
-      setTaskId(id);
+      const scriptName = fileName.trim() || '未命名剧本';
+      const content = source.kind === 'paste' ? source.text : (source.text || '');
+      await addScript({
+        projectId,
+        name: scriptName,
+        content,
+      });
+      message.success('剧本已保存到后端');
+      navigate(`/project/${projectId}/scripts`);
     } catch {
-      message.error('提交创作任务失败');
+      message.error('提交剧本失败');
     } finally {
       setSubmitting(false);
     }

@@ -1,11 +1,11 @@
 import { workflowRedirect } from './workflow';
 
 describe('workflowRedirect', () => {
-  it('sends unfinalized STEP2 visits back to outline', () => {
-    expect(workflowRedirect('proj-nming-muye', 1, 'assets')).toBe('/project/proj-nming-muye/outline');
+  it('sends unfinalized STEP2 visits back to scripts', () => {
+    expect(workflowRedirect('proj-nming-muye', 1, 'assets')).toBe('/project/proj-nming-muye/scripts');
   });
 
-  it('allows STEP2 after outline is finalized', () => {
+  it('allows STEP2 after scripts exist', () => {
     expect(workflowRedirect('proj-nming-muye', 2, 'assets')).toBeNull();
   });
 

@@ -4,7 +4,7 @@ import { useWorkflowStore } from '../stores/workflowStore';
 import type { WorkflowPage } from '../lib/workflow';
 
 const STEPS: { page: WorkflowPage; n: 1 | 2 | 3; label: string; path: (id: string) => string }[] = [
-  { page: 'outline', n: 1, label: '剧本大纲', path: (id) => `/project/${id}/outline` },
+  { page: 'scripts', n: 1, label: '剧本列表', path: (id) => `/project/${id}/scripts` },
   { page: 'assets', n: 2, label: '角色、场景和道具', path: (id) => `/project/${id}/assets` },
   { page: 'episodes', n: 3, label: '分集视频', path: (id) => `/project/${id}/episodes` },
 ];

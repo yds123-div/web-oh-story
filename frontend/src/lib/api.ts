@@ -1,5 +1,6 @@
 import { apiFetch } from './http';
 import type {
+  AddScriptBody,
   Asset,
   AssetListResponse,
   CreateProjectBody,
@@ -17,6 +18,8 @@ import type {
   Project,
   ProjectListResponse,
   ProjectStatistics,
+  Script,
+  ScriptListResponse,
   Segment,
   SegmentListResponse,
   SubmitTaskResponse,
@@ -27,6 +30,7 @@ import type {
   TaskStateName,
   TaskStatus,
   TemplateListResponse,
+  UpdateScriptBody,
   VideoTaskBody,
   WorkflowState,
 } from '../types/api';
@@ -390,4 +394,62 @@ export function submitCreativeTask(body: CreativeTaskBody): Promise<SubmitTaskRe
     method: 'POST',
     body: JSON.stringify(body),
   });
+}
+
+// ===== 剧本（后端 o_script）=====
+
+/** 后端 `o_script` 表一行（id 为 number） - 仅用于测试导出 */
+export type ScriptRow = {
+  id: number;
+  projectId: number | null;
+  name: string | null;
+  content: string | null;
+  extractState: number | null;
+  errorReason: string | null;
+  createTime: number | null;
+};
+
+function toScript(row: ScriptRow): Script {
+  return {
+    id: String(row.id),
+    projectId: row.projectId != null ? String(row.projectId) : '',
+    name: row.name ?? '',
+    content: row.content ?? '',
+    extractState: row.extractState ?? 0,
+    errorReason: row.errorReason ?? null,
+    createTime: typeof row.createTime === 'number' ? new Date(row.createTime).toISOString() : '',
+  };
+}
+
+export async function listScripts(projectId: string): Promise<ScriptListResponse> {
+  const rows = await postJson<ScriptRow[]>('/api/script/getScrptApi', { projectId: Number(projectId) });
+  return { scripts: (rows ?? []).map(toScript) };
+}
+
+export async function addScript(body: AddScriptBody): Promise<Script> {
+  await postJson('/api/script/addScript', {
+    projectId: Number(body.projectId),
+    name: body.name,
+    content: body.content,
+  });
+  // 后端 addScript 只返回 message；剧本 id 是 Date.now() 时间戳，重新拉列表、取最大 id 即为本次新建
+  const { scripts } = await listScripts(body.projectId);
+  const newest = scripts.reduce<Script | null>(
+    (acc, s) => (acc == null || Number(s.id) > Number(acc.id) ? s : acc),
+    null,
+  );
+  if (!newest) throw new Error('新建剧本后未能在列表中找到它');
+  return newest;
+}
+
+export async function updateScript(body: UpdateScriptBody): Promise<void> {
+  await postJson('/api/script/updateScript', {
+    id: Number(body.id),
+    ...(body.name != null ? { name: body.name } : {}),
+    ...(body.content != null ? { content: body.content } : {}),
+  });
+}
+
+export async function deleteScript(id: string): Promise<void> {
+  await postJson('/api/script/delScript', { id: Number(id) });
 }

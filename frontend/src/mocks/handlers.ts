@@ -447,4 +447,60 @@ export const handlers = [
     const task = createCreativeTask(body.kind === 'image' ? 'creative-image' : 'creative-video');
     return HttpResponse.json({ taskId: task.taskId }, { status: 202 });
   }),
+
+  // ===== 剧本（后端 o_script）=====
+
+  http.post('/api/script/getScrptApi', async ({ request }) => {
+    await netDelay(80);
+    const body = (await request.json()) as Record<string, unknown>;
+    const invalid = validateBody(body, { projectId: 'optionalNumber' });
+    if (invalid) return invalid;
+    // Mock 数据：返回测试剧本
+    const mockScripts = body.projectId
+      ? [
+          {
+            id: Date.now(),
+            projectId: Number(body.projectId),
+            name: '第1集·异世囚笼',
+            content: '【木叶长廊 内 夜】\n木叶，夜晚长廊，月光冷白。\n△ 林晚扶着廊柱，指尖颤抖，眼神茫然又痛苦，身着木叶制式素色和服。\n林晚（低声独白）：明明只是在家看火影……一睁眼，就来到了这里。\n△ 鼬缓步从阴影走出，红瞳微光，神色淡漠。\n鼬：深夜在此，有何目的。长老安排你，来监视我？',
+            extractState: 0,
+            errorReason: null,
+            createTime: Date.now(),
+          },
+        ]
+      : [];
+    return envelope(mockScripts);
+  }),
+
+  http.post('/api/script/addScript', async ({ request }) => {
+    await netDelay(80);
+    const body = (await request.json()) as Record<string, unknown>;
+    const invalid = validateBody(body, {
+      projectId: 'number',
+      name: 'string',
+      content: 'string',
+    });
+    if (invalid) return invalid;
+    return envelope({ message: '新增剧本成功' }, '新增剧本成功');
+  }),
+
+  http.post('/api/script/updateScript', async ({ request }) => {
+    await netDelay(80);
+    const body = (await request.json()) as Record<string, unknown>;
+    const invalid = validateBody(body, {
+      id: 'number',
+      name: 'optionalString',
+      content: 'optionalString',
+    });
+    if (invalid) return invalid;
+    return envelope({ message: '更新剧本成功' }, '更新剧本成功');
+  }),
+
+  http.post('/api/script/delScript', async ({ request }) => {
+    await netDelay(80);
+    const body = (await request.json()) as Record<string, unknown>;
+    const invalid = validateBody(body, { id: 'number' });
+    if (invalid) return invalid;
+    return envelope({ message: '删除剧本成功' }, '删除剧本成功');
+  }),
 ];
