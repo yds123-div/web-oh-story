@@ -6,6 +6,7 @@
 
 import type { ProjectStatistics } from '../types/api';
 import { EXTRACT_STATE } from '../lib/extractState';
+import { IMAGE_STATE, PROMPT_STATE } from '../lib/assetGenState';
 
 export type BackendProjectRow = {
   id: number;
@@ -60,6 +61,10 @@ export type BackendAssetRow = {
   prompt: string | null;
   remark: string | null;
   imageId: number | null;
+  /** 提示词润色状态（后端中文文案：生成中/已完成/失败/生成失败），NULL=从未润色 */
+  promptState: string | null;
+  /** 润色失败原因 */
+  promptErrorReason: string | null;
   startTime: number;
 };
 
@@ -70,6 +75,8 @@ type BackendImageRow = {
   filePath: string;
   type: string;
   state: string;
+  /** 生图失败原因（真实后端 o_image.errorReason，父资产查询不返回该列） */
+  errorReason: string | null;
   /** 上传图片的 data URL（真实后端写文件后返回 oss URL） */
   dataUrl?: string;
 };
@@ -84,6 +91,8 @@ let scripts: BackendScriptRow[] = [];
 let assets: BackendAssetRow[] = [];
 let images: BackendImageRow[] = [];
 let imageIdSeq = 1;
+/** 图像供应商 key 开关：镜像真实后端「key 未配置时生图必失败」的默认态 */
+let imageVendorEnabled = false;
 /** generalStatistics 的模拟计数（真实后端按 o_assets/o_script 等表统计） */
 let statsByProject = new Map<number, ProjectStatistics>();
 /** o_script 自增 id 计数器（与真实后端一致，非时间戳） */
@@ -174,6 +183,8 @@ function seed(): void {
       prompt: null,
       remark: null,
       imageId: null,
+      promptState: null,
+      promptErrorReason: null,
       startTime: 1758000060000,
     },
     {
@@ -186,6 +197,8 @@ function seed(): void {
       prompt: null,
       remark: null,
       imageId: null,
+      promptState: null,
+      promptErrorReason: null,
       startTime: 1758000061000,
     },
     {
@@ -198,11 +211,14 @@ function seed(): void {
       prompt: null,
       remark: null,
       imageId: null,
+      promptState: null,
+      promptErrorReason: null,
       startTime: 1758000062000,
     },
   ];
   images = [];
   imageIdSeq = 1;
+  imageVendorEnabled = false;
   statsByProject = new Map([
     [DEMO_PROJECT_ID, { roleCount: 2, scriptCount: 1, videoCount: 0, storyboardCount: 3 }],
   ]);
@@ -368,6 +384,8 @@ export function addBackendAsset(
     prompt: null,
     remark: null,
     imageId: null,
+    promptState: null,
+    promptErrorReason: null,
     startTime: Date.now(),
     ...row,
     id: Date.now() + assets.length,
@@ -425,7 +443,8 @@ export function saveBackendAssetImage(body: {
     assetsId: body.assetId,
     filePath: `/${found.projectId}/${body.type}/mock-${Date.now()}.png`,
     type: body.type,
-    state: '已完成',
+    state: IMAGE_STATE.DONE,
+    errorReason: null,
     dataUrl: body.base64,
   };
   images.push(created);
@@ -477,3 +496,107 @@ export function getBackendAssetPage(
   return { data, total: parents.length };
 }
 
+
+// ===== 资产 AI：润色与生图（复刻后端 assetsGenerate 行为）=====
+
+/** 图像供应商 key 开关（真实后端配置 key 后生图即可用） */
+export function setBackendImageVendorEnabled(enabled: boolean): void {
+  imageVendorEnabled = enabled;
+}
+
+/** 按资产行 id 找到可变引用（内部状态机用） */
+function findAssetMut(id: number): BackendAssetRow | undefined {
+  return assets.find((a) => a.id === id);
+}
+
+/** 批量设置润色状态（镜像后端 polishAssetsPrompt / batchPolishAssetsPrompt 的 update） */
+function setAssetsPromptState(ids: number[], promptState: string | null, promptErrorReason: string | null = null): void {
+  for (const asset of assets) {
+    if (ids.includes(asset.id)) {
+      asset.promptState = promptState;
+      asset.promptErrorReason = promptErrorReason;
+    }
+  }
+}
+
+/** 单个润色完成后的假提示词（镜像后端文本模型产出写回 o_assets.prompt） */
+function fakePolishedPrompt(name: string): string {
+  return `【${name}】赛博朋克电影质感：高对比冷调光影，清冷月光，标准四视图，细节锐利。`;
+}
+
+/**
+ * 镜像后端批量润色异步状态机：受理时置「生成中」并立即返回，
+ * 定时器到点写「已完成」+ 假提示词（failReason 有值则写「生成失败」）。
+ */
+export function runBatchPolishStateMachine(
+  ids: number[],
+  options: { failReason?: string } = {},
+): void {
+  setAssetsPromptState(ids, PROMPT_STATE.RUNNING);
+  schedule(200, () => {
+    for (const id of ids) {
+      const asset = findAssetMut(id);
+      if (!asset) continue;
+      if (options.failReason) {
+        asset.promptState = PROMPT_STATE.FAILED_ALT;
+        asset.promptErrorReason = options.failReason;
+        continue;
+      }
+      asset.prompt = fakePolishedPrompt(asset.name);
+      asset.promptState = PROMPT_STATE.DONE;
+      asset.promptErrorReason = null;
+    }
+  });
+}
+
+/** 单个润色（同步）：直接写「已完成」+ 假提示词，返回给调用方（镜像后端同步返回 prompt） */
+export function runSinglePolish(id: number): string | null {
+  const asset = findAssetMut(id);
+  if (!asset) return null;
+  asset.prompt = fakePolishedPrompt(asset.name);
+  asset.promptState = PROMPT_STATE.DONE;
+  asset.promptErrorReason = null;
+  return asset.prompt;
+}
+
+/**
+ * 镜像后端 generateAssets（同步接口）：
+ * - 先插 o_image「生成中」占位并挂到资产（真实后端在任何失败下也会保留该行）
+ * - 图像供应商已配置 key：置「已完成」并写 filePath，返回小图 URL
+ * - 未配置 key（默认）：置「生成失败」+ errorReason，返回携带原因的失败信封
+ */
+export function runAssetImageGeneration(body: {
+  assetId: number;
+  type: string;
+  model: string;
+  resolution: string;
+}): { ok: true; path: string } | { ok: false; reason: string } {
+  const asset = findAssetMut(body.assetId);
+  if (!asset) return { ok: false, reason: '资产不存在' };
+  const created: BackendImageRow = {
+    id: imageIdSeq++,
+    assetsId: body.assetId,
+    filePath: `/${asset.projectId}/${body.type}/ai-${Date.now()}.jpg`,
+    type: body.type,
+    state: IMAGE_STATE.RUNNING,
+    errorReason: null,
+  };
+  images.push(created);
+  asset.imageId = created.id;
+
+  if (!imageVendorEnabled) {
+    created.state = IMAGE_STATE.FAILED;
+    created.errorReason = '图像供应商未配置 key';
+    return { ok: false, reason: '图像供应商未配置 key' };
+  }
+  created.state = IMAGE_STATE.DONE;
+  return { ok: true, path: `http://localhost:10588/oss${created.filePath}` };
+}
+
+/** 镜像后端 cancelGenerate：把进行中的 o_image 行置「生成失败」 */
+export function cancelBackendImage(imageId: number): boolean {
+  const image = images.find((img) => img.id === imageId);
+  if (!image) return false;
+  image.state = IMAGE_STATE.FAILED;
+  return true;
+}

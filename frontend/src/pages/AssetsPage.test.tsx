@@ -7,7 +7,12 @@ import AssetsPage from './AssetsPage';
 import { WorkflowGate } from '../components/WorkflowGate';
 import { WorkflowStepProvider } from '../hooks/useWorkflowStep';
 import { handlers } from '../mocks/handlers';
-import { DEMO_PROJECT_ID, resetBackendDb } from '../mocks/backendDb';
+import {
+  addBackendProject,
+  addBackendScript,
+  DEMO_PROJECT_ID,
+  resetBackendDb,
+} from '../mocks/backendDb';
 
 const server = setupServer(...handlers);
 
@@ -19,11 +24,12 @@ afterEach(() => {
 });
 afterAll(() => server.close());
 
-function renderPage() {
+/** 指定项目 id 渲染（现造数据的新项目用例） */
+function renderWithId(projectId: number | string) {
   return render(
     <ConfigProvider>
       <AntApp>
-        <MemoryRouter initialEntries={[`/project/${DEMO_PROJECT_ID}/assets`]}>
+        <MemoryRouter initialEntries={[`/project/${projectId}/assets`]}>
           <Routes>
             <Route
               path="/project/:id/assets"
@@ -38,9 +44,16 @@ function renderPage() {
           </Routes>
         </MemoryRouter>
       </AntApp>
-    </ConfigProvider>,
+    </ConfigProvider>
   );
 }
+
+/** 种子项目（默认） */
+function renderPage() {
+  return renderWithId(DEMO_PROJECT_ID);
+}
+
+
 
 /** 类型卡片上的计数（antd 两字按钮会插空格，且页头步骤也有数字，故按卡片作用域取） */
 function statCount(label: RegExp): string {
@@ -167,4 +180,79 @@ describe('AssetsPage 资产工坊', () => {
     expect(await screen.findByText('加载资产失败')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: RETRY_BTN })).toBeInTheDocument();
   });
+});
+
+describe('AssetsPage 资产 AI 能力（润色 / 生图 / 提取）', () => {
+  it('单个润色：点击后新提示词出现在卡片上并标记已润色', async () => {
+    renderPage();
+
+    expect(await screen.findByText('林晚')).toBeInTheDocument();
+    fireEvent.click(screen.getAllByRole('button', { name: /润色提示词/ })[0]!);
+
+    // mock 后端同步返回润色结果并持久化；卡片显示提示词摘要与已润色徽标
+    expect(await screen.findByText(/提示词：【林晚】/)).toBeInTheDocument();
+    expect(screen.getAllByText('提示词已润色').length).toBeGreaterThan(0);
+  });
+
+  it('生图（图像 key 未配置）：失败原因内联展示，可重试，不阻塞页面', async () => {
+    renderPage();
+
+    expect(await screen.findByText('林晚')).toBeInTheDocument();
+    fireEvent.click(screen.getAllByRole('button', { name: /生成形象/ })[0]!);
+
+    // 失败原因清晰展示（默认态：图像供应商未配置 key）
+    expect(await screen.findByText(/生成失败：图像供应商未配置 key/)).toBeInTheDocument();
+    // 失败徽标 + 重试按钮仍在（另一张卡的按钮不受影响）
+    expect(screen.getAllByText('生成失败').length).toBeGreaterThan(0);
+    expect(screen.getAllByRole('button', { name: /生成形象/ }).length).toBeGreaterThan(0);
+    expect(screen.getByRole('button', { name: /批量润色提示词/ })).toBeEnabled();
+  });
+
+  it('批量润色：受理后进入润色中，轮询到终态后提示词全部落卡', async () => {
+    renderPage();
+
+    expect(await screen.findByText('林晚')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /批量润色提示词/ }));
+
+    // 受理即置「润色中」（当前筛选下两张角色卡都进入润色中）
+    await waitFor(() => expect(screen.getAllByText('润色中').length).toBe(2));
+
+    // 轮询（页间隔 2s）+ mock 状态机（200ms）→ 全部完成并回写提示词
+    await waitFor(
+      () => {
+        const doneTags = screen.getAllByText('提示词已润色');
+        expect(doneTags.length).toBe(2);
+      },
+      { timeout: 9000 },
+    );
+    expect(screen.getByText(/提示词：【林晚】/)).toBeInTheDocument();
+  }, 15000);
+
+  it('空项目在本页发起 AI 提取：显示进行中横幅，完成后资产自动出现', async () => {
+    // 现造真实数据：新项目 + 1 个未提取剧本（有剧本无资产 → 门控放行资产页）
+    const project = addBackendProject({
+      projectType: 'script',
+      name: '提取演示项目',
+      intro: '',
+      type: '女频-轻小说',
+      artStyle: '赛博朋克电影',
+      directorManual: '',
+      videoRatio: '9:16',
+      imageModel: 'Seedream-4.0',
+      videoModel: 'Seedance 2.0',
+      imageQuality: '2K',
+      mode: 'text',
+    });
+    addBackendScript({ projectId: project.id, name: '第1集·异世囚笼', content: '林晚扶着廊柱。' });
+
+    renderWithId(project.id);
+    expect(await screen.findByText(/还没有角色/)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: /AI 提取资产/ }));
+    // 提交后显示进行中状态
+    expect(await screen.findByText(/AI 正在通读剧本，提取角色与场景/)).toBeInTheDocument();
+
+    // 轮询到成功：资产（角色）自动出现在资产工坊
+    expect(await screen.findByText('林晚', {}, { timeout: 9000 })).toBeInTheDocument();
+  }, 15000);
 });

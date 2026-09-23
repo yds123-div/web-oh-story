@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { App, Button, Card, Flex, Input, Select, Typography, Tag } from 'antd';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { addScript, createProject, fetchProject, listProjects } from '../lib/api';
-import { DEFAULT_PROJECT_FORM } from '../config/project';
+import { ART_STYLE_OPTIONS, DEFAULT_PROJECT_FORM } from '../config/project';
 import { errorMessage } from '../lib/errors';
 import { validateScriptFileContent, validateScriptText } from '../lib/scriptValidation';
 import type { Project } from '../types/api';
@@ -42,7 +42,7 @@ export default function CreatePage() {
   const [fileName, setFileName] = useState('逆命木叶');
   const [submitting, setSubmitting] = useState(false);
   const [category, setCategory] = useState('女频-轻小说');
-  const [style, setStyle] = useState('赛博朋克电影');
+  const [style, setStyle] = useState(DEFAULT_PROJECT_FORM.artStyle);
   const [videoRatio, setVideoRatio] = useState('9:16');
   const [sceneRatio, setSceneRatio] = useState('16:9');
   const [imageQuality, setImageQuality] = useState('2K');
@@ -341,11 +341,7 @@ export default function CreatePage() {
                 style={{ width: '100%' }}
                 value={style}
                 onChange={setStyle}
-                options={[
-                  { value: '赛博朋克电影', label: '赛博朋克电影' },
-                  { value: '国漫写实', label: '国漫写实' },
-                  { value: '赛璐璐动画', label: '赛璐璐动画' },
-                ]}
+                options={ART_STYLE_OPTIONS}
               />
             </div>
           </Flex>

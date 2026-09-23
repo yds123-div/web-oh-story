@@ -35,8 +35,9 @@ describe('CreatePage 打开已有项目', () => {
     expect(await screen.findByText('📌 项目配置（已保存）')).toBeInTheDocument();
     // 故事类型同时出现在还原卡片与右侧参数面板
     expect((await screen.findAllByText('女频-轻小说')).length).toBeGreaterThan(1);
-    // 视频风格同时出现在还原卡片与右侧风格库下拉
-    expect((await screen.findAllByText('赛博朋克电影')).length).toBeGreaterThan(1);
+    // 还原卡片显示已保存的视频风格；右侧风格库下拉默认展示新建用的共享默认风格
+    expect(screen.getByText('赛博朋克电影')).toBeInTheDocument();
+    expect(screen.getByText('2D · 90年代日漫')).toBeInTheDocument();
     expect(screen.getByText('知晓结局的穿越者试图改写宿命')).toBeInTheDocument();
     expect(screen.getByText('图像模型 Seedream-4.0')).toBeInTheDocument();
   });

@@ -89,6 +89,13 @@ const SCREENPLAY = `第一集：异世囚笼
 function cloneAsset(asset: Asset): Asset {
   return { ...asset };
 }
+/** 演示资产的 AI 生成状态默认值（旧 mock 契约，无后端状态列） */
+const DEMO_AI_STATE = {
+  promptState: 'none',
+  promptErrorReason: null,
+  imageId: null,
+  imageState: 'none',
+} as const;
 
 function nmingAssets(projectId: string): Asset[] {
   return [
@@ -101,6 +108,7 @@ function nmingAssets(projectId: string): Asset[] {
       imageUrl: `${DA}/linwan.png`,
       prompt: null,
       remark: null,
+      ...DEMO_AI_STATE,
     },
     {
       id: `${projectId}-char-itachi`,
@@ -111,6 +119,7 @@ function nmingAssets(projectId: string): Asset[] {
       imageUrl: `${DA}/itachi.png`,
       prompt: null,
       remark: null,
+      ...DEMO_AI_STATE,
     },
     {
       id: `${projectId}-char-shisui`,
@@ -121,6 +130,7 @@ function nmingAssets(projectId: string): Asset[] {
       imageUrl: null,
       prompt: null,
       remark: null,
+      ...DEMO_AI_STATE,
     },
     {
       id: `${projectId}-char-elder`,
@@ -131,6 +141,7 @@ function nmingAssets(projectId: string): Asset[] {
       imageUrl: null,
       prompt: null,
       remark: null,
+      ...DEMO_AI_STATE,
     },
     {
       id: `${projectId}-scene-corridor`,
@@ -141,6 +152,7 @@ function nmingAssets(projectId: string): Asset[] {
       imageUrl: `${DA}/corridor.jpg`,
       prompt: null,
       remark: null,
+      ...DEMO_AI_STATE,
     },
   ];
 }

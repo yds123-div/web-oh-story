@@ -143,6 +143,19 @@ export type OutlineSummary = {
 export type AssetType = 'character' | 'scene' | 'prop' | 'material';
 
 /**
+ * 资产提示词 AI 润色状态（后端 `o_assets.promptState` 中文文案在 API 层翻译后的命名状态）：
+ * none=从未润色（后端为 NULL）、running=生成中、done=已完成、failed=润色失败
+ * （后端两种失败文案「失败」/「生成失败」都翻译为 failed）
+ */
+export type AssetPromptStatus = 'none' | 'running' | 'done' | 'failed';
+
+/**
+ * 资产图片生成状态（后端 `o_image.state` 中文文案翻译）：none=无图片记录、
+ * running=生成中、done=已完成、failed=生成失败
+ */
+export type AssetImageStatus = 'none' | 'running' | 'done' | 'failed';
+
+/**
  * 资产（后端 `o_assets` join `o_image` 行的翻译形态）。
  * 后端 type 枚举只有 role/scene/tool；素材（material）无后端对应，
  * 仅作为旧页面残留的前端概念保留在枚举里。
@@ -159,6 +172,14 @@ export type Asset = {
   prompt: string | null;
   /** 备注（o_assets.remark） */
   remark: string | null;
+  /** 提示词润色状态（o_assets.promptState 翻译） */
+  promptState: AssetPromptStatus;
+  /** 润色失败原因（o_assets.promptErrorReason） */
+  promptErrorReason: string | null;
+  /** 当前关联的 o_image 行 id（生图占位记录，取消生图用）；未生成/未上传为 null */
+  imageId: string | null;
+  /** 图片生成状态（o_image.state 翻译） */
+  imageState: AssetImageStatus;
 };
 
 export type AssetListResponse = {

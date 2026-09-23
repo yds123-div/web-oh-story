@@ -6,6 +6,10 @@ import {
   createProject,
   deleteAsset,
   deleteProject,
+  batchPolishAssetPrompts,
+  cancelAssetImageGeneration,
+  generateAssetImage,
+  polishAssetPrompt,
   deleteScript,
   extractScriptAssets,
   finalizeOutline,
@@ -36,7 +40,7 @@ import {
   updateScript,
   uploadAssetImage,
 } from '../lib/api';
-import { DEMO_PROJECT_ID, resetBackendDb } from './backendDb';
+import { DEMO_PROJECT_ID, resetBackendDb, setBackendImageVendorEnabled } from './backendDb';
 import { getTaskRecord, resetDb } from './db';
 import { handlers } from './handlers';
 
@@ -491,5 +495,94 @@ describe('templates and notifications', () => {
     expect(notifications.length).toBeGreaterThanOrEqual(4);
     expect(notifications.some((n) => n.title.includes('Seedance 2.5'))).toBe(true);
     expect(notifications.every((n) => !n.title.includes('Hogee'))).toBe(true);
+  });
+});
+
+describe('MSW asset AI contracts（润色 / 生图，镜像后端 assetsGenerate）', () => {
+  const projectId = String(DEMO_PROJECT_ID);
+
+  function findAssetRow(id: string) {
+    return listAssets(projectId, { type: 'character' }).then(({ assets }) =>
+      assets.find((a) => a.id === id),
+    );
+  }
+
+  it('单个润色：同步返回新提示词并持久化（promptState=done）', async () => {
+    const prompt = await polishAssetPrompt({
+      assetId: '101',
+      projectId,
+      type: 'character',
+      name: '林晚',
+      description: '现代穿越者',
+    });
+
+    expect(prompt).toContain('林晚');
+    const row = (await findAssetRow('101'))!;
+    expect(row.prompt).toBe(prompt);
+    expect(row.promptState).toBe('done');
+  });
+
+  it('批量润色：受理即置 running，后台状态机到点写 done + 提示词', async () => {
+    await batchPolishAssetPrompts(projectId, [
+      { assetId: '101', type: 'character', name: '林晚', description: '现代穿越者' },
+      { assetId: '102', type: 'character', name: '宇智波鼬', description: '忍者' },
+    ]);
+
+    // 受理后立刻查：全部进入生成中
+    const during = await listAssets(projectId, { type: 'character' });
+    expect(during.assets.map((a) => a.promptState)).toEqual(['running', 'running']);
+
+    // 状态机定时器到点后：完成并写回提示词
+    let settled: Awaited<ReturnType<typeof listAssets>> | null = null;
+    for (let i = 0; i < 80; i += 1) {
+      await new Promise((r) => setTimeout(r, 10));
+      settled = await listAssets(projectId, { type: 'character' });
+      if (settled.assets.every((a) => a.promptState !== 'running')) break;
+    }
+    expect(settled!.assets.map((a) => a.promptState)).toEqual(['done', 'done']);
+    expect(settled!.assets.every((a) => a.prompt != null)).toBe(true);
+  });
+
+  it('生图（图像 key 未配置，默认态）：失败原因透出，资产行落失败态', async () => {
+    await expect(
+      generateAssetImage({
+        assetId: '101',
+        projectId,
+        type: 'character',
+        name: '林晚',
+        description: '现代穿越者',
+        model: '1:Seedream-4.0',
+        resolution: '2K',
+        prompt: '赛博朋克少女四视图',
+      }),
+    ).rejects.toMatchObject({ message: '图像供应商未配置 key' });
+
+    const row = (await findAssetRow('101'))!;
+    expect(row.imageState).toBe('failed');
+    expect(row.imageId).not.toBeNull();
+  });
+
+  it('生图（图像 key 已配置）：返回图片 URL 并落已完成态；cancelGenerate 把它置失败', async () => {
+    setBackendImageVendorEnabled(true);
+
+    const result = await generateAssetImage({
+      assetId: '101',
+      projectId,
+      type: 'character',
+      name: '林晚',
+      description: '现代穿越者',
+      model: '1:Seedream-4.0',
+      resolution: '2K',
+      prompt: '赛博朋克少女四视图',
+    });
+    expect(result.imageUrl).toContain('/oss/');
+
+    const row = (await findAssetRow('101'))!;
+    expect(row.imageState).toBe('done');
+    expect(row.imageUrl).toBe(result.imageUrl);
+
+    await cancelAssetImageGeneration(row.imageId!);
+    const cancelled = (await findAssetRow('101'))!;
+    expect(cancelled.imageState).toBe('failed');
   });
 });

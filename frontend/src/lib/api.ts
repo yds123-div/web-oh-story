@@ -1,5 +1,6 @@
 import { apiFetch } from './http';
 import { extractStatusFromState, isExtractionActive } from './extractState';
+import { imageStatusFromState, isPromptActive, promptStatusFromState } from './assetGenState';
 import type {
   AddScriptBody,
   Asset,
@@ -356,6 +357,12 @@ export type AssetRow = {
   prompt: string | null;
   remark: string | null;
   imageId: number | null;
+  /** o_assets.promptState（润色状态中文文案） */
+  promptState?: string | null;
+  /** o_assets.promptErrorReason（润色失败原因） */
+  promptErrorReason?: string | null;
+  /** o_image.state（生图状态中文文案，join 不上时后端不输出该键） */
+  state?: string | null;
   /** o_image 静态托管 URL（后端拼好） */
   src?: string | null;
   /** 子资产（多形象），本页暂不消费 */
@@ -373,6 +380,10 @@ function toAsset(row: AssetRow): Asset {
     imageUrl: row.src ?? null,
     prompt: row.prompt ?? null,
     remark: row.remark ?? null,
+    promptState: promptStatusFromState(row.promptState ?? null),
+    promptErrorReason: row.promptErrorReason ?? null,
+    imageId: row.imageId != null ? String(row.imageId) : null,
+    imageState: imageStatusFromState(row.state ?? null),
   };
 }
 
@@ -542,6 +553,163 @@ export function submitCreativeTask(body: CreativeTaskBody): Promise<SubmitTaskRe
     method: 'POST',
     body: JSON.stringify(body),
   });
+}
+
+// ===== 资产 AI：润色与生图（后端 assetsGenerate）=====
+
+/** 资产 AI 请求（润色 / 生图）共用的资产载荷（name/description 为触发时的快照） */
+export type AssetAiItem = {
+  assetId: string;
+  type: Exclude<AssetType, 'material'>;
+  name: string;
+  description: string;
+};
+
+/** 单个资产提示词 AI 润色（同步接口：等文本模型返回，新提示词已持久化到 o_assets.prompt） */
+export async function polishAssetPrompt(
+  body: AssetAiItem & { projectId: string },
+): Promise<string> {
+  const data = await postJson<{ prompt: string | null; assetsId: number }>(
+    '/api/assetsGenerate/polishAssetsPrompt',
+    {
+      assetsId: Number(body.assetId),
+      projectId: Number(body.projectId),
+      type: BACKEND_ASSET_TYPES[body.type],
+      name: body.name,
+      describe: body.description,
+    },
+  );
+  if (data?.prompt == null) throw new Error('润色结果为空');
+  return data.prompt;
+}
+
+/**
+ * 批量提示词 AI 润色（异步接口：后端受理后立即返回，后台并发生成，
+ * 结果持久化到各资产行）。完成进度由 pollAssetPromptsUntilSettled 轮询。
+ */
+export async function batchPolishAssetPrompts(
+  projectId: string,
+  items: AssetAiItem[],
+  options: { concurrentCount?: number; otherTextPrompt?: string } = {},
+): Promise<number> {
+  const data = await postJson<{ total: number | null } | null>(
+    '/api/assetsGenerate/batchPolishAssetsPrompt',
+    {
+      projectId: Number(projectId),
+      items: items.map((item) => ({
+        assetsId: Number(item.assetId),
+        type: BACKEND_ASSET_TYPES[item.type],
+        name: item.name,
+        describe: item.description,
+      })),
+      concurrentCount: options.concurrentCount ?? 1,
+      // 后端 zod 必填；无额外要求时发空串
+      otherTextPrompt: options.otherTextPrompt ?? '',
+    },
+  );
+  return data?.total ?? items.length;
+}
+
+/** 批量润色轮询的一拍：提交的资产id → 润色状态 */
+export type AssetPromptState = {
+  id: string;
+  promptState: Asset['promptState'];
+  promptErrorReason: string | null;
+};
+
+/** 批量润色轮询超时（后台任务卡死时兜底，避免无限轮询） */
+export class PromptPollTimeoutError extends Error {
+  constructor(message = '提示词润色超时') {
+    super(message);
+    this.name = 'PromptPollTimeoutError';
+  }
+}
+
+/**
+ * 批量润色轮询编排：后端无专用轮询接口，读模型就是资产列表
+ * （getAssetsApi 行自带 promptState），故每拍全量取回本项目资产、
+ * 过滤出提交的 id 回调 onTick，直到全部到达终态（已完成/失败）。
+ * 超时抛 PromptPollTimeoutError；取消抛 AbortError。
+ */
+export async function pollAssetPromptsUntilSettled(
+  projectId: string,
+  assetIds: string[],
+  options: {
+    onTick: (states: AssetPromptState[]) => void;
+    intervalMs?: number;
+    timeoutMs?: number;
+  },
+  signal?: AbortSignal,
+): Promise<void> {
+  const intervalMs = options.intervalMs ?? 3000;
+  const timeoutMs = options.timeoutMs ?? 5 * 60_000;
+  const startedAt = Date.now();
+
+  for (;;) {
+    const { assets } = await listAssets(projectId);
+    if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
+    const states: AssetPromptState[] = assets
+      .filter((a) => assetIds.includes(a.id))
+      .map((a) => ({ id: a.id, promptState: a.promptState, promptErrorReason: a.promptErrorReason }));
+    options.onTick(states);
+
+    // 全部到达终态即结束；某 id 在响应中缺失（资产被删）也不再等
+    const pending = states.filter((s) => isPromptActive(s.promptState));
+    if (pending.length === 0) return;
+
+    if (Date.now() - startedAt > timeoutMs) {
+      throw new PromptPollTimeoutError();
+    }
+    await waitForTick(intervalMs, signal);
+  }
+}
+
+/** 资产 AI 生图结果：path 是后端静态托管的小图 URL */
+export type GeneratedAssetImage = {
+  imageUrl: string;
+  assetId: string;
+};
+
+/**
+ * 资产 AI 生图（同步接口：后端先落 o_image 占位并挂到资产上，再调图像模型，
+ * 失败把 o_image 置「生成失败」并返回携带原因的错误）。
+ * model/resolution 按后端自身约定取项目配置：o_project.imageModel（期望
+ * 「供应商id:模型名」）/ imageQuality；图像 key 未到位时后端报错，原因原样透出。
+ */
+export async function generateAssetImage(
+  body: AssetAiItem & {
+    projectId: string;
+    /** 图像模型（项目配置 o_project.imageModel） */
+    model: string;
+    /** 生成尺寸（项目配置 o_project.imageQuality） */
+    resolution: string;
+    /** 参考图（已上传图片的 base64，可选） */
+    base64?: string | null;
+    /** 生图提示词；为空时由调用方回退到描述 */
+    prompt: string;
+  },
+): Promise<GeneratedAssetImage> {
+  const payload: Record<string, unknown> = {
+    projectId: Number(body.projectId),
+    model: body.model,
+    resolution: body.resolution,
+    id: Number(body.assetId),
+    type: BACKEND_ASSET_TYPES[body.type],
+    name: body.name,
+    prompt: body.prompt,
+  };
+  if (body.base64 != null) payload.base64 = body.base64;
+  const data = await postJson<{ path: string | null; assetsId: number } | null>(
+    '/api/assetsGenerate/generateAssets',
+    payload,
+  );
+  if (data?.path == null) throw new Error('生成结果为空');
+  return { imageUrl: data.path, assetId: String(data.assetsId) };
+}
+
+/** 取消生图：把进行中的 o_image 行置「生成失败」（后端不做真正的任务取消） */
+export async function cancelAssetImageGeneration(imageId: string): Promise<void> {
+  await postJson('/api/assetsGenerate/cancelGenerate', { id: Number(imageId) });
 }
 
 // ===== 剧本（后端 o_script）=====

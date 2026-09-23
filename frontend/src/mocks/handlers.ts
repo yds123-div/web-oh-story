@@ -27,6 +27,7 @@ import {
   addBackendAsset,
   addBackendProject,
   addBackendScript,
+  cancelBackendImage,
   deleteBackendAsset,
   deleteBackendProject,
   deleteBackendScripts,
@@ -39,7 +40,10 @@ import {
   getBackendTaskById,
   getBackendTasks,
   getProjectStatistics,
+  runAssetImageGeneration,
+  runBatchPolishStateMachine,
   runExtractStateMachine,
+  runSinglePolish,
   saveBackendAssetImage,
   updateBackendAsset,
   updateBackendProject,
@@ -526,6 +530,114 @@ export const handlers = [
     }
     const task = createCreativeTask(body.kind === 'image' ? 'creative-image' : 'creative-video');
     return HttpResponse.json({ taskId: task.taskId }, { status: 202 });
+  }),
+
+  // ===== 资产 AI：润色与生图（后端 assetsGenerate 契约）=====
+
+  // 单个润色（同步：等文本模型返回新 prompt）
+  http.post('/api/assetsGenerate/polishAssetsPrompt', async ({ request }) => {
+    await netDelay(80);
+    const body = (await request.json()) as Record<string, unknown>;
+    const invalid = validateBody(body, {
+      assetsId: 'number',
+      projectId: 'number',
+      type: 'string',
+      name: 'string',
+      describe: 'string',
+    });
+    if (invalid) return invalid;
+    const prompt = runSinglePolish(Number(body.assetsId));
+    if (prompt == null) {
+      return HttpResponse.json(
+        { message: '参数错误', errors: ['资产不存在'] },
+        { status: 400 },
+      );
+    }
+    return envelope({ prompt, assetsId: Number(body.assetsId) }, '润色成功');
+  }),
+
+  // 批量润色（异步受理：后台并发生成，进度经资产列表的 promptState 轮询）
+  http.post('/api/assetsGenerate/batchPolishAssetsPrompt', async ({ request }) => {
+    await netDelay(80);
+    const body = (await request.json()) as Record<string, unknown>;
+    const invalid = validateBody(body, {
+      projectId: 'number',
+      concurrentCount: 'optionalNumber',
+      otherTextPrompt: 'string',
+    });
+    if (invalid) return invalid;
+    const items = body.items;
+    // 复刻 zod z.array(z.object(...))：非空数组、每项 assetsId 为数字
+    const itemsValid =
+      Array.isArray(items) &&
+      items.length > 0 &&
+      items.every(
+        (item) =>
+          typeof item === 'object' &&
+          item !== null &&
+          typeof (item as Record<string, unknown>).assetsId === 'number',
+      );
+    if (!itemsValid) {
+      return HttpResponse.json(
+        { message: '参数错误', errors: ['字段 items 应为资产数组'] },
+        { status: 400 },
+      );
+    }
+    const ids = (items as { assetsId: number }[]).map((item) => Number(item.assetsId));
+    runBatchPolishStateMachine(ids);
+    return envelope({ total: ids.length }, '开始批量润色');
+  }),
+
+  // 资产生图（同步：图像 key 未配置时失败，失败原因走信封 message）
+  http.post('/api/assetsGenerate/generateAssets', async ({ request }) => {
+    await netDelay(80);
+    const body = (await request.json()) as Record<string, unknown>;
+    const invalid = validateBody(body, {
+      projectId: 'number',
+      model: 'string',
+      resolution: 'string',
+      id: 'number',
+      type: 'string',
+      name: 'string',
+      prompt: 'string',
+      base64: 'optionalString',
+    });
+    if (invalid) return invalid;
+    // 后端 zod 枚举
+    if (!['role', 'scene', 'tool', 'storyboard'].includes(String(body.type))) {
+      return HttpResponse.json(
+        { message: '参数错误', errors: ['字段 type 应为 role/scene/tool/storyboard'] },
+        { status: 400 },
+      );
+    }
+    const result = runAssetImageGeneration({
+      assetId: Number(body.id),
+      type: String(body.type),
+      model: String(body.model),
+      resolution: String(body.resolution),
+    });
+    if (!result.ok) {
+      return HttpResponse.json(
+        { code: 400, data: null, message: result.reason },
+        { status: 400 },
+      );
+    }
+    return envelope({ path: result.path, assetsId: Number(body.id) }, '生成成功');
+  }),
+
+  // 取消生图（把进行中的 o_image 置「生成失败」）
+  http.post('/api/assetsGenerate/cancelGenerate', async ({ request }) => {
+    await netDelay(60);
+    const body = (await request.json()) as Record<string, unknown>;
+    const invalid = validateBody(body, { id: 'number' });
+    if (invalid) return invalid;
+    if (!cancelBackendImage(Number(body.id))) {
+      return HttpResponse.json(
+        { message: '参数错误', errors: ['图片记录不存在'] },
+        { status: 400 },
+      );
+    }
+    return envelope({ message: '取消成功' }, '取消成功');
   }),
 
   // ===== 剧本（后端 o_script 契约：zod 四字段必填 / 批量删除）=====
