@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { App, Button, Card, Flex, Input, Modal, Select, Typography } from 'antd';
-import type { PlazaAsset, PlazaCategory, Project } from '../types/api';
+import type { PlazaAsset, PlazaCategory } from '../types/api';
 
 const { Text } = Typography;
 
@@ -104,39 +104,29 @@ const MOCK_ASSETS: PlazaAsset[] = [
   },
 ];
 
-// 模拟项目数据
-const MOCK_PROJECTS: Project[] = [
+// 模拟项目数据（资产广场为静态展示页，二期再接真实项目接口）
+type MockProject = {
+  id: string;
+  name: string;
+  characterCount: number;
+  sceneCount: number;
+  statusText: string;
+};
+
+const MOCK_PROJECTS: MockProject[] = [
   {
     id: 'p1',
     name: '逆命木叶企划',
-    coverUrl: null,
-    updatedAt: '2026-09-19T10:00:00Z',
-    status: 'in_progress',
-    statusText: '进行中',
-    assetCount: 5,
     characterCount: 4,
     sceneCount: 1,
-    segmentCount: 3,
-    durationSec: 40,
-    creditBalance: 500,
-    aspectRatio: '9:16',
-    style: '赛博朋克电影',
+    statusText: '进行中',
   },
   {
     id: 'p2',
     name: '默认项目',
-    coverUrl: null,
-    updatedAt: '2026-09-19T10:00:00Z',
-    status: 'in_progress',
-    statusText: '进行中',
-    assetCount: 0,
     characterCount: 0,
     sceneCount: 0,
-    segmentCount: 0,
-    durationSec: 0,
-    creditBalance: 1000,
-    aspectRatio: '9:16',
-    style: '赛博朋克电影',
+    statusText: '进行中',
   },
 ];
 

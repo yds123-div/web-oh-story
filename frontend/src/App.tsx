@@ -7,6 +7,7 @@ import { PlaceholderPage } from './pages/PlaceholderPage';
 const HomePage = lazy(() => import('./pages/HomePage'));
 const IdeaPage = lazy(() => import('./pages/IdeaPage'));
 const CreatePage = lazy(() => import('./pages/CreatePage'));
+const TaskCenterPage = lazy(() => import('./pages/TaskCenterPage'));
 const OutlinePage = lazy(() => import('./pages/OutlinePage'));
 const AssetsPage = lazy(() => import('./pages/AssetsPage'));
 const EpisodesPage = lazy(() => import('./pages/EpisodesPage'));
@@ -34,6 +35,7 @@ export default function App() {
               }
             />
             <Route path="/create" element={<CreatePage />} />
+            <Route path="/tasks" element={<TaskCenterPage />} />
             <Route path="/canvas" element={<CanvasPage />} />
             <Route path="/canvas/:id" element={<NodeCanvasPage />} />
             <Route path="/node" element={<NodeCanvasPage />} />

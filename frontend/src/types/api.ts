@@ -1,39 +1,90 @@
-export type ProjectStatus = 'in_progress' | 'archived';
-
+/** 前端"项目" ↔ 后端 `o_project`；后端 id 为 number（Date.now()），对外统一转 string */
 export type Project = {
   id: string;
   name: string;
-  coverUrl: string | null;
-  updatedAt: string;
-  status: ProjectStatus;
-  statusText: string;
-  assetCount: number;
-  characterCount: number;
-  sceneCount: number;
-  segmentCount: number;
-  durationSec: number;
-  creditBalance: number;
-  aspectRatio: string;
-  style: string;
-};
-
-export type StorageUsage = {
-  usedBytes: number;
-  quotaBytes: number;
-  retentionDays: number;
+  /** 故事类型（如 女频-轻小说） */
+  type: string;
+  /** 项目类型：script=剧本 / novel=小说（前端只开放剧本模式） */
+  projectType: string;
+  /** 项目简介 */
+  intro: string;
+  /** 视频风格 */
+  artStyle: string;
+  /** 导演手册（P2，暂存空串） */
+  directorManual: string;
+  /** 画面比例 */
+  videoRatio: string;
+  imageModel: string;
+  videoModel: string;
+  imageQuality: string;
+  /** 生成模式（后端默认 text） */
+  mode: string;
+  /** 创建时间（后端为 number 时间戳，翻译为 ISO 字符串） */
+  createTime: string;
 };
 
 export type ProjectListResponse = {
   projects: Project[];
-  storage: StorageUsage;
 };
 
+/** 后端 `/api/general/generalStatistics` 返回的计数 */
+export type ProjectStatistics = {
+  roleCount: number;
+  scriptCount: number;
+  videoCount: number;
+  storyboardCount: number;
+};
+
+/**
+ * 新建项目 body —— 与后端 addProject 的 12 个必填字段一一对应。
+ * projectType/directorManual/mode 不由表单提供、由 API client 固定（剧本模式）。
+ */
 export type CreateProjectBody = {
   name: string;
-  templateId?: string;
-  aspectRatio?: string;
-  style?: string;
+  type: string;
+  artStyle: string;
+  videoRatio: string;
+  imageModel: string;
+  videoModel: string;
+  imageQuality: string;
+  intro?: string;
 };
+
+// ---- 任务（后端 o_tasks）----
+
+export type TaskStateName = 'running' | 'succeeded' | 'failed';
+
+/** 任务中心一行；后端 state 中文（进行中/已完成/生成失败）翻译为 TaskStateName */
+export type TaskRecord = {
+  projectId: string | null;
+  projectName: string | null;
+  taskClass: string;
+  relatedObjects: string | null;
+  model: string | null;
+  describe: string;
+  state: TaskStateName;
+  /** 后端原始 state 文案（进行中/已完成/生成失败） */
+  stateText: string;
+  startTime: string | null;
+  reason: string | null;
+};
+
+export type TaskListParams = {
+  state?: TaskStateName;
+  taskClass?: string;
+  projectId?: string;
+  page: number;
+  limit: number;
+};
+
+export type TaskListResponse = {
+  tasks: TaskRecord[];
+  total: number;
+};
+
+/** 分类/项目下拉选项 */
+export type TaskOption = { id: string; name: string };
+
 
 export type CreditsResponse = {
   balance: number;

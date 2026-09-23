@@ -1,40 +1,52 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { App, Button, Card, Flex, Input, Modal, Select, Typography } from 'antd';
 import { useNavigate } from 'react-router-dom';
-import { createProject, listProjects, patchProject } from '../lib/api';
-import type { Project } from '../types/api';
-
-function formatUpdated(iso: string): string {
-  return `更新于 ${iso.slice(0, 16).replace('T', ' ')}`;
-}
-
-function formatDuration(sec: number): string {
-  const m = Math.floor(sec / 60);
-  const s = sec % 60;
-  return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
-}
+import { createProject, deleteProject, getProjectStatistics, listProjects, patchProject } from '../lib/api';
+import type { Project, ProjectStatistics } from '../types/api';
+import { errorMessage } from '../lib/errors';
+import { formatDateTime } from '../lib/format';
+import {
+  ART_STYLE_OPTIONS,
+  DEFAULT_PROJECT_FORM,
+  IMAGE_MODEL_OPTIONS,
+  IMAGE_QUALITY_OPTIONS,
+  PROJECT_TYPE_OPTIONS,
+  VIDEO_MODEL_OPTIONS,
+  VIDEO_RATIO_OPTIONS,
+} from '../config/project';
 
 export default function HomePage() {
-  const { message } = App.useApp();
+  const { message, modal } = App.useApp();
   const navigate = useNavigate();
   const [projects, setProjects] = useState<Project[]>([]);
+  const [stats, setStats] = useState<Record<string, ProjectStatistics>>({});
+  const [loaded, setLoaded] = useState(false);
+
   const [createOpen, setCreateOpen] = useState(false);
   const [newName, setNewName] = useState('');
-  const [aspectRatio, setAspectRatio] = useState('9:16');
-  const [style, setStyle] = useState('赛博朋克电影');
+  const [newIntro, setNewIntro] = useState('');
+  const [form, setForm] = useState({ ...DEFAULT_PROJECT_FORM });
   const [creating, setCreating] = useState(false);
   const [renameId, setRenameId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState('');
   const [renaming, setRenaming] = useState(false);
 
-  const load = async () => {
+  const load = useCallback(async () => {
     const data = await listProjects();
-    setProjects(data.projects);
-  };
+    // 后端列表无排序保证，按创建时间（id 为 Date.now 时间戳）倒序展示，全部呈现不截断
+    const sorted = [...data.projects].sort((a, b) => Number(b.id) - Number(a.id));
+    setProjects(sorted);
+    setLoaded(true);
+    // 计数走后端统计接口，逐项目拉取，不阻塞列表渲染
+    const entries = await Promise.all(
+      sorted.map(async (p) => [p.id, await getProjectStatistics(p.id)] as const),
+    );
+    setStats(Object.fromEntries(entries));
+  }, []);
 
   useEffect(() => {
     void load().catch(() => message.error('加载项目列表失败'));
-  }, [message]);
+  }, [load, message]);
 
   const onCreate = async () => {
     const name = newName.trim();
@@ -44,12 +56,15 @@ export default function HomePage() {
     }
     setCreating(true);
     try {
-      await createProject({ name, aspectRatio, style });
+      await createProject({ name, intro: newIntro.trim(), ...form });
       setCreateOpen(false);
       setNewName('');
+      setNewIntro('');
+      setForm({ ...DEFAULT_PROJECT_FORM });
       await load();
-    } catch {
-      message.error('新建项目失败');
+      message.success(`项目「${name}」已创建并保存到后端`);
+    } catch (err) {
+      message.error(errorMessage(err, '新建项目失败'));
     } finally {
       setCreating(false);
     }
@@ -67,11 +82,31 @@ export default function HomePage() {
       await patchProject(renameId, { name });
       setRenameId(null);
       await load();
-    } catch {
-      message.error('重命名失败');
+      message.success('已保存到后端');
+    } catch (err) {
+      message.error(errorMessage(err, '重命名失败'));
     } finally {
       setRenaming(false);
     }
+  };
+
+  const onDelete = (project: Project) => {
+    modal.confirm({
+      title: `删除项目「${project.name}」？`,
+      content: '将级联删除该项目下的剧本、资产、分镜、视频轨道与任务记录，且不可恢复。',
+      okText: '删除',
+      okButtonProps: { danger: true },
+      cancelText: '取消',
+      onOk: async () => {
+        try {
+          await deleteProject(project.id);
+          await load();
+          message.success('项目已删除');
+        } catch (err) {
+          message.error(errorMessage(err, '删除项目失败'));
+        }
+      },
+    });
   };
 
   return (
@@ -80,7 +115,7 @@ export default function HomePage() {
         空间 <em>· 个人</em>
       </h2>
       <Typography.Text type="secondary" style={{ fontSize: 13, display: 'block', marginTop: 6 }}>
-        个人项目卡 · 重命名 / 归档
+        个人项目卡 · 新建 / 重命名 / 删除 · 数据来自后端，刷新不丢失
       </Typography.Text>
 
       <Flex align="center" justify="space-between" style={{ margin: '26px 0 13px' }}>
@@ -90,9 +125,22 @@ export default function HomePage() {
         </Button>
       </Flex>
 
+      {loaded && projects.length === 0 ? (
+        <div className="ds-card" style={{ padding: '48px 20px', textAlign: 'center' }}>
+          <div style={{ fontSize: 34, marginBottom: 12 }}>🎬</div>
+          <div style={{ fontSize: 14.5, marginBottom: 6 }}>还没有项目</div>
+          <Typography.Text type="secondary" style={{ fontSize: 12.5, display: 'block', marginBottom: 18 }}>
+            从一个故事开始：新建项目后，提交剧本即可进入创作工作流
+          </Typography.Text>
+          <Button type="primary" className="ds-grad ds-pill" onClick={() => setCreateOpen(true)}>
+            ＋ 新建第一个项目
+          </Button>
+        </div>
+      ) : null}
+
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(250px, 1fr))', gap: 15 }}>
         {projects.map((p) => {
-          const ok = p.status === 'in_progress';
+          const s = stats[p.id];
           return (
             <Card
               key={p.id}
@@ -102,24 +150,19 @@ export default function HomePage() {
               onClick={() => navigate(`/create?projectId=${p.id}`)}
               cover={
                 <div className="ds-cv">
-                  {p.coverUrl ? (
-                    <img src={p.coverUrl} alt={p.name} />
-                  ) : (
-                    <div
-                      style={{
-                        position: 'absolute',
-                        inset: 0,
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        fontWeight: 800,
-                        color: 'rgba(255,255,255,.85)',
-                      }}
-                    >
-                      {p.name}
-                    </div>
-                  )}
-                  {p.coverUrl ? <span className="ds-aigc">✦ AI生成</span> : null}
+                  <div
+                    style={{
+                      position: 'absolute',
+                      inset: 0,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      fontWeight: 800,
+                      color: 'rgba(255,255,255,.85)',
+                    }}
+                  >
+                    {p.name}
+                  </div>
                   <div className="ds-ops">
                     <button
                       type="button"
@@ -131,8 +174,14 @@ export default function HomePage() {
                     >
                       ✎ 重命名
                     </button>
-                    <button type="button" onClick={(e) => e.stopPropagation()}>
-                      📦 归档
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onDelete(p);
+                      }}
+                    >
+                      🗑 删除
                     </button>
                   </div>
                 </div>
@@ -141,41 +190,38 @@ export default function HomePage() {
               <b style={{ fontSize: 13.5 }}>{p.name}</b>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 7, marginTop: 7 }}>
                 <Flex align="center" justify="space-between">
-                  <span style={{ fontSize: 10.5, color: 'var(--ant-color-text-tertiary)' }}>{formatUpdated(p.updatedAt)}</span>
-                  <span className={`ds-status ${ok ? 'ok' : 'no'}`}>
-                    {ok ? <i className="ds-dot" /> : null}
-                    {p.statusText}
-                  </span>
-                </Flex>
-                <Flex align="center" justify="space-between">
                   <span style={{ fontSize: 10.5, color: 'var(--ant-color-text-tertiary)' }}>
-                    资产 {p.assetCount}（角色{p.characterCount}+场景{p.sceneCount}）
+                    创建于 {formatDateTime(p.createTime)}
                   </span>
                   <span style={{ fontSize: 10.5, color: 'var(--ant-color-text-tertiary)' }}>
-                    片段 {p.segmentCount} · {formatDuration(p.durationSec)}
+                    {p.videoRatio} · {p.artStyle}
                   </span>
                 </Flex>
-                <Flex align="center" justify="flex-end">
-                  <span style={{ fontSize: 10.5, color: 'var(--ant-color-text-tertiary)' }}>
-                    {p.aspectRatio} · {p.style}
-                  </span>
-                </Flex>
+                <span style={{ fontSize: 10.5, color: 'var(--ant-color-text-tertiary)' }}>
+                  角色 {s?.roleCount ?? 0} · 剧本 {s?.scriptCount ?? 0} · 视频 {s?.videoCount ?? 0} · 分镜{' '}
+                  {s?.storyboardCount ?? 0}
+                </span>
+                <span style={{ fontSize: 10.5, color: 'var(--ant-color-text-tertiary)' }}>
+                  {p.type} · {p.imageQuality}
+                </span>
               </div>
             </Card>
           );
         })}
-        <button type="button" className="ds-newCard" onClick={() => setCreateOpen(true)}>
-          <div style={{ textAlign: 'center' }}>
-            <div style={{ fontSize: 26, marginBottom: 8 }}>＋</div>
-            <div style={{ fontSize: 12 }}>新建项目</div>
-          </div>
-        </button>
+        {projects.length > 0 ? (
+          <button type="button" className="ds-newCard" onClick={() => setCreateOpen(true)}>
+            <div style={{ textAlign: 'center' }}>
+              <div style={{ fontSize: 26, marginBottom: 8 }}>＋</div>
+              <div style={{ fontSize: 12 }}>新建项目</div>
+            </div>
+          </button>
+        ) : null}
       </div>
 
       <Modal
         open={createOpen}
         className="ds-modal"
-        title="新建项目"
+        title="✨ 新建项目"
         onCancel={() => setCreateOpen(false)}
         styles={{ mask: { backdropFilter: 'blur(4px)', background: 'rgba(5,5,10,.62)' } }}
         footer={[
@@ -192,26 +238,95 @@ export default function HomePage() {
             <Typography.Text type="secondary" style={{ fontSize: 11.5, display: 'block', marginBottom: 6 }}>
               项目名称
             </Typography.Text>
-            <Input placeholder="输入项目名称" value={newName} onChange={(e) => setNewName(e.target.value)} onPressEnter={() => void onCreate()} />
+            <Input
+              placeholder="输入项目名称"
+              value={newName}
+              onChange={(e) => setNewName(e.target.value)}
+              onPressEnter={() => void onCreate()}
+            />
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 11 }}>
             <div>
               <Typography.Text type="secondary" style={{ fontSize: 11.5, display: 'block', marginBottom: 6 }}>
-                默认比例
-              </Typography.Text>
-              <Select style={{ width: '100%' }} value={aspectRatio} onChange={setAspectRatio} options={[{ value: '9:16' }, { value: '16:9' }]} />
-            </div>
-            <div>
-              <Typography.Text type="secondary" style={{ fontSize: 11.5, display: 'block', marginBottom: 6 }}>
-                默认风格
+                故事类型
               </Typography.Text>
               <Select
                 style={{ width: '100%' }}
-                value={style}
-                onChange={setStyle}
-                options={[{ value: '赛博朋克电影' }, { value: '国漫写实' }]}
+                value={form.type}
+                onChange={(type) => setForm((f) => ({ ...f, type }))}
+                options={PROJECT_TYPE_OPTIONS}
               />
             </div>
+            <div>
+              <Typography.Text type="secondary" style={{ fontSize: 11.5, display: 'block', marginBottom: 6 }}>
+                视频风格
+              </Typography.Text>
+              <Select
+                style={{ width: '100%' }}
+                value={form.artStyle}
+                onChange={(artStyle) => setForm((f) => ({ ...f, artStyle }))}
+                options={ART_STYLE_OPTIONS}
+              />
+            </div>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 11 }}>
+            <div>
+              <Typography.Text type="secondary" style={{ fontSize: 11.5, display: 'block', marginBottom: 6 }}>
+                画面比例
+              </Typography.Text>
+              <Select
+                style={{ width: '100%' }}
+                value={form.videoRatio}
+                onChange={(videoRatio) => setForm((f) => ({ ...f, videoRatio }))}
+                options={VIDEO_RATIO_OPTIONS}
+              />
+            </div>
+            <div>
+              <Typography.Text type="secondary" style={{ fontSize: 11.5, display: 'block', marginBottom: 6 }}>
+                生图质量
+              </Typography.Text>
+              <Select
+                style={{ width: '100%' }}
+                value={form.imageQuality}
+                onChange={(imageQuality) => setForm((f) => ({ ...f, imageQuality }))}
+                options={IMAGE_QUALITY_OPTIONS}
+              />
+            </div>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 11 }}>
+            <div>
+              <Typography.Text type="secondary" style={{ fontSize: 11.5, display: 'block', marginBottom: 6 }}>
+                图像模型
+              </Typography.Text>
+              <Select
+                style={{ width: '100%' }}
+                value={form.imageModel}
+                onChange={(imageModel) => setForm((f) => ({ ...f, imageModel }))}
+                options={IMAGE_MODEL_OPTIONS}
+              />
+            </div>
+            <div>
+              <Typography.Text type="secondary" style={{ fontSize: 11.5, display: 'block', marginBottom: 6 }}>
+                视频模型
+              </Typography.Text>
+              <Select
+                style={{ width: '100%' }}
+                value={form.videoModel}
+                onChange={(videoModel) => setForm((f) => ({ ...f, videoModel }))}
+                options={VIDEO_MODEL_OPTIONS}
+              />
+            </div>
+          </div>
+          <div>
+            <Typography.Text type="secondary" style={{ fontSize: 11.5, display: 'block', marginBottom: 6 }}>
+              项目简介（可选）
+            </Typography.Text>
+            <Input.TextArea
+              rows={2}
+              placeholder="一句话介绍这个故事"
+              value={newIntro}
+              onChange={(e) => setNewIntro(e.target.value)}
+            />
           </div>
         </Flex>
       </Modal>

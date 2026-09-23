@@ -5,6 +5,7 @@ const items = [
   { to: '/', icon: '🏠', label: '首页', end: true },
   { to: '/idea', icon: '💡', label: '创意', end: false },
   { to: '/create', icon: '🎬', label: '创作', end: false },
+  { to: '/tasks', icon: '🧾', label: '任务', end: false },
   { to: '/canvas', icon: '🎨', label: '画布', end: false },
   { to: '/plaza', icon: '📦', label: '资产', end: false },
   { to: '/space', icon: '🧊', label: '空间', end: false },

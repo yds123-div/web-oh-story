@@ -8,14 +8,12 @@ import type {
   Project,
   Segment,
   Shot,
-  StorageUsage,
   TaskStatus,
   Template,
   WorkflowState,
   WorkflowStep,
 } from '../types/api';
 
-const GB = 1024 * 1024 * 1024;
 const DEMO_PROJECT_ID = 'proj-nming-muye';
 
 // 示例资源挂在 Vite base 下（本地 /demo-assets，服务器 /deepsfv-dev/demo-assets）
@@ -38,43 +36,37 @@ type InternalTask = TaskStatus & {
   model?: ModelId;
 };
 
-function nowIso(): string {
-  return new Date().toISOString();
-}
-
 function seedProjects(): Project[] {
   return [
     {
       id: DEMO_PROJECT_ID,
       name: '逆命木叶',
-      coverUrl: `${DA}/corridor.jpg`,
-      updatedAt: '2026-09-17T18:20:00.000Z',
-      status: 'in_progress',
-      statusText: '进行中',
-      assetCount: 5,
-      characterCount: 4,
-      sceneCount: 1,
-      segmentCount: 3,
-      durationSec: 37,
-      creditBalance: 132,
-      aspectRatio: '9:16',
-      style: '赛博朋克电影',
+      intro: '知晓结局的穿越者试图改写宿命',
+      projectType: 'script',
+      type: '女频-轻小说',
+      artStyle: '赛博朋克电影',
+      directorManual: '',
+      videoRatio: '9:16',
+      imageModel: 'Seedream-4.0',
+      videoModel: 'Seedance 2.0',
+      imageQuality: '2K',
+      mode: 'text',
+      createTime: '2026-09-17T18:20:00.000Z',
     },
     {
       id: 'proj-naruto-brawl',
       name: '火影乱斗',
-      coverUrl: null,
-      updatedAt: '2026-09-16T21:04:00.000Z',
-      status: 'archived',
-      statusText: '已归档',
-      assetCount: 2,
-      characterCount: 2,
-      sceneCount: 0,
-      segmentCount: 4,
-      durationSec: 46,
-      creditBalance: 0,
-      aspectRatio: '16:9',
-      style: '国漫写实',
+      intro: '',
+      projectType: 'script',
+      type: '热血战斗',
+      artStyle: '国漫写实',
+      directorManual: '',
+      videoRatio: '16:9',
+      imageModel: 'Seedream-4.0',
+      videoModel: 'Seedance 2.0',
+      imageQuality: '2K',
+      mode: 'text',
+      createTime: '2026-09-16T21:04:00.000Z',
     },
   ];
 }
@@ -515,11 +507,6 @@ function imageUrlFor(asset: Asset): string | null {
 
 let projects = seedProjects();
 let creditsBalance = 940;
-const storage: StorageUsage = {
-  usedBytes: Math.round(3.4 * GB),
-  quotaBytes: 10 * GB,
-  retentionDays: 30,
-};
 
 let outlines = new Map<string, Outline>();
 let assets = new Map<string, Asset>();
@@ -590,58 +577,15 @@ export function resetDb(): void {
 
 seedDemoContent();
 
-export function getProjects(): Project[] {
-  return projects.map((p) => ({ ...p }));
-}
-
-export function getStorage(): StorageUsage {
-  return { ...storage };
-}
-
 export function getCreditsBalance(): number {
   return creditsBalance;
-}
-
-export function addProject(input: {
-  name: string;
-  aspectRatio?: string;
-  style?: string;
-}): Project {
-  const project: Project = {
-    id: `proj-${randomId()}`,
-    name: input.name,
-    coverUrl: null,
-    updatedAt: nowIso(),
-    status: 'in_progress',
-    statusText: '进行中',
-    assetCount: 0,
-    characterCount: 0,
-    sceneCount: 0,
-    segmentCount: 0,
-    durationSec: 0,
-    creditBalance: 0,
-    aspectRatio: input.aspectRatio ?? '9:16',
-    style: input.style ?? '赛博朋克电影',
-  };
-  projects = [project, ...projects];
-  workflows.set(project.id, defaultWorkflow(project.id));
-  return { ...project };
-}
-
-export function renameProject(id: string, name: string): Project | null {
-  const found = projects.find((p) => p.id === id);
-  if (!found) return null;
-  found.name = name;
-  found.updatedAt = nowIso();
-  const outline = outlines.get(id);
-  if (outline) outline.projectName = name;
-  return { ...found };
 }
 
 export function getProject(id: string): Project | undefined {
   return projects.find((p) => p.id === id);
 }
 
+/** 旧 REST 任务流的内部轮询（尚未迁移到后端契约的 mock 流程测试用） */
 export function getTaskRecord(id: string): TaskStatus | undefined {
   const t = tasks.get(id);
   return t ? { taskId: t.taskId, status: t.status, progress: t.progress, result: t.result, error: t.error } : undefined;

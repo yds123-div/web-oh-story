@@ -1,9 +1,12 @@
-import { useMemo, useState } from 'react';
-import { App, Button, Flex, Input, Progress, Select, Typography, Tag } from 'antd';
+import { useEffect, useMemo, useState } from 'react';
+import { App, Button, Card, Flex, Input, Progress, Select, Typography, Tag } from 'antd';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useTask } from '../hooks/useTask';
-import { createProject, submitOutlineTask } from '../lib/api';
+import { createProject, fetchProject, submitOutlineTask } from '../lib/api';
+import { DEFAULT_PROJECT_FORM } from '../config/project';
+import { errorMessage } from '../lib/errors';
 import { validateScriptFileContent, validateScriptText } from '../lib/scriptValidation';
+import type { Project } from '../types/api';
 
 const SAMPLE = `【木叶长廊 内 夜】
 木叶，夜晚长廊，月光冷白。
@@ -21,6 +24,18 @@ export default function CreatePage() {
   const navigate = useNavigate();
   const [params] = useSearchParams();
   const projectIdFromUrl = params.get('projectId');
+
+  // 打开已有项目时，拉取并还原其创建时保存的配置
+  const [savedProject, setSavedProject] = useState<Project | null>(null);
+  useEffect(() => {
+    if (!projectIdFromUrl) {
+      setSavedProject(null);
+      return;
+    }
+    void fetchProject(projectIdFromUrl)
+      .then(setSavedProject)
+      .catch((err) => message.error(errorMessage(err, '加载项目配置失败')));
+  }, [projectIdFromUrl, message]);
 
   const [panel, setPanel] = useState<'empty' | 'paste' | 'ready'>('empty');
   const [paste, setPaste] = useState(SAMPLE);
@@ -86,8 +101,13 @@ export default function CreatePage() {
       if (!projectId) {
         const created = await createProject({
           name: fileName.trim() || '未命名项目',
-          aspectRatio: videoRatio,
-          style,
+          type: category,
+          artStyle: style,
+          videoRatio,
+          imageQuality,
+          // 创作页暂不选模型，沿用项目表单默认值（模型选项见 config/project.ts）
+          imageModel: DEFAULT_PROJECT_FORM.imageModel,
+          videoModel: DEFAULT_PROJECT_FORM.videoModel,
         });
         projectId = created.id;
       }
@@ -112,11 +132,39 @@ export default function CreatePage() {
       </Typography.Text>
 
       <Flex gap={8} wrap style={{ margin: '16px 0 0' }} align="center">
-        <button type="button" className="ds-modeChip on">📄 剧本模式（≤30万字）</button>
+        <button type="button" className="ds-modeChip on">📄 剧本模式（≤3万字）</button>
         <span style={{ fontSize: 11, color: 'var(--ant-color-text-tertiary)', marginLeft: 10 }}>
           上传成品剧本，AI 精编后进入三步工作流
         </span>
       </Flex>
+
+      {savedProject ? (
+        <Card className="ds-card" size="small" style={{ marginTop: 14 }} styles={{ body: { padding: '12px 16px' } }}>
+          <Flex justify="space-between" align="center" style={{ marginBottom: 8 }}>
+            <b style={{ fontSize: 13 }}>📌 项目配置（已保存）</b>
+            <Typography.Text type="secondary" style={{ fontSize: 11 }}>
+              {savedProject.projectType === 'script' ? '剧本项目' : savedProject.projectType}
+            </Typography.Text>
+          </Flex>
+          <Flex gap={8} wrap style={{ fontSize: 12 }}>
+            {[
+              savedProject.type,
+              savedProject.artStyle,
+              savedProject.videoRatio,
+              savedProject.imageQuality,
+              `图像模型 ${savedProject.imageModel || '未选择'}`,
+              `视频模型 ${savedProject.videoModel || '未选择'}`,
+            ].map((item) => (
+              <Tag key={item}>{item}</Tag>
+            ))}
+          </Flex>
+          {savedProject.intro ? (
+            <Typography.Text type="secondary" style={{ fontSize: 12, display: 'block', marginTop: 8 }}>
+              {savedProject.intro}
+            </Typography.Text>
+          ) : null}
+        </Card>
+      ) : null}
 
       <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 0.8fr', gap: 16, marginTop: 14 }}>
         <div className="ds-upload">

@@ -1,7 +1,6 @@
 import type { PatchSegmentBody } from '../types/api';
 import { delay, http, HttpResponse } from 'msw';
 import {
-  addProject,
   completeAssetsRecord,
   createAssetImageTask,
   createEpisodeExportTask,
@@ -16,9 +15,6 @@ import {
   getEpisodeRecord,
   getOutlineRecord,
   getProject,
-  getProjects,
-  getStorage,
-  getTaskRecord,
   getWorkflowRecord,
   isModelId,
   listAssetRecords,
@@ -29,12 +25,43 @@ import {
   listTemplateRecords,
   patchAssetRecord,
   patchSegmentRecord,
-  renameProject,
 } from './db';
+import {
+  addBackendProject,
+  deleteBackendProject,
+  findBackendProject,
+  getBackendProjects,
+  getBackendTaskById,
+  getBackendTasks,
+  getProjectStatistics,
+  updateBackendProject,
+} from './backendDb';
 
 function netDelay(ms: number): Promise<void> {
   if (import.meta.env.MODE === 'test') return Promise.resolve();
   return delay(ms);
+}
+
+/** 后端信封：HTTP 恒 200，成败看 code */
+function envelope(data: unknown, message = '成功') {
+  return HttpResponse.json({ code: 200, data, message });
+}
+
+/** 复刻后端 validateFields 失败形状：HTTP 400 + `{message: '参数错误', errors}`（非信封） */
+function validateBody(
+  body: Record<string, unknown>,
+  shape: Record<string, 'string' | 'number' | 'optionalNumber' | 'optionalString'>,
+) {
+  const errors: string[] = [];
+  for (const [field, rule] of Object.entries(shape)) {
+    const value = body[field];
+    if (rule === 'number' && typeof value !== 'number') errors.push(`字段 ${field} 应为数字`);
+    if (rule === 'string' && typeof value !== 'string') errors.push(`字段 ${field} 应为字符串`);
+    if (rule === 'optionalNumber' && value != null && typeof value !== 'number') errors.push(`字段 ${field} 应为数字`);
+    if (rule === 'optionalString' && value != null && typeof value !== 'string') errors.push(`字段 ${field} 应为字符串`);
+  }
+  if (errors.length === 0) return null;
+  return HttpResponse.json({ message: '参数错误', errors }, { status: 400 });
 }
 
 export const handlers = [
@@ -48,37 +75,154 @@ export const handlers = [
     });
   }),
 
-  http.get('/api/projects', async () => {
+  // ===== 项目（后端契约：o_project）=====
+
+  http.post('/api/project/getProject', async () => {
     await netDelay(80);
-    return HttpResponse.json({
-      projects: getProjects(),
-      storage: getStorage(),
+    return envelope(getBackendProjects());
+  }),
+
+  http.post('/api/project/addProject', async ({ request }) => {
+    await netDelay(80);
+    const body = (await request.json()) as Record<string, unknown>;
+    const invalid = validateBody(body, {
+      projectType: 'string',
+      name: 'string',
+      intro: 'string',
+      type: 'string',
+      artStyle: 'string',
+      directorManual: 'string',
+      videoRatio: 'string',
+      imageModel: 'string',
+      videoModel: 'string',
+      imageQuality: 'string',
+      mode: 'string',
     });
+    if (invalid) return invalid;
+    addBackendProject({
+      projectType: String(body.projectType),
+      name: String(body.name),
+      intro: String(body.intro),
+      type: String(body.type),
+      artStyle: String(body.artStyle),
+      directorManual: String(body.directorManual),
+      videoRatio: String(body.videoRatio),
+      imageModel: String(body.imageModel),
+      videoModel: String(body.videoModel),
+      imageQuality: String(body.imageQuality),
+      mode: String(body.mode),
+    });
+    return envelope({ message: '新增项目成功' }, '新增项目成功');
   }),
 
-  http.post('/api/projects', async ({ request }) => {
+  http.post('/api/project/editProject', async ({ request }) => {
     await netDelay(80);
-    const body = (await request.json()) as { name?: string; aspectRatio?: string; style?: string };
-    const name = body.name?.trim();
-    if (!name) {
-      return HttpResponse.json({ message: '项目名称不能为空' }, { status: 400 });
-    }
-    const project = addProject({ name, aspectRatio: body.aspectRatio, style: body.style });
-    return HttpResponse.json(project, { status: 201 });
+    const body = (await request.json()) as Record<string, unknown>;
+    const invalid = validateBody(body, {
+      id: 'number',
+      name: 'string',
+      intro: 'string',
+      type: 'string',
+      artStyle: 'string',
+      directorManual: 'string',
+      videoRatio: 'string',
+      imageModel: 'string',
+      videoModel: 'string',
+      imageQuality: 'string',
+      projectType: 'string',
+      mode: 'string',
+    });
+    if (invalid) return invalid;
+    updateBackendProject(Number(body.id), {
+      name: String(body.name),
+      intro: String(body.intro),
+      type: String(body.type),
+      artStyle: String(body.artStyle),
+      directorManual: String(body.directorManual),
+      videoRatio: String(body.videoRatio),
+      imageModel: String(body.imageModel),
+      videoModel: String(body.videoModel),
+      imageQuality: String(body.imageQuality),
+      projectType: String(body.projectType),
+      mode: String(body.mode),
+    });
+    return envelope({ message: '编辑项目成功' }, '编辑项目成功');
   }),
 
-  http.patch('/api/projects/:id', async ({ params, request }) => {
+  http.post('/api/project/delProject', async ({ request }) => {
     await netDelay(80);
-    const body = (await request.json()) as { name?: string };
-    const name = body.name?.trim();
-    if (!name) {
-      return HttpResponse.json({ message: '项目名称不能为空' }, { status: 400 });
-    }
-    const updated = renameProject(String(params.id), name);
-    if (!updated) {
-      return HttpResponse.json({ message: '项目不存在' }, { status: 404 });
-    }
-    return HttpResponse.json(updated);
+    const body = (await request.json()) as Record<string, unknown>;
+    const invalid = validateBody(body, { id: 'number' });
+    if (invalid) return invalid;
+    deleteBackendProject(Number(body.id));
+    return envelope({ message: '删除项目成功' }, '删除项目成功');
+  }),
+
+  http.post('/api/general/getSingleProject', async ({ request }) => {
+    await netDelay(60);
+    const body = (await request.json()) as Record<string, unknown>;
+    const invalid = validateBody(body, { id: 'number' });
+    if (invalid) return invalid;
+    const found = getBackendProjects().filter((p) => p.id === Number(body.id));
+    return envelope(found);
+  }),
+
+  http.post('/api/general/generalStatistics', async ({ request }) => {
+    await netDelay(60);
+    const body = (await request.json()) as Record<string, unknown>;
+    const invalid = validateBody(body, { projectId: 'number' });
+    if (invalid) return invalid;
+    return envelope(getProjectStatistics(Number(body.projectId)));
+  }),
+
+  // ===== 任务中心（后端契约：o_tasks）=====
+
+  http.post('/api/task/getTaskApi', async ({ request }) => {
+    await netDelay(80);
+    const body = (await request.json()) as Record<string, unknown>;
+    const invalid = validateBody(body, {
+      state: 'optionalString',
+      taskClass: 'optionalString',
+      projectId: 'optionalNumber',
+      page: 'number',
+      limit: 'number',
+    });
+    if (invalid) return invalid;
+    const page = Number(body.page ?? 1);
+    const limit = Number(body.limit ?? 10);
+    const filtered = getBackendTasks()
+      .filter((t) => (body.taskClass ? t.taskClass === body.taskClass : true))
+      .filter((t) => (body.state ? t.state === body.state : true))
+      .filter((t) => (body.projectId != null ? t.projectId === Number(body.projectId) : true))
+      .sort((a, b) => b.id - a.id);
+    // 复刻后端 leftJoin o_project + `select("o_tasks.*", "o_project.*")`：
+    // 重名列 id 会被项目 id 覆盖（join 不上时为 null），name 为项目名
+    const rows = filtered
+      .slice((page - 1) * limit, page * limit)
+      .map((t) => {
+        const project = t.projectId != null ? findBackendProject(t.projectId) : null;
+        return { ...t, id: project?.id ?? null, name: project?.name ?? null };
+      });
+    return envelope({ data: rows, total: filtered.length });
+  }),
+
+  http.post('/api/task/getTaskCategories', async () => {
+    await netDelay(40);
+    const classes = [...new Set(getBackendTasks().map((t) => t.taskClass).filter(Boolean))];
+    return envelope(classes.map((taskClass) => ({ taskClass })));
+  }),
+
+  http.post('/api/task/getProject', async () => {
+    await netDelay(40);
+    return envelope(getBackendProjects().map((p) => ({ id: p.id, name: p.name })));
+  }),
+
+  http.post('/api/task/taskDetails', async ({ request }) => {
+    await netDelay(40);
+    const body = (await request.json()) as Record<string, unknown>;
+    const invalid = validateBody(body, { taskId: 'number' });
+    if (invalid) return invalid;
+    return envelope(getBackendTaskById(Number(body.taskId)));
   }),
 
   http.get('/api/credits', async () => {
@@ -112,15 +256,6 @@ export const handlers = [
     }
     const task = createNovelTask(project.id);
     return HttpResponse.json({ taskId: task.taskId }, { status: 202 });
-  }),
-
-  http.get('/api/tasks/:taskId', async ({ params }) => {
-    await netDelay(40);
-    const task = getTaskRecord(String(params.taskId));
-    if (!task) {
-      return HttpResponse.json({ message: '任务不存在' }, { status: 404 });
-    }
-    return HttpResponse.json(task);
   }),
 
   http.get('/api/projects/:id/outline', async ({ params }) => {

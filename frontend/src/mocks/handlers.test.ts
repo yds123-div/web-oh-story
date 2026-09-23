@@ -2,10 +2,12 @@ import { setupServer } from 'msw/node';
 import {
   completeAssets,
   createProject,
+  deleteProject,
   finalizeOutline,
   getCredits,
   getEpisode,
   getOutline,
+  getProjectStatistics,
   getTask,
   getWorkflow,
   listAssets,
@@ -14,6 +16,9 @@ import {
   listNotifications,
   listProjects,
   listSegments,
+  listTaskCategories,
+  listTaskProjects,
+  listTasks,
   listTemplates,
   patchAsset,
   patchProject,
@@ -24,7 +29,8 @@ import {
   submitOutlineTask,
   submitSegmentVideoTask,
 } from '../lib/api';
-import { resetDb } from './db';
+import { DEMO_PROJECT_ID, resetBackendDb } from './backendDb';
+import { getTaskRecord, resetDb } from './db';
 import { handlers } from './handlers';
 
 const server = setupServer(...handlers);
@@ -32,35 +38,96 @@ const server = setupServer(...handlers);
 beforeAll(() => server.listen({ onUnhandledRequest: 'error' }));
 afterEach(() => {
   resetDb();
+  resetBackendDb();
   server.resetHandlers();
 });
 afterAll(() => server.close());
 
+const NEW_PROJECT_BODY = {
+  name: '新剧本',
+  type: '女频-轻小说',
+  artStyle: '赛博朋克电影',
+  videoRatio: '9:16',
+  imageModel: 'Seedream-4.0',
+  videoModel: 'Seedance 2.0',
+  imageQuality: '2K',
+};
+
 describe('MSW project and credits contracts', () => {
-  it('lists seeded projects including 逆命木叶', async () => {
+  it('lists seeded projects including 逆命木叶 with string ids', async () => {
     const data = await listProjects();
     expect(data.projects.map((p) => p.name)).toContain('逆命木叶');
-    expect(data.storage.usedBytes).toBeGreaterThan(0);
-    expect(data.storage.quotaBytes).toBe(10 * 1024 * 1024 * 1024);
+    expect(data.projects.every((p) => typeof p.id === 'string' && p.id.length > 0)).toBe(true);
   });
 
   it('creates a project that then appears in the list', async () => {
-    const created = await createProject({ name: '新剧本' });
+    const created = await createProject(NEW_PROJECT_BODY);
     expect(created.name).toBe('新剧本');
     const data = await listProjects();
-    expect(data.projects[0]?.name).toBe('新剧本');
+    expect(data.projects.map((p) => p.name)).toContain('新剧本');
   });
 
-  it('renames a project through PATCH and persists it', async () => {
-    await patchProject('proj-nming-muye', { name: '逆命木叶·改' });
+  it('renames a project and persists it', async () => {
+    const updated = await patchProject(String(DEMO_PROJECT_ID), { name: '逆命木叶·改' });
+    expect(updated.name).toBe('逆命木叶·改');
     const data = await listProjects();
-    const found = data.projects.find((p) => p.id === 'proj-nming-muye');
+    const found = data.projects.find((p) => p.id === String(DEMO_PROJECT_ID));
     expect(found?.name).toBe('逆命木叶·改');
+  });
+
+  it('deletes the created project so it disappears from the list', async () => {
+    const created = await createProject(NEW_PROJECT_BODY);
+    await deleteProject(created.id);
+    const data = await listProjects();
+    expect(data.projects.some((p) => p.id === created.id)).toBe(false);
+  });
+
+  it('returns statistics counters for the demo project', async () => {
+    const stats = await getProjectStatistics(String(DEMO_PROJECT_ID));
+    expect(stats).toEqual({ roleCount: 2, scriptCount: 1, videoCount: 0, storyboardCount: 3 });
   });
 
   it('returns credit balance 940', async () => {
     const credits = await getCredits();
     expect(credits.balance).toBe(940);
+  });
+});
+
+describe('MSW task center contracts', () => {
+  it('lists tasks with joined project names and translated state', async () => {
+    const data = await listTasks({ page: 1, limit: 10 });
+    expect(data.total).toBe(3);
+    const failed = data.tasks.find((t) => t.state === 'failed');
+    expect(failed).toMatchObject({
+      taskClass: '剧本资产提取',
+      projectName: '逆命木叶',
+      stateText: '生成失败',
+      reason: '供应商未配置 key',
+    });
+    // join 不上的任务：项目为空，状态照常翻译
+    const orphan = data.tasks.find((t) => t.projectId === null);
+    expect(orphan).toMatchObject({ state: 'running', projectName: null });
+  });
+
+  it('filters by state and taskClass', async () => {
+    const succeeded = await listTasks({ state: 'succeeded', page: 1, limit: 10 });
+    expect(succeeded.total).toBe(1);
+    expect(succeeded.tasks[0]?.taskClass).toBe('视频生成');
+    const byClass = await listTasks({ taskClass: '剧本资产提取', page: 1, limit: 10 });
+    expect(byClass.total).toBe(1);
+  });
+
+  it('exposes distinct task classes and the project dropdown', async () => {
+    await expect(listTaskCategories()).resolves.toEqual(
+      expect.arrayContaining(['剧本资产提取', '视频生成', '分镜图片生成']),
+    );
+    const projects = await listTaskProjects();
+    expect(projects).toEqual([{ id: String(DEMO_PROJECT_ID), name: '逆命木叶' }]);
+  });
+
+  it('returns a task detail as TaskStatus via getTask', async () => {
+    const status = await getTask('9001');
+    expect(status).toMatchObject({ taskId: '9001', status: 'failed', error: '供应商未配置 key' });
   });
 });
 
@@ -72,10 +139,10 @@ describe('outline task polling contract', () => {
     });
     expect(taskId).toMatch(/^task-/);
 
-    let status = await getTask(taskId);
+    let status = await pollLegacyTask(taskId);
     for (let i = 0; i < 80 && status.status !== 'succeeded'; i += 1) {
       await new Promise((r) => setTimeout(r, 10));
-      status = await getTask(taskId);
+      status = await pollLegacyTask(taskId);
     }
 
     expect(status.status).toBe('succeeded');
@@ -84,11 +151,18 @@ describe('outline task polling contract', () => {
   });
 });
 
+/** 旧 REST mock 任务流的内部轮询（getTask 已接后端任务契约） */
+async function pollLegacyTask(taskId: string) {
+  const status = getTaskRecord(taskId);
+  if (!status) throw new Error(`任务不存在: ${taskId}`);
+  return status;
+}
+
 async function waitSucceeded(taskId: string) {
-  let status = await getTask(taskId);
+  let status = await pollLegacyTask(taskId);
   for (let i = 0; i < 80 && status.status !== 'succeeded'; i += 1) {
     await new Promise((r) => setTimeout(r, 10));
-    status = await getTask(taskId);
+    status = await pollLegacyTask(taskId);
   }
   return status;
 }
