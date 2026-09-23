@@ -295,15 +295,21 @@ export type NotificationListResponse = {
 
 // ---- 剧本（后端 o_script）----
 
+/**
+ * 剧本提取状态（API 层按后端 extractState 整数翻译后的命名状态）：
+ * none=未提取（手动新增，后端为 NULL）、waiting=等待提取、extracting=提取中、
+ * done=提取成功、failed=提取失败
+ */
+export type ScriptExtractStatus = 'none' | 'waiting' | 'extracting' | 'done' | 'failed';
+
 /** 后端 `o_script` 表一行 */
 export type Script = {
   id: string;
   projectId: string;
   name: string;
   content: string;
-  /** 提取状态：0=未提取, 1=提取中, 2=已提取 */
-  extractState: number;
-  /** 提取失败原因 */
+  extractStatus: ScriptExtractStatus;
+  /** 提取失败原因（extractStatus='failed' 时有值） */
   errorReason: string | null;
   /** 创建时间（后端为 number 时间戳，翻译为 ISO 字符串） */
   createTime: string;
@@ -320,11 +326,11 @@ export type AddScriptBody = {
   content: string;
 };
 
-/** 更新剧本 body */
+/** 更新剧本 body（后端 updateScript 四字段全必填，前端无剧本-资产关联编辑，assets 恒发空数组=不动关联） */
 export type UpdateScriptBody = {
   id: string;
-  name?: string;
-  content?: string;
+  name: string;
+  content: string;
 };
 
 export type PlazaAssetCategory = 'character' | 'scene' | 'video' | 'material';

@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { useWorkflowStore } from '../stores/workflowStore';
+import { useWorkflowStep } from '../hooks/useWorkflowStep';
 import type { WorkflowPage } from '../lib/workflow';
 
 const STEPS: { page: WorkflowPage; n: 1 | 2 | 3; label: string; path: (id: string) => string }[] = [
@@ -22,7 +22,9 @@ export function WorkflowHeader({
 }) {
   const { id = '' } = useParams();
   const navigate = useNavigate();
-  const unlocked = useWorkflowStore((s) => s.unlockedByProject[id] ?? 1);
+  // 步骤高亮按后端真实状态（有剧本→Step2 done，有资产→Step3 done）；查询中按 1 展示
+  const { step: unlockedStep } = useWorkflowStep();
+  const unlocked = unlockedStep ?? 1;
 
   return (
     <div className="ds-flowHead">

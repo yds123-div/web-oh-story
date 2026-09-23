@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { http, HttpResponse } from 'msw';
 import { setupServer } from 'msw/node';
-import { addScript, deleteScript, listScripts, updateScript } from './api';
+import { addScript, deleteScript, listScripts, projectHasAssets, updateScript } from './api';
 import type { ScriptRow } from './api';
 
 const server = setupServer();
@@ -10,194 +10,159 @@ beforeAll(() => server.listen());
 afterEach(() => server.resetHandlers());
 afterAll(() => server.close());
 
-describe('Scripts API', () => {
+function ok(data: unknown) {
+  return HttpResponse.json({ code: 200, data, message: '成功' });
+}
+
+describe('Scripts API（后端真实契约翻译）', () => {
   const projectId = '12345';
 
   describe('listScripts', () => {
-    it('should POST to /api/script/getScrptApi with projectId', async () => {
-      const mockScripts: ScriptRow[] = [
+    it('按后端契约 POST {projectId} 并翻译行为前端 Script', async () => {
+      const rows: ScriptRow[] = [
         {
           id: 1,
           projectId: 12345,
           name: '第1集·异世囚笼',
           content: '剧本内容',
-          extractState: 0,
+          extractState: null,
           errorReason: null,
-          createTime: Date.now(),
+          createTime: 1727100000000,
         },
       ];
 
       server.use(
         http.post('/api/script/getScrptApi', async ({ request }) => {
-          const body = await request.json();
-          expect(body).toEqual({ projectId: 12345 });
-          return HttpResponse.json({ code: 200, data: mockScripts, message: '成功' });
+          expect(await request.json()).toEqual({ projectId: 12345 });
+          return ok(rows);
         }),
       );
 
       const result = await listScripts(projectId);
       expect(result.scripts).toHaveLength(1);
-      expect(result.scripts[0].id).toBe('1');
-      expect(result.scripts[0].name).toBe('第1集·异世囚笼');
-    });
-
-    it('should translate backend row to frontend Script type', async () => {
-      const mockRow: ScriptRow = {
-        id: 999,
-        projectId: 12345,
-        name: '测试剧本',
-        content: '测试内容',
-        extractState: 2,
+      expect(result.scripts[0]).toMatchObject({
+        id: '1',
+        projectId: '12345',
+        name: '第1集·异世囚笼',
+        content: '剧本内容',
+        extractStatus: 'none',
         errorReason: null,
-        createTime: 1727100000000,
-      };
-
-      server.use(
-        http.post('/api/script/getScrptApi', async () => {
-          return HttpResponse.json({ code: 200, data: [mockRow], message: '成功' });
-        }),
-      );
-
-      const result = await listScripts(projectId);
-      expect(result.scripts[0].id).toBe('999');
-      expect(result.scripts[0].projectId).toBe('12345');
-      expect(result.scripts[0].extractState).toBe(2);
-      // 时间戳转 ISO 字符串，具体值取决于时区，只验证格式
+      });
+      // 时间戳翻译为 ISO 字符串
       expect(result.scripts[0].createTime).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
     });
 
-    it('should handle empty array response', async () => {
-      server.use(
-        http.post('/api/script/getScrptApi', async () => {
-          return HttpResponse.json({ code: 200, data: [], message: '成功' });
-        }),
-      );
+    it('把后端 extractState 整数翻译为五态命名状态', async () => {
+      const rows: ScriptRow[] = [
+        { id: 2, projectId: 12345, name: 'a', content: '', extractState: 1, errorReason: null, createTime: 1 },
+        { id: 3, projectId: 12345, name: 'b', content: '', extractState: 2, errorReason: null, createTime: 1 },
+        { id: 4, projectId: 12345, name: 'c', content: '', extractState: 0, errorReason: null, createTime: 1 },
+        { id: 5, projectId: 12345, name: 'd', content: '', extractState: -1, errorReason: 'AI 未返回任何资产', createTime: 1 },
+      ];
 
+      server.use(http.post('/api/script/getScrptApi', async () => ok(rows)));
+
+      const { scripts } = await listScripts(projectId);
+      expect(scripts.map((s) => s.extractStatus)).toEqual(['done', 'waiting', 'extracting', 'failed']);
+      expect(scripts.find((s) => s.id === '5')?.errorReason).toBe('AI 未返回任何资产');
+    });
+
+    it('空列表返回空数组', async () => {
+      server.use(http.post('/api/script/getScrptApi', async () => ok([])));
       const result = await listScripts(projectId);
       expect(result.scripts).toEqual([]);
     });
   });
 
   describe('addScript', () => {
-    it('should POST to /api/script/addScript with correct body', async () => {
-      let capturedBody: unknown;
+    it('body 含后端 zod 必填的 assets: []', async () => {
+      let captured: unknown;
 
       server.use(
         http.post('/api/script/addScript', async ({ request }) => {
-          capturedBody = await request.json();
-          return HttpResponse.json({ code: 200, data: { message: '新增剧本成功' }, message: '新增剧本成功' });
-        }),
-        http.post('/api/script/getScrptApi', async () => {
-          return HttpResponse.json({
-            code: 200,
-            data: [
-              {
-                id: Date.now(),
-                projectId: 12345,
-                name: '新剧本',
-                content: '新内容',
-                extractState: 0,
-                errorReason: null,
-                createTime: Date.now(),
-              },
-            ],
-            message: '成功',
-          });
+          captured = await request.json();
+          return ok({ message: '添加剧本成功' });
         }),
       );
 
-      await addScript({
-        projectId,
-        name: '新剧本',
-        content: '新内容',
-      });
+      await addScript({ projectId, name: '新剧本', content: '新内容' });
 
-      expect(capturedBody).toEqual({
+      expect(captured).toEqual({
         projectId: 12345,
         name: '新剧本',
         content: '新内容',
+        assets: [],
       });
     });
 
-    it('should fetch list after add and return newest script', async () => {
-      const newId = Date.now();
-
+    it('信封 code!==200 时抛出携带 message 的 ApiError', async () => {
       server.use(
-        http.post('/api/script/addScript', async () => {
-          return HttpResponse.json({ code: 200, data: { message: '新增剧本成功' }, message: '新增剧本成功' });
-        }),
-        http.post('/api/script/getScrptApi', async () => {
-          return HttpResponse.json({
-            code: 200,
-            data: [
-              { id: newId - 1000, projectId: 12345, name: '旧剧本', content: '', extractState: 0, errorReason: null, createTime: Date.now() },
-              { id: newId, projectId: 12345, name: '新剧本', content: '新内容', extractState: 0, errorReason: null, createTime: Date.now() },
-            ],
-            message: '成功',
-          });
-        }),
+        http.post('/api/script/addScript', async () =>
+          HttpResponse.json({ code: 400, data: null, message: '参数错误' }),
+        ),
       );
 
-      const result = await addScript({ projectId, name: '新剧本', content: '新内容' });
-      expect(result.id).toBe(String(newId));
-      expect(result.name).toBe('新剧本');
+      await expect(addScript({ projectId, name: 'x', content: 'y' })).rejects.toMatchObject({
+        name: 'ApiError',
+        message: '参数错误',
+      });
     });
   });
 
   describe('updateScript', () => {
-    it('should POST to /api/script/updateScript with id and optional fields', async () => {
-      let capturedBody: unknown;
+    it('全量发送 id/name/content/assets（后端四字段必填）', async () => {
+      let captured: unknown;
 
       server.use(
         http.post('/api/script/updateScript', async ({ request }) => {
-          capturedBody = await request.json();
-          return HttpResponse.json({ code: 200, data: { message: '更新剧本成功' }, message: '更新剧本成功' });
+          captured = await request.json();
+          return ok({ message: '编辑剧本成功' });
         }),
       );
 
       await updateScript({ id: '123', name: '更新名称', content: '更新内容' });
 
-      expect(capturedBody).toEqual({
+      expect(captured).toEqual({
         id: 123,
         name: '更新名称',
         content: '更新内容',
+        assets: [],
       });
-    });
-
-    it('should only send provided fields', async () => {
-      let capturedBody: unknown;
-
-      server.use(
-        http.post('/api/script/updateScript', async ({ request }) => {
-          capturedBody = await request.json();
-          return HttpResponse.json({ code: 200, data: { message: '更新剧本成功' }, message: '更新剧本成功' });
-        }),
-      );
-
-      await updateScript({ id: '123', name: '仅更新名称' });
-
-      expect(capturedBody).toEqual({
-        id: 123,
-        name: '仅更新名称',
-      });
-      expect(capturedBody).not.toHaveProperty('content');
     });
   });
 
   describe('deleteScript', () => {
-    it('should POST to /api/script/delScript with id', async () => {
-      let capturedBody: unknown;
+    it('按后端批量语义 POST {ids: [id]}', async () => {
+      let captured: unknown;
 
       server.use(
         http.post('/api/script/delScript', async ({ request }) => {
-          capturedBody = await request.json();
-          return HttpResponse.json({ code: 200, data: { message: '删除剧本成功' }, message: '删除剧本成功' });
+          captured = await request.json();
+          return ok({ message: '删除剧本成功' });
         }),
       );
 
       await deleteScript('123');
 
-      expect(capturedBody).toEqual({ id: 123 });
+      expect(captured).toEqual({ ids: [123] });
+    });
+  });
+
+  describe('projectHasAssets', () => {
+    it('getAllAssets 有资产 → true', async () => {
+      server.use(
+        http.post('/api/cornerScape/getAllAssets', async ({ request }) => {
+          expect(await request.json()).toEqual({ projectId: 12345 });
+          return ok([{ id: 1, name: '林晚', type: 'role' }]);
+        }),
+      );
+
+      await expect(projectHasAssets(projectId)).resolves.toBe(true);
+    });
+
+    it('getAllAssets 空 → false', async () => {
+      server.use(http.post('/api/cornerScape/getAllAssets', async () => ok([])));
+      await expect(projectHasAssets(projectId)).resolves.toBe(false);
     });
   });
 });

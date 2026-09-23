@@ -1,6 +1,6 @@
 /**
- * 后端形状的内存库（o_project / o_tasks），供 MSW 按后端真实契约模拟：
- * POST + JSON body + `{code, data, message}` 信封；id 为 number（Date.now()）。
+ * 后端形状的内存库（o_project / o_tasks / o_script / o_assets），供 MSW 按后端真实契约模拟：
+ * POST + JSON body + `{code, data, message}` 信封；id 为 number。
  * 仅用于测试与浏览器 mock，与真实后端无关。
  */
 
@@ -35,16 +35,41 @@ export type BackendTaskRow = {
   reason: string | null;
 };
 
+/** 后端 `o_script` 表一行（id 为自增 number，与真实后端一致） */
+export type BackendScriptRow = {
+  id: number;
+  projectId: number;
+  name: string;
+  content: string;
+  /** null=未提取（手动新增不写该列）、2=等待提取、0=正在提取、1=成功、-1=失败 */
+  extractState: number | null;
+  errorReason: string | null;
+  createTime: number;
+};
+
+/** 后端 `o_assets` 表一行（仅模拟门控所需的字段） */
+export type BackendAssetRow = {
+  id: number;
+  projectId: number;
+  name: string;
+  type: 'role' | 'scene' | 'tool';
+};
+
 /** 种子项目 id（数字，与后端一致） */
 export const DEMO_PROJECT_ID = 1758000000000;
 export const DEMO_PROJECT_NAME = '逆命木叶';
 
 let projects: BackendProjectRow[] = [];
 let tasks: BackendTaskRow[] = [];
+let scripts: BackendScriptRow[] = [];
+let assets: BackendAssetRow[] = [];
 /** generalStatistics 的模拟计数（真实后端按 o_assets/o_script 等表统计） */
 let statsByProject = new Map<number, ProjectStatistics>();
+/** o_script 自增 id 计数器（与真实后端一致，非时间戳） */
+let scriptIdSeq = 1;
 
 function seed(): void {
+  scriptIdSeq = 1;
   projects = [
     {
       id: DEMO_PROJECT_ID,
@@ -98,6 +123,18 @@ function seed(): void {
       reason: null,
     },
   ];
+  scripts = [
+    {
+      id: scriptIdSeq++,
+      projectId: DEMO_PROJECT_ID,
+      name: '第1集·异世囚笼',
+      content: '【木叶长廊 内 夜】\n木叶，夜晚长廊，月光冷白。\n△ 林晚扶着廊柱，指尖颤抖，眼神茫然又痛苦。\n鼬：深夜在此，有何目的。',
+      extractState: null,
+      errorReason: null,
+      createTime: 1758000050000,
+    },
+  ];
+  assets = [];
   statsByProject = new Map([
     [DEMO_PROJECT_ID, { roleCount: 2, scriptCount: 1, videoCount: 0, storyboardCount: 3 }],
   ]);
@@ -153,4 +190,54 @@ export function setProjectStatistics(projectId: number, counts: ProjectStatistic
 
 export function getProjectStatistics(projectId: number): ProjectStatistics {
   return statsByProject.get(projectId) ?? { roleCount: 0, scriptCount: 0, videoCount: 0, storyboardCount: 0 };
+}
+
+// ===== 剧本（复刻后端 o_script 契约）=====
+
+/** 镜像后端 getScrptApi 返回：每行带 relatedAssets（后端 leftJoin o_scriptAssets，无关联时为 []） */
+export function getBackendScripts(
+  projectId: number,
+  name?: string,
+): (BackendScriptRow & { relatedAssets: { id: number; name: string }[] })[] {
+  return scripts
+    .filter((s) => s.projectId === projectId)
+    .filter((s) => (name ? s.name.includes(name) : true))
+    .map((s) => ({ ...s, relatedAssets: [] }));
+}
+
+export function addBackendScript(row: Pick<BackendScriptRow, 'projectId' | 'name' | 'content'>): BackendScriptRow {
+  // 真实后端 addScript 不写 extractState（NULL）且不返回 id
+  const created: BackendScriptRow = {
+    ...row,
+    id: scriptIdSeq++,
+    extractState: null,
+    errorReason: null,
+    createTime: Date.now(),
+  };
+  scripts.push(created);
+  return { ...created };
+}
+
+export function updateBackendScript(
+  id: number,
+  patch: Pick<BackendScriptRow, 'name' | 'content'>,
+): BackendScriptRow | null {
+  const found = scripts.find((s) => s.id === id);
+  if (!found) return null;
+  Object.assign(found, patch);
+  return { ...found };
+}
+
+export function deleteBackendScripts(ids: number[]): void {
+  scripts = scripts.filter((s) => !ids.includes(s.id));
+}
+
+// ===== 资产（仅模拟门控所需的 getAllAssets）=====
+
+export function getBackendAssets(projectId: number): BackendAssetRow[] {
+  return assets.filter((a) => a.projectId === projectId).map((a) => ({ ...a }));
+}
+
+export function addBackendAssets(rows: Omit<BackendAssetRow, 'id'>[]): void {
+  for (const row of rows) assets.push({ ...row, id: Date.now() + assets.length });
 }

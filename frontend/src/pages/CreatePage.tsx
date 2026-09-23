@@ -1,8 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
-import { App, Button, Card, Flex, Input, Progress, Select, Typography, Tag } from 'antd';
+import { App, Button, Card, Flex, Input, Select, Typography, Tag } from 'antd';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { useTask } from '../hooks/useTask';
-import { addScript, createProject, fetchProject } from '../lib/api';
+import { addScript, createProject, fetchProject, listProjects } from '../lib/api';
 import { DEFAULT_PROJECT_FORM } from '../config/project';
 import { errorMessage } from '../lib/errors';
 import { validateScriptFileContent, validateScriptText } from '../lib/scriptValidation';
@@ -41,7 +40,6 @@ export default function CreatePage() {
   const [paste, setPaste] = useState(SAMPLE);
   const [source, setSource] = useState<ReadySource | null>(null);
   const [fileName, setFileName] = useState('逆命木叶');
-  const [taskId, setTaskId] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [category, setCategory] = useState('女频-轻小说');
   const [style, setStyle] = useState('赛博朋克电影');
@@ -49,15 +47,15 @@ export default function CreatePage() {
   const [sceneRatio, setSceneRatio] = useState('16:9');
   const [imageQuality, setImageQuality] = useState('2K');
 
-  const { task } = useTask(taskId, {
-    intervalMs: 2500,
-    onSucceeded: (t) => {
-      const result = t.result as { projectId?: string } | undefined;
-      const nextId = result?.projectId ?? projectIdFromUrl;
-      if (nextId) navigate(`/project/${nextId}/outline`);
-    },
-    onFailed: (t) => message.error(t.error ?? '创作任务失败'),
-  });
+  // 无 URL 项目上下文时，可把剧本提交进已有项目（后端真实列表）或新建项目
+  const [projectOptions, setProjectOptions] = useState<Project[]>([]);
+  const [selectedProjectId, setSelectedProjectId] = useState<string>('new');
+  useEffect(() => {
+    if (projectIdFromUrl) return;
+    void listProjects()
+      .then(({ projects }) => setProjectOptions(projects))
+      .catch((err) => message.error(errorMessage(err, '加载项目列表失败')));
+  }, [projectIdFromUrl, message]);
 
   const readyHint = useMemo(() => {
     if (!source) return '';
@@ -101,17 +99,22 @@ export default function CreatePage() {
     try {
       let projectId = projectIdFromUrl;
       if (!projectId) {
-        const created = await createProject({
-          name: fileName.trim() || '未命名项目',
-          type: category,
-          artStyle: style,
-          videoRatio,
-          imageQuality,
-          // 创作页暂不选模型，沿用项目表单默认值（模型选项见 config/project.ts）
-          imageModel: DEFAULT_PROJECT_FORM.imageModel,
-          videoModel: DEFAULT_PROJECT_FORM.videoModel,
-        });
-        projectId = created.id;
+        if (selectedProjectId !== 'new') {
+          // 提交进已有项目
+          projectId = selectedProjectId;
+        } else {
+          const created = await createProject({
+            name: fileName.trim() || '未命名项目',
+            type: category,
+            artStyle: style,
+            videoRatio,
+            imageQuality,
+            // 创作页暂不选模型，沿用项目表单默认值（模型选项见 config/project.ts）
+            imageModel: DEFAULT_PROJECT_FORM.imageModel,
+            videoModel: DEFAULT_PROJECT_FORM.videoModel,
+          });
+          projectId = created.id;
+        }
       }
       const scriptName = fileName.trim() || '未命名剧本';
       const content = source.kind === 'paste' ? source.text : (source.text || '');
@@ -122,8 +125,8 @@ export default function CreatePage() {
       });
       message.success('剧本已保存到后端');
       navigate(`/project/${projectId}/scripts`);
-    } catch {
-      message.error('提交剧本失败');
+    } catch (err) {
+      message.error(errorMessage(err, '提交剧本失败'));
     } finally {
       setSubmitting(false);
     }
@@ -259,7 +262,6 @@ export default function CreatePage() {
                 onClick={() => {
                   setSource(null);
                   setPanel('empty');
-                  setTaskId(null);
                 }}
               >
                 删除并重选
@@ -277,10 +279,24 @@ export default function CreatePage() {
           <Typography.Text type="secondary" style={{ fontSize: 11.5, display: 'block', marginBottom: 6 }}>
             选择项目
           </Typography.Text>
-          <Select style={{ width: '100%', marginBottom: 12 }} defaultValue="默认项目">
-            <Select.Option value="default">默认项目</Select.Option>
-            <Select.Option value="nming">逆命木叶企划</Select.Option>
-          </Select>
+          {projectIdFromUrl ? (
+            <Select
+              style={{ width: '100%', marginBottom: 12 }}
+              value={savedProject?.name || '当前项目'}
+              disabled
+              options={[{ value: savedProject?.name || '当前项目' }]}
+            />
+          ) : (
+            <Select
+              style={{ width: '100%', marginBottom: 12 }}
+              value={selectedProjectId}
+              onChange={setSelectedProjectId}
+              options={[
+                { value: 'new', label: '＋ 新建项目（用左侧参数创建）' },
+                ...projectOptions.map((p) => ({ value: p.id, label: p.name || '未命名项目' })),
+              ]}
+            />
+          )}
           <Flex gap={8} style={{ marginBottom: 12 }}>
             <div style={{ flex: 1 }}>
               <Typography.Text type="secondary" style={{ fontSize: 11.5, display: 'block', marginBottom: 6 }}>
@@ -358,22 +374,11 @@ export default function CreatePage() {
               />
             </div>
           </Flex>
-          {task ? (
-            <div style={{ margin: '16px 0' }}>
-              <Progress percent={task.progress} strokeColor={{ from: '#8b5cf6', to: '#6366f1' }} />
-              <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-                {task.status === 'pending' && '排队中…'}
-                {task.status === 'running' && '剧本精编中…'}
-                {task.status === 'succeeded' && '✓ 大纲任务完成'}
-                {task.status === 'failed' && (task.error ?? '失败')}
-              </Typography.Text>
-            </div>
-          ) : null}
           <Flex justify="flex-end" style={{ marginTop: 18 }}>
             <Button
               type="primary"
               className="ds-grad ds-pill"
-              loading={submitting || (task != null && task.status !== 'failed')}
+              loading={submitting}
               onClick={() => void startCreate()}
             >
               ✦ 立即创作

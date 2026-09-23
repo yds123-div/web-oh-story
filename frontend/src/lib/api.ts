@@ -39,8 +39,12 @@ import type {
  * 后端全部接口为 POST + JSON body + `{code, data, message}` 信封，
  * REST 动词 / 路径参数 / 字段映射 / id 数字↔字符串 的翻译全部收敛在本模块内。
  */
-async function postJson<T>(path: string, body: Record<string, unknown>): Promise<T> {
-  return apiFetch<T>(path, { method: 'POST', body: JSON.stringify(body) });
+async function postJson<T>(
+  path: string,
+  body: Record<string, unknown>,
+  init?: RequestInit,
+): Promise<T> {
+  return apiFetch<T>(path, { method: 'POST', body: JSON.stringify(body), ...init });
 }
 
 // ===== 项目（后端 o_project）=====
@@ -162,8 +166,12 @@ export async function patchProject(id: string, body: { name: string }): Promise<
 }
 
 /** 单项目（getSingleProject 翻译），用于打开已有项目时还原配置 */
-export async function fetchProject(id: string): Promise<Project> {
-  const rows = await postJson<ProjectRow[]>('/api/general/getSingleProject', { id: Number(id) });
+export async function fetchProject(id: string, signal?: AbortSignal): Promise<Project> {
+  const rows = await postJson<ProjectRow[]>(
+    '/api/general/getSingleProject',
+    { id: Number(id) },
+    { signal },
+  );
   const current = rows?.[0];
   if (!current) throw new Error('项目不存在');
   return toProject(current);
@@ -398,7 +406,7 @@ export function submitCreativeTask(body: CreativeTaskBody): Promise<SubmitTaskRe
 
 // ===== 剧本（后端 o_script）=====
 
-/** 后端 `o_script` 表一行（id 为 number） - 仅用于测试导出 */
+/** 后端 `o_script` 表一行（id 为自增 number） - 仅用于测试导出 */
 export type ScriptRow = {
   id: number;
   projectId: number | null;
@@ -409,47 +417,78 @@ export type ScriptRow = {
   createTime: number | null;
 };
 
+/** 后端 extractState 整数 → 前端命名状态（五态语义只在此处翻译一次） */
+function toExtractStatus(state: number | null): Script['extractStatus'] {
+  switch (state) {
+    case 1:
+      return 'done';
+    case 2:
+      return 'waiting';
+    case 0:
+      return 'extracting';
+    case -1:
+      return 'failed';
+    default:
+      return 'none';
+  }
+}
+
 function toScript(row: ScriptRow): Script {
   return {
     id: String(row.id),
     projectId: row.projectId != null ? String(row.projectId) : '',
     name: row.name ?? '',
     content: row.content ?? '',
-    extractState: row.extractState ?? 0,
+    extractStatus: toExtractStatus(row.extractState),
     errorReason: row.errorReason ?? null,
     createTime: typeof row.createTime === 'number' ? new Date(row.createTime).toISOString() : '',
   };
 }
 
-export async function listScripts(projectId: string): Promise<ScriptListResponse> {
-  const rows = await postJson<ScriptRow[]>('/api/script/getScrptApi', { projectId: Number(projectId) });
+export async function listScripts(projectId: string, signal?: AbortSignal): Promise<ScriptListResponse> {
+  const rows = await postJson<ScriptRow[]>(
+    '/api/script/getScrptApi',
+    { projectId: Number(projectId) },
+    { signal },
+  );
   return { scripts: (rows ?? []).map(toScript) };
 }
 
-export async function addScript(body: AddScriptBody): Promise<Script> {
+export async function addScript(body: AddScriptBody): Promise<void> {
+  // 后端 zod 四字段必填；assets 键必须存在（空数组=不建剧本-资产关联）
   await postJson('/api/script/addScript', {
     projectId: Number(body.projectId),
     name: body.name,
     content: body.content,
+    assets: [],
   });
-  // 后端 addScript 只返回 message；剧本 id 是 Date.now() 时间戳，重新拉列表、取最大 id 即为本次新建
-  const { scripts } = await listScripts(body.projectId);
-  const newest = scripts.reduce<Script | null>(
-    (acc, s) => (acc == null || Number(s.id) > Number(acc.id) ? s : acc),
-    null,
-  );
-  if (!newest) throw new Error('新建剧本后未能在列表中找到它');
-  return newest;
 }
 
 export async function updateScript(body: UpdateScriptBody): Promise<void> {
+  // 后端 zod 四字段必填；assets 传空数组=不改动剧本-资产关联
   await postJson('/api/script/updateScript', {
     id: Number(body.id),
-    ...(body.name != null ? { name: body.name } : {}),
-    ...(body.content != null ? { content: body.content } : {}),
+    name: body.name,
+    content: body.content,
+    assets: [],
   });
 }
 
 export async function deleteScript(id: string): Promise<void> {
-  await postJson('/api/script/delScript', { id: Number(id) });
+  // 后端 delScript 是批量语义（ids 数组）
+  await postJson('/api/script/delScript', { ids: [Number(id)] });
+}
+
+/**
+ * 项目下是否有资产（角色/场景/道具）。走 cornerScape/getAllAssets：
+ * 返回全部父资产（排除 clip/audio），比 generalStatistics 可靠——
+ * 后者按中文 type（"角色"/"分镜"）统计，但代码只写英文 type，计数恒为 0。
+ */
+export async function projectHasAssets(projectId: string, signal?: AbortSignal): Promise<boolean> {
+  const rows = await postJson<unknown[] | null>(
+    '/api/cornerScape/getAllAssets',
+    { projectId: Number(projectId) },
+    { signal },
+  );
+  return (rows ?? []).length > 0;
 }

@@ -28,13 +28,18 @@ import {
 } from './db';
 import {
   addBackendProject,
+  addBackendScript,
   deleteBackendProject,
+  deleteBackendScripts,
   findBackendProject,
+  getBackendAssets,
   getBackendProjects,
+  getBackendScripts,
   getBackendTaskById,
   getBackendTasks,
   getProjectStatistics,
   updateBackendProject,
+  updateBackendScript,
 } from './backendDb';
 
 function netDelay(ms: number): Promise<void> {
@@ -50,7 +55,7 @@ function envelope(data: unknown, message = '成功') {
 /** 复刻后端 validateFields 失败形状：HTTP 400 + `{message: '参数错误', errors}`（非信封） */
 function validateBody(
   body: Record<string, unknown>,
-  shape: Record<string, 'string' | 'number' | 'optionalNumber' | 'optionalString'>,
+  shape: Record<string, 'string' | 'number' | 'optionalNumber' | 'optionalString' | 'numberArray'>,
 ) {
   const errors: string[] = [];
   for (const [field, rule] of Object.entries(shape)) {
@@ -59,6 +64,13 @@ function validateBody(
     if (rule === 'string' && typeof value !== 'string') errors.push(`字段 ${field} 应为字符串`);
     if (rule === 'optionalNumber' && value != null && typeof value !== 'number') errors.push(`字段 ${field} 应为数字`);
     if (rule === 'optionalString' && value != null && typeof value !== 'string') errors.push(`字段 ${field} 应为字符串`);
+    // 复刻 zod 的 z.array(z.number())：键必须存在且为数字数组
+    if (
+      rule === 'numberArray' &&
+      (!Array.isArray(value) || value.some((v) => typeof v !== 'number'))
+    ) {
+      errors.push(`字段 ${field} 应为数字数组`);
+    }
   }
   if (errors.length === 0) return null;
   return HttpResponse.json({ message: '参数错误', errors }, { status: 400 });
@@ -448,28 +460,15 @@ export const handlers = [
     return HttpResponse.json({ taskId: task.taskId }, { status: 202 });
   }),
 
-  // ===== 剧本（后端 o_script）=====
+  // ===== 剧本（后端 o_script 契约：zod 四字段必填 / 批量删除）=====
 
   http.post('/api/script/getScrptApi', async ({ request }) => {
     await netDelay(80);
     const body = (await request.json()) as Record<string, unknown>;
-    const invalid = validateBody(body, { projectId: 'optionalNumber' });
+    const invalid = validateBody(body, { projectId: 'number', name: 'optionalString' });
     if (invalid) return invalid;
-    // Mock 数据：返回测试剧本
-    const mockScripts = body.projectId
-      ? [
-          {
-            id: Date.now(),
-            projectId: Number(body.projectId),
-            name: '第1集·异世囚笼',
-            content: '【木叶长廊 内 夜】\n木叶，夜晚长廊，月光冷白。\n△ 林晚扶着廊柱，指尖颤抖，眼神茫然又痛苦，身着木叶制式素色和服。\n林晚（低声独白）：明明只是在家看火影……一睁眼，就来到了这里。\n△ 鼬缓步从阴影走出，红瞳微光，神色淡漠。\n鼬：深夜在此，有何目的。长老安排你，来监视我？',
-            extractState: 0,
-            errorReason: null,
-            createTime: Date.now(),
-          },
-        ]
-      : [];
-    return envelope(mockScripts);
+    const name = typeof body.name === 'string' && body.name ? body.name : undefined;
+    return envelope(getBackendScripts(Number(body.projectId), name));
   }),
 
   http.post('/api/script/addScript', async ({ request }) => {
@@ -479,9 +478,15 @@ export const handlers = [
       projectId: 'number',
       name: 'string',
       content: 'string',
+      assets: 'numberArray',
     });
     if (invalid) return invalid;
-    return envelope({ message: '新增剧本成功' }, '新增剧本成功');
+    addBackendScript({
+      projectId: Number(body.projectId),
+      name: String(body.name),
+      content: String(body.content),
+    });
+    return envelope({ message: '添加剧本成功' }, '添加剧本成功');
   }),
 
   http.post('/api/script/updateScript', async ({ request }) => {
@@ -489,18 +494,33 @@ export const handlers = [
     const body = (await request.json()) as Record<string, unknown>;
     const invalid = validateBody(body, {
       id: 'number',
-      name: 'optionalString',
-      content: 'optionalString',
+      name: 'string',
+      content: 'string',
+      assets: 'numberArray',
     });
     if (invalid) return invalid;
-    return envelope({ message: '更新剧本成功' }, '更新剧本成功');
+    updateBackendScript(Number(body.id), {
+      name: String(body.name),
+      content: String(body.content),
+    });
+    return envelope({ message: '编辑剧本成功' }, '编辑剧本成功');
   }),
 
   http.post('/api/script/delScript', async ({ request }) => {
     await netDelay(80);
     const body = (await request.json()) as Record<string, unknown>;
-    const invalid = validateBody(body, { id: 'number' });
+    const invalid = validateBody(body, { ids: 'numberArray' });
     if (invalid) return invalid;
+    deleteBackendScripts((body.ids as number[]).map(Number));
     return envelope({ message: '删除剧本成功' }, '删除剧本成功');
+  }),
+
+  // 门控数据源（getAllAssets：项目全部父资产，排除 clip/audio）
+  http.post('/api/cornerScape/getAllAssets', async ({ request }) => {
+    await netDelay(60);
+    const body = (await request.json()) as Record<string, unknown>;
+    const invalid = validateBody(body, { projectId: 'number' });
+    if (invalid) return invalid;
+    return envelope(getBackendAssets(Number(body.projectId)));
   }),
 ];

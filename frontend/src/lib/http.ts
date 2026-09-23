@@ -108,7 +108,9 @@ export async function apiFetch<T>(path: string, init: RequestInit = {}): Promise
   let response: Response;
   try {
     response = await fetch(path, { ...init, headers });
-  } catch {
+  } catch (err) {
+    // 调用方主动取消（AbortController，如 StrictMode 重挂载）：原样抛出，不按网络错误处理
+    if (err instanceof DOMException && err.name === 'AbortError') throw err;
     notifyNetworkError();
     throw new NetworkError();
   }

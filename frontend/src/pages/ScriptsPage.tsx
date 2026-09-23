@@ -2,43 +2,61 @@ import { useEffect, useState } from 'react';
 import { App, Button, Input, Modal, Tag, Typography } from 'antd';
 import { useNavigate, useParams } from 'react-router-dom';
 import { WorkflowHeader } from '../components/WorkflowHeader';
-import { deleteScript, fetchProject, listScripts, updateScript } from '../lib/api';
-import { useWorkflowStore } from '../stores/workflowStore';
-import type { Script } from '../types/api';
+import { useWorkflowStep } from '../hooks/useWorkflowStep';
+import { deleteScript, fetchProject, updateScript } from '../lib/api';
+import { errorMessage } from '../lib/errors';
+import type { Script, ScriptExtractStatus } from '../types/api';
+
+/** 命名提取状态 → 展示标签（状态翻译已在 API 层完成，此处只配 UI） */
+function extractStatusTag(status: ScriptExtractStatus) {
+  switch (status) {
+    case 'done':
+      return <Tag color="success">已提取</Tag>;
+    case 'waiting':
+    case 'extracting':
+      return <Tag color="warning">{status === 'extracting' ? '提取中' : '等待提取'}</Tag>;
+    case 'failed':
+      return <Tag color="error">提取失败</Tag>;
+    case 'none':
+      return <Tag>未提取</Tag>;
+  }
+}
 
 export default function ScriptsPage() {
-  const { message } = App.useApp();
+  const { message, modal } = App.useApp();
   const { id = '' } = useParams();
   const navigate = useNavigate();
-  const setUnlocked = useWorkflowStore((s) => s.setUnlocked);
+  const { scripts: fetchedScripts } = useWorkflowStep();
   const [scripts, setScripts] = useState<Script[]>([]);
   const [projectName, setProjectName] = useState('');
+  const [loading, setLoading] = useState(true);
   const [editingScript, setEditingScript] = useState<Script | null>(null);
   const [editingName, setEditingName] = useState('');
   const [editingContent, setEditingContent] = useState('');
   const [saving, setSaving] = useState(false);
 
+  // 项目名是页面自身所需（门控查询不含），单独取
   useEffect(() => {
-    let cancelled = false;
+    const controller = new AbortController();
     const boot = async () => {
       try {
-        const [project, data] = await Promise.all([fetchProject(id), listScripts(id)]);
-        if (cancelled) return;
+        const project = await fetchProject(id, controller.signal);
         setProjectName(project.name);
-        setScripts(data.scripts);
-        // 剧本存在即可进入资产步骤
-        if (data.scripts.length > 0) {
-          setUnlocked(id, 2);
-        }
       } catch (err) {
-        if (!cancelled) message.error('加载剧本失败');
+        if (err instanceof DOMException && err.name === 'AbortError') return;
+        message.error(errorMessage(err, '加载项目失败'));
       }
     };
     void boot();
-    return () => {
-      cancelled = true;
-    };
-  }, [id, message, setUnlocked]);
+    return () => controller.abort();
+  }, [id, message]);
+
+  // 剧本列表消费 Provider 的门控查询结果：按自增 id 排序（同毫秒也稳定），列表位置即集数
+  useEffect(() => {
+    if (fetchedScripts == null) return;
+    setScripts([...fetchedScripts].sort((a, b) => Number(a.id) - Number(b.id)));
+    setLoading(false);
+  }, [fetchedScripts]);
 
   const onEdit = (script: Script) => {
     setEditingScript(script);
@@ -64,17 +82,17 @@ export default function ScriptsPage() {
       );
       setEditingScript(null);
       message.success('剧本已更新');
-    } catch {
-      message.error('更新失败');
+    } catch (err) {
+      message.error(errorMessage(err, '更新失败'));
     } finally {
       setSaving(false);
     }
   };
 
   const onDelete = async (scriptId: string) => {
-    Modal.confirm({
+    modal.confirm({
       title: '确认删除',
-      content: '删除后无法恢复，确定要删除这个剧本吗？',
+      content: '删除后无法恢复（关联分镜、视频将一并删除），确定要删除这个剧本吗？',
       okText: '删除',
       okButtonProps: { danger: true },
       cancelText: '取消',
@@ -83,18 +101,16 @@ export default function ScriptsPage() {
           await deleteScript(scriptId);
           setScripts(scripts.filter((s) => s.id !== scriptId));
           message.success('剧本已删除');
-        } catch {
-          message.error('删除失败');
+        } catch (err) {
+          message.error(errorMessage(err, '删除失败'));
         }
       },
     });
   };
 
-  const extractStateTag = (state: number) => {
-    if (state === 0) return <Tag color="default">未提取</Tag>;
-    if (state === 1) return <Tag color="processing">提取中</Tag>;
-    if (state === 2) return <Tag color="success">已提取</Tag>;
-    return <Tag color="default">未知</Tag>;
+  const onExtract = () => {
+    message.info('AI 提取资产将在资产工坊开放（下一阶段接入）');
+    navigate(`/project/${id}/assets`);
   };
 
   return (
@@ -109,7 +125,7 @@ export default function ScriptsPage() {
         </div>
 
         <div style={{ marginTop: 22 }}>
-          {scripts.length === 0 ? (
+          {loading ? null : scripts.length === 0 ? (
             <div
               style={{
                 textAlign: 'center',
@@ -134,7 +150,7 @@ export default function ScriptsPage() {
               </div>
             </div>
           ) : (
-            scripts.map((script) => (
+            scripts.map((script, idx) => (
               <div
                 key={script.id}
                 style={{
@@ -160,13 +176,14 @@ export default function ScriptsPage() {
                       fontSize: 15,
                       flexShrink: 0,
                     }}
+                    title={`第 ${idx + 1} 集`}
                   >
-                    {Number(script.id)}
+                    {idx + 1}
                   </div>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
                       <h4 style={{ margin: 0, fontSize: 15 }}>{script.name}</h4>
-                      {extractStateTag(script.extractState)}
+                      {extractStatusTag(script.extractStatus)}
                       <Tag color="default">{script.content.length} 字</Tag>
                     </div>
                     <Typography.Text
@@ -175,23 +192,21 @@ export default function ScriptsPage() {
                     >
                       {script.content.slice(0, 120)}{script.content.length > 120 ? '……' : ''}
                     </Typography.Text>
-                    {script.errorReason ? (
+                    {script.extractStatus === 'failed' && script.errorReason ? (
                       <Typography.Text type="danger" style={{ fontSize: 12, display: 'block', marginBottom: 8 }}>
                         提取失败：{script.errorReason}
                       </Typography.Text>
                     ) : null}
                     <div style={{ display: 'flex', gap: 8 }}>
-                      <Button
-                        size="small"
-                        onClick={() => onEdit(script)}
-                      >
+                      {(script.extractStatus === 'none' || script.extractStatus === 'failed') ? (
+                        <Button size="small" type="primary" className="ds-grad ds-pill" onClick={onExtract}>
+                          🤖 AI 提取资产
+                        </Button>
+                      ) : null}
+                      <Button size="small" onClick={() => onEdit(script)}>
                         ✏️ 编辑
                       </Button>
-                      <Button
-                        size="small"
-                        danger
-                        onClick={() => onDelete(script.id)}
-                      >
+                      <Button size="small" danger onClick={() => onDelete(script.id)}>
                         删除
                       </Button>
                     </div>

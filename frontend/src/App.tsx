@@ -2,6 +2,7 @@ import { lazy, Suspense } from 'react';
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 import { AppLayout } from './layout/AppLayout';
 import { WorkflowGate } from './components/WorkflowGate';
+import { WorkflowStepProvider } from './hooks/useWorkflowStep';
 import { PlaceholderPage } from './pages/PlaceholderPage';
 
 const HomePage = lazy(() => import('./pages/HomePage'));
@@ -42,30 +43,43 @@ export default function App() {
             <Route path="/node" element={<NodeCanvasPage />} />
             <Route path="/plaza" element={<PlazaPage />} />
             <Route path="/space" element={<SpacePage />} />
-            <Route path="/project/:id/scripts" element={<ScriptsPage />} />
+            <Route
+              path="/project/:id/scripts"
+              element={
+                <WorkflowStepProvider>
+                  <ScriptsPage />
+                </WorkflowStepProvider>
+              }
+            />
             <Route path="/project/:id/outline" element={<OutlinePage />} />
             <Route
               path="/project/:id/assets"
               element={
-                <WorkflowGate page="assets">
-                  <AssetsPage />
-                </WorkflowGate>
+                <WorkflowStepProvider>
+                  <WorkflowGate page="assets">
+                    <AssetsPage />
+                  </WorkflowGate>
+                </WorkflowStepProvider>
               }
             />
             <Route
               path="/project/:id/episodes"
               element={
-                <WorkflowGate page="episodes">
-                  <EpisodesPage />
-                </WorkflowGate>
+                <WorkflowStepProvider>
+                  <WorkflowGate page="episodes">
+                    <EpisodesPage />
+                  </WorkflowGate>
+                </WorkflowStepProvider>
               }
             />
             <Route
               path="/project/:id/episode/:episodeId"
               element={
-                <WorkflowGate page="studio">
-                  <StudioPage />
-                </WorkflowGate>
+                <WorkflowStepProvider>
+                  <WorkflowGate page="studio">
+                    <StudioPage />
+                  </WorkflowGate>
+                </WorkflowStepProvider>
               }
             />
             <Route path="*" element={<Navigate to="/" replace />} />

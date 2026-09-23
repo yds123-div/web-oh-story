@@ -1,20 +1,21 @@
 import { setupServer } from 'msw/node';
 import {
+  addScript,
   completeAssets,
   createProject,
   deleteProject,
+  deleteScript,
   finalizeOutline,
   getCredits,
   getEpisode,
   getOutline,
   getProjectStatistics,
   getTask,
-  getWorkflow,
   listAssets,
-  listEpisodes,
   listModels,
   listNotifications,
   listProjects,
+  listScripts,
   listSegments,
   listTaskCategories,
   listTaskProjects,
@@ -23,13 +24,15 @@ import {
   patchAsset,
   patchProject,
   patchSegment,
+  projectHasAssets,
   submitAssetImageTask,
   submitEpisodeExportTask,
   submitEpisodeSplitTask,
   submitOutlineTask,
   submitSegmentVideoTask,
+  updateScript,
 } from '../lib/api';
-import { DEMO_PROJECT_ID, resetBackendDb } from './backendDb';
+import { addBackendAssets, DEMO_PROJECT_ID, resetBackendDb } from './backendDb';
 import { getTaskRecord, resetDb } from './db';
 import { handlers } from './handlers';
 
@@ -341,6 +344,71 @@ describe('episode export', () => {
       downloadUrl: '/demo-assets/clip1.mp4',
       fileName: '逆命木叶_第1集_720P.mp4',
     });
+  });
+});
+
+describe('MSW script contracts（镜像后端 zod 校验）', () => {
+  it('lists seeded scripts for the demo project with status none（手动新增不写 extractState）', async () => {
+    const { scripts } = await listScripts(String(DEMO_PROJECT_ID));
+    expect(scripts.map((s) => s.name)).toContain('第1集·异世囚笼');
+    expect(scripts[0].extractStatus).toBe('none');
+  });
+
+  it('adds a script then appears in the list（自增 id 而非时间戳）', async () => {
+    await addScript({
+      projectId: String(DEMO_PROJECT_ID),
+      name: '第2集·月下对峙',
+      content: '第二集内容',
+    });
+    const { scripts } = await listScripts(String(DEMO_PROJECT_ID));
+    const added = scripts.find((s) => s.name === '第2集·月下对峙');
+    expect(added).toBeDefined();
+    // id 是自增小整数（1、2…），不是 Date.now() 时间戳
+    expect(Number(added!.id)).toBeLessThan(1000);
+    expect(added!.extractStatus).toBe('none');
+  });
+
+  it('rejects addScript missing the assets key（后端 zod 必填，HTTP 400 非信封）', async () => {
+    const res = await fetch('/api/script/addScript', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ projectId: DEMO_PROJECT_ID, name: 'x', content: 'y' }),
+    });
+    expect(res.status).toBe(400);
+    const body = (await res.json()) as { message?: string };
+    expect(body.message).toBe('参数错误');
+  });
+
+  it('rejects delScript with a single id instead of ids array', async () => {
+    const res = await fetch('/api/script/delScript', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: 1 }),
+    });
+    expect(res.status).toBe(400);
+  });
+
+  it('updates then deletes a script and both persist', async () => {
+    await addScript({ projectId: String(DEMO_PROJECT_ID), name: '待编辑', content: '旧内容' });
+    const { scripts } = await listScripts(String(DEMO_PROJECT_ID));
+    const target = scripts.find((s) => s.name === '待编辑')!;
+
+    await updateScript({ id: target.id, name: '已编辑', content: '新内容' });
+    const afterUpdate = await listScripts(String(DEMO_PROJECT_ID));
+    expect(afterUpdate.scripts.find((s) => s.id === target.id)).toMatchObject({
+      name: '已编辑',
+      content: '新内容',
+    });
+
+    await deleteScript(target.id);
+    const afterDelete = await listScripts(String(DEMO_PROJECT_ID));
+    expect(afterDelete.scripts.some((s) => s.id === target.id)).toBe(false);
+  });
+
+  it('projectHasAssets reflects getAllAssets（门控数据源）', async () => {
+    await expect(projectHasAssets(String(DEMO_PROJECT_ID))).resolves.toBe(false);
+    addBackendAssets([{ projectId: DEMO_PROJECT_ID, name: '林晚', type: 'role' }]);
+    await expect(projectHasAssets(String(DEMO_PROJECT_ID))).resolves.toBe(true);
   });
 });
 
