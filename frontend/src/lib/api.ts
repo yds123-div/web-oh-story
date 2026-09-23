@@ -4,6 +4,8 @@ import type {
   AddScriptBody,
   Asset,
   AssetListResponse,
+  AssetType,
+  CreateAssetBody,
   CreateProjectBody,
   CreateSegmentBody,
   CreditsResponse,
@@ -32,6 +34,7 @@ import type {
   TaskStateName,
   TaskStatus,
   TemplateListResponse,
+  UpdateAssetBody,
   UpdateScriptBody,
   VideoTaskBody,
   WorkflowState,
@@ -325,20 +328,155 @@ export function getWorkflow(projectId: string): Promise<WorkflowState> {
   return apiFetch(`/api/projects/${projectId}/workflow`);
 }
 
-export function listAssets(projectId: string): Promise<AssetListResponse> {
-  return apiFetch(`/api/projects/${projectId}/assets`);
+// ===== 资产（后端 o_assets / o_image）=====
+
+/**
+ * 类型枚举唯一翻译表：前端资产类型 ↔ 后端 type。
+ * 后端只有 role/scene/tool；素材（material）无后端对应（getAssetsApi 按 type 过滤查不到）。
+ */
+export const BACKEND_ASSET_TYPES = {
+  character: 'role',
+  scene: 'scene',
+  prop: 'tool',
+} as const satisfies Record<Exclude<AssetType, 'material'>, string>;
+
+const FRONTEND_ASSET_TYPES: Record<string, AssetType> = {
+  role: 'character',
+  scene: 'scene',
+  tool: 'prop',
+};
+
+/** getAssetsApi 返回的 o_assets join o_image 行（select o_assets.* + filePath/state，另拼 src/sonAssets） */
+export type AssetRow = {
+  id: number;
+  projectId: number | null;
+  name: string | null;
+  type: string | null;
+  describe: string | null;
+  prompt: string | null;
+  remark: string | null;
+  imageId: number | null;
+  /** o_image 静态托管 URL（后端拼好） */
+  src?: string | null;
+  /** 子资产（多形象），本页暂不消费 */
+  sonAssets?: unknown[];
+};
+
+function toAsset(row: AssetRow): Asset {
+  return {
+    id: String(row.id),
+    projectId: row.projectId != null ? String(row.projectId) : '',
+    // 类型过滤查询只会命中 role/scene/tool，兜底 material 仅防御不可达分支
+    type: FRONTEND_ASSET_TYPES[row.type ?? ''] ?? 'material',
+    name: row.name ?? '',
+    description: row.describe ?? '',
+    imageUrl: row.src ?? null,
+    prompt: row.prompt ?? null,
+    remark: row.remark ?? null,
+  };
 }
 
-export function submitAssetImageTask(assetId: string): Promise<SubmitTaskResponse> {
-  return apiFetch(`/api/assets/${assetId}/image-tasks`, { method: 'POST' });
+export type AssetListParams = {
+  /** 省略时按后端三类枚举并行取回合并（后端接口必须按单一 type 查询） */
+  type?: AssetType;
+  page?: number;
+  limit?: number;
+  /** 按名称模糊搜索（后端 like） */
+  name?: string;
+};
+
+async function fetchAssetsPage(
+  projectId: string,
+  type: Exclude<AssetType, 'material'>,
+  params: AssetListParams,
+): Promise<{ data: AssetRow[]; total: number }> {
+  const body: Record<string, unknown> = {
+    projectId: Number(projectId),
+    type: BACKEND_ASSET_TYPES[type],
+    page: params.page ?? 1,
+    limit: params.limit ?? 10,
+  };
+  if (params.name) body.name = params.name;
+  const data = await postJson<{ data: AssetRow[]; total: number } | null>(
+    '/api/assets/getAssetsApi',
+    body,
+  );
+  return { data: data?.data ?? [], total: data?.total ?? 0 };
 }
 
-export function patchAsset(assetId: string, body: { consistencyLocked?: boolean; currentAlt?: number }): Promise<Asset> {
-  return apiFetch(`/api/assets/${assetId}`, { method: 'PATCH', body: JSON.stringify(body) });
+export async function listAssets(
+  projectId: string,
+  params: AssetListParams = {},
+): Promise<AssetListResponse> {
+  if (params.type && params.type !== 'material') {
+    const { data, total } = await fetchAssetsPage(projectId, params.type, params);
+    return { assets: data.map(toAsset), total };
+  }
+  // 未指定类型：三类并行取回合并（material 无后端对应，恒为空）。
+  // 合并结果不分页，每类取前 100 条 —— 供资产库 @ 引用等全量场景使用。
+  const types: (Exclude<AssetType, 'material'>)[] = ['character', 'scene', 'prop'];
+  const pages = await Promise.all(
+    types.map((type) => fetchAssetsPage(projectId, type, { ...params, page: 1, limit: 100 })),
+  );
+  const assets = pages.flatMap((p) => p.data.map(toAsset));
+  return { assets, total: pages.reduce((acc, p) => acc + p.total, 0) };
 }
 
-export function completeAssets(projectId: string): Promise<WorkflowState> {
-  return apiFetch(`/api/projects/${projectId}/assets/complete`, { method: 'POST' });
+/** 单类型资产总数（类型卡片计数用，limit 1 只取 total） */
+export async function countAssets(
+  projectId: string,
+  type: Exclude<AssetType, 'material'>,
+): Promise<number> {
+  const { total } = await fetchAssetsPage(projectId, type, { page: 1, limit: 1 });
+  return total;
+}
+
+/** 手工新增资产（名称/描述/类型），后端只回 message，调用方自行重查列表 */
+export async function createAsset(body: CreateAssetBody): Promise<void> {
+  const payload: Record<string, unknown> = {
+    name: body.name,
+    describe: body.description,
+    type: BACKEND_ASSET_TYPES[body.type],
+    projectId: Number(body.projectId),
+  };
+  if (body.prompt != null) payload.prompt = body.prompt;
+  await postJson('/api/assets/addAssets', payload);
+}
+
+/** 编辑资产（名称/描述/提示词/备注）；prompt/remark 原样回传，避免后端全量 update 清空 */
+export async function updateAsset(body: UpdateAssetBody): Promise<void> {
+  await postJson('/api/assets/updateAssets', {
+    id: Number(body.id),
+    name: body.name,
+    describe: body.description,
+    remark: body.remark ?? null,
+    prompt: body.prompt ?? null,
+  });
+}
+
+/** 删除资产（后端级联清理 o_image 与子资产） */
+export async function deleteAsset(id: string): Promise<void> {
+  await postJson('/api/assets/delAssets', { id: Number(id) });
+}
+
+/**
+ * 上传资产图片：base64（data URL 或裸 base64）保存到后端静态托管，
+ * 成功后资产卡即可展示。type 必须是后端三类之一；prompt 原样回传避免被清空。
+ */
+export async function uploadAssetImage(body: {
+  assetId: string;
+  projectId: string;
+  type: Exclude<AssetType, 'material'>;
+  base64: string;
+  prompt?: string | null;
+}): Promise<void> {
+  await postJson('/api/assets/saveAssets', {
+    id: Number(body.assetId),
+    projectId: Number(body.projectId),
+    base64: body.base64,
+    type: BACKEND_ASSET_TYPES[body.type],
+    prompt: body.prompt ?? '',
+  });
 }
 
 export function submitEpisodeSplitTask(projectId: string): Promise<SubmitTaskResponse> {

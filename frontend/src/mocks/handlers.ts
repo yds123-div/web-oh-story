@@ -2,7 +2,6 @@ import type { PatchSegmentBody } from '../types/api';
 import { delay, http, HttpResponse } from 'msw';
 import {
   completeAssetsRecord,
-  createAssetImageTask,
   createEpisodeExportTask,
   createEpisodeSplitTask,
   createOutlineTask,
@@ -17,21 +16,22 @@ import {
   getProject,
   getWorkflowRecord,
   isModelId,
-  listAssetRecords,
   listEpisodeRecords,
   listModelRecords,
   listNotificationRecords,
   listSegmentRecords,
   listTemplateRecords,
-  patchAssetRecord,
   patchSegmentRecord,
 } from './db';
 import {
+  addBackendAsset,
   addBackendProject,
   addBackendScript,
+  deleteBackendAsset,
   deleteBackendProject,
   deleteBackendScripts,
   findBackendProject,
+  getBackendAssetPage,
   getBackendAssets,
   getBackendProjects,
   getBackendScripts,
@@ -40,6 +40,8 @@ import {
   getBackendTasks,
   getProjectStatistics,
   runExtractStateMachine,
+  saveBackendAssetImage,
+  updateBackendAsset,
   updateBackendProject,
   updateBackendScript,
 } from './backendDb';
@@ -313,38 +315,102 @@ export const handlers = [
     return HttpResponse.json(workflow);
   }),
 
-  http.get('/api/projects/:id/assets', async ({ params }) => {
-    await netDelay(80);
-    const list = listAssetRecords(String(params.id));
-    if (!list) {
-      return HttpResponse.json({ message: '项目不存在' }, { status: 404 });
-    }
-    return HttpResponse.json({ assets: list });
+  // ===== 资产（后端契约：o_assets / o_image）=====
+
+  http.post('/api/assets/getAssetsApi', async ({ request }) => {
+    await netDelay(60);
+    const body = (await request.json()) as Record<string, unknown>;
+    const invalid = validateBody(body, {
+      projectId: 'number',
+      type: 'string',
+      name: 'optionalString',
+      page: 'number',
+      limit: 'number',
+    });
+    if (invalid) return invalid;
+    const name = typeof body.name === 'string' && body.name ? body.name : undefined;
+    return envelope(
+      getBackendAssetPage(Number(body.projectId), String(body.type), name, Number(body.page), Number(body.limit)),
+    );
   }),
 
-  http.post('/api/assets/:id/image-tasks', async ({ params }) => {
-    await netDelay(120);
-    const task = createAssetImageTask(String(params.id));
-    if (!task) {
-      return HttpResponse.json({ message: '资产不存在' }, { status: 404 });
-    }
-    return HttpResponse.json({ taskId: task.taskId }, { status: 202 });
+  http.post('/api/assets/addAssets', async ({ request }) => {
+    await netDelay(60);
+    const body = (await request.json()) as Record<string, unknown>;
+    const invalid = validateBody(body, {
+      name: 'string',
+      describe: 'string',
+      type: 'string',
+      projectId: 'number',
+      remark: 'optionalString',
+      prompt: 'optionalString',
+    });
+    if (invalid) return invalid;
+    addBackendAsset({
+      projectId: Number(body.projectId),
+      name: String(body.name),
+      describe: String(body.describe),
+      type: String(body.type) as 'role' | 'scene' | 'tool',
+      prompt: body.prompt != null ? String(body.prompt) : null,
+      remark: body.remark != null ? String(body.remark) : null,
+    });
+    return envelope({ message: '新增资产成功' }, '新增资产成功');
   }),
 
-  http.patch('/api/assets/:id', async ({ params, request }) => {
+  http.post('/api/assets/updateAssets', async ({ request }) => {
+    await netDelay(60);
+    const body = (await request.json()) as Record<string, unknown>;
+    const invalid = validateBody(body, {
+      id: 'number',
+      name: 'string',
+      describe: 'string',
+      remark: 'optionalString',
+      prompt: 'optionalString',
+    });
+    if (invalid) return invalid;
+    updateBackendAsset(Number(body.id), {
+      name: String(body.name),
+      describe: String(body.describe),
+      prompt: body.prompt != null ? String(body.prompt) : null,
+      remark: body.remark != null ? String(body.remark) : null,
+    });
+    return envelope({ message: '更新资产成功' }, '更新资产成功');
+  }),
+
+  http.post('/api/assets/delAssets', async ({ request }) => {
+    await netDelay(60);
+    const body = (await request.json()) as Record<string, unknown>;
+    const invalid = validateBody(body, { id: 'number' });
+    if (invalid) return invalid;
+    deleteBackendAsset(Number(body.id));
+    return envelope({ message: '删除资产成功' }, '删除资产成功');
+  }),
+
+  http.post('/api/assets/saveAssets', async ({ request }) => {
     await netDelay(80);
-    const body = (await request.json()) as { consistencyLocked?: boolean; currentAlt?: number };
-    if (body.consistencyLocked !== undefined && typeof body.consistencyLocked !== 'boolean') {
-      return HttpResponse.json({ message: 'consistencyLocked 无效' }, { status: 400 });
+    const body = (await request.json()) as Record<string, unknown>;
+    const invalid = validateBody(body, {
+      id: 'number',
+      projectId: 'number',
+      base64: 'optionalString',
+      type: 'string',
+      prompt: 'optionalString',
+      imageId: 'optionalNumber',
+    });
+    if (invalid) return invalid;
+    // 后端只认 role/scene/tool 枚举
+    if (!['role', 'scene', 'tool'].includes(String(body.type))) {
+      return HttpResponse.json({ message: '参数错误', errors: ['字段 type 应为 role/scene/tool'] }, { status: 400 });
     }
-    if (body.currentAlt !== undefined && typeof body.currentAlt !== 'number') {
-      return HttpResponse.json({ message: 'currentAlt 无效' }, { status: 400 });
-    }
-    const updated = patchAssetRecord(String(params.id), body);
-    if (!updated) {
-      return HttpResponse.json({ message: '资产不存在' }, { status: 404 });
-    }
-    return HttpResponse.json(updated);
+    // 对齐真实后端：base64 缺省时走 prompt-only 更新（imageId 可选）
+    saveBackendAssetImage({
+      assetId: Number(body.id),
+      base64: body.base64 != null ? String(body.base64) : null,
+      type: String(body.type),
+      prompt: body.prompt != null ? String(body.prompt) : null,
+      imageId: body.imageId != null ? Number(body.imageId) : null,
+    });
+    return envelope({ message: '保存资产图片成功' }, '保存资产图片成功');
   }),
 
   http.post('/api/projects/:id/assets/complete', async ({ params }) => {

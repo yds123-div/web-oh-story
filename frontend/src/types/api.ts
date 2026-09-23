@@ -142,26 +142,47 @@ export type OutlineSummary = {
 
 export type AssetType = 'character' | 'scene' | 'prop' | 'material';
 
-export type AssetAlt = {
-  name: string;
-  imageUrl: string;
-  filter?: string;
-};
-
+/**
+ * 资产（后端 `o_assets` join `o_image` 行的翻译形态）。
+ * 后端 type 枚举只有 role/scene/tool；素材（material）无后端对应，
+ * 仅作为旧页面残留的前端概念保留在枚举里。
+ */
 export type Asset = {
   id: string;
   projectId: string;
   type: AssetType;
   name: string;
-  role: string;
   description: string;
+  /** 后端静态托管图片 URL（getAssetsApi 的 src 翻译）；未生成/未上传为 null */
   imageUrl: string | null;
-  emoji: string | null;
-  consistencyLocked: boolean;
-  status: 'pending' | 'ready';
-  alts?: AssetAlt[];
-  currentAlt?: number;
-  refs?: string[];
+  /** 生图提示词（o_assets.prompt，AI 润色/生图用） */
+  prompt: string | null;
+  /** 备注（o_assets.remark） */
+  remark: string | null;
+};
+
+export type AssetListResponse = {
+  assets: Asset[];
+  /** 后端分页 total（父资产数） */
+  total: number;
+};
+
+/** 新增资产 body（对应后端 addAssets；material 无后端类型，边界上排除） */
+export type CreateAssetBody = {
+  projectId: string;
+  type: Exclude<AssetType, 'material'>;
+  name: string;
+  description: string;
+  prompt?: string;
+};
+
+/** 更新资产 body（对应后端 updateAssets：id/name/describe 必填，prompt/remark 原样回传避免被清空） */
+export type UpdateAssetBody = {
+  id: string;
+  name: string;
+  description: string;
+  prompt?: string | null;
+  remark?: string | null;
 };
 
 export type Outline = {
@@ -192,10 +213,6 @@ export type Episode = {
   coverUrl: string | null;
   summary: string;
   segments: EpisodeSegmentSummary[];
-};
-
-export type AssetListResponse = {
-  assets: Asset[];
 };
 
 export type EpisodeListResponse = {

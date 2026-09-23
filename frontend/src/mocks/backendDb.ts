@@ -48,12 +48,30 @@ export type BackendScriptRow = {
   createTime: number;
 };
 
-/** 后端 `o_assets` 表一行（仅模拟门控所需的字段） */
+/** 后端 `o_assets` 表一行 */
 export type BackendAssetRow = {
   id: number;
+  /** 父资产 id（子资产/多形象），父资产为 null */
+  assetsId: number | null;
   projectId: number;
   name: string;
+  describe: string;
   type: 'role' | 'scene' | 'tool';
+  prompt: string | null;
+  remark: string | null;
+  imageId: number | null;
+  startTime: number;
+};
+
+/** 后端 `o_image` 表一行（mock 用 dataUrl 直接充当静态托管 URL） */
+type BackendImageRow = {
+  id: number;
+  assetsId: number;
+  filePath: string;
+  type: string;
+  state: string;
+  /** 上传图片的 data URL（真实后端写文件后返回 oss URL） */
+  dataUrl?: string;
 };
 
 /** 种子项目 id（数字，与后端一致） */
@@ -64,6 +82,8 @@ let projects: BackendProjectRow[] = [];
 let tasks: BackendTaskRow[] = [];
 let scripts: BackendScriptRow[] = [];
 let assets: BackendAssetRow[] = [];
+let images: BackendImageRow[] = [];
+let imageIdSeq = 1;
 /** generalStatistics 的模拟计数（真实后端按 o_assets/o_script 等表统计） */
 let statsByProject = new Map<number, ProjectStatistics>();
 /** o_script 自增 id 计数器（与真实后端一致，非时间戳） */
@@ -143,7 +163,46 @@ function seed(): void {
       createTime: 1758000050000,
     },
   ];
-  assets = [];
+  assets = [
+    {
+      id: 101,
+      assetsId: null,
+      projectId: DEMO_PROJECT_ID,
+      name: '林晚',
+      describe: '现代穿越者，成为木叶孤女，知晓结局试图拯救鼬，却陷入权力旋涡。',
+      type: 'role',
+      prompt: null,
+      remark: null,
+      imageId: null,
+      startTime: 1758000060000,
+    },
+    {
+      id: 102,
+      assetsId: null,
+      projectId: DEMO_PROJECT_ID,
+      name: '宇智波鼬',
+      describe: '背负灭族悲剧的忍者，心思深沉，因任务与宿命被迫推开林晚。',
+      type: 'role',
+      prompt: null,
+      remark: null,
+      imageId: null,
+      startTime: 1758000061000,
+    },
+    {
+      id: 103,
+      assetsId: null,
+      projectId: DEMO_PROJECT_ID,
+      name: '木叶长廊',
+      describe: '传统日式木质长廊，林晚与鼬深夜对峙的场所（月夜冷调）。',
+      type: 'scene',
+      prompt: null,
+      remark: null,
+      imageId: null,
+      startTime: 1758000062000,
+    },
+  ];
+  images = [];
+  imageIdSeq = 1;
   statsByProject = new Map([
     [DEMO_PROJECT_ID, { roleCount: 2, scriptCount: 1, videoCount: 0, storyboardCount: 3 }],
   ]);
@@ -292,12 +351,129 @@ export function getBackendScriptStates(
     .map((s) => ({ id: s.id, extractState: s.extractState, errorReason: s.errorReason }));
 }
 
-// ===== 资产（仅模拟门控所需的 getAllAssets）=====
+// ===== 资产（复刻后端 o_assets / o_image 契约）=====
 
+/** 镜像后端 getAllAssets：项目全部父资产（排除 clip/audio，本 mock 无这两类） */
 export function getBackendAssets(projectId: number): BackendAssetRow[] {
-  return assets.filter((a) => a.projectId === projectId).map((a) => ({ ...a }));
+  return assets.filter((a) => a.projectId === projectId && a.assetsId == null).map((a) => ({ ...a }));
 }
 
-export function addBackendAssets(rows: Omit<BackendAssetRow, 'id'>[]): void {
-  for (const row of rows) assets.push({ ...row, id: Date.now() + assets.length });
+/** 镜像后端 addAssets：不返回 id，只写库 */
+export function addBackendAsset(
+  row: Pick<BackendAssetRow, 'projectId' | 'name' | 'describe' | 'type'> &
+    Partial<Pick<BackendAssetRow, 'prompt' | 'remark'>>,
+): BackendAssetRow {
+  const created: BackendAssetRow = {
+    assetsId: null,
+    prompt: null,
+    remark: null,
+    imageId: null,
+    startTime: Date.now(),
+    ...row,
+    id: Date.now() + assets.length,
+  };
+  assets.push(created);
+  return { ...created };
 }
+
+/** AI 提取状态机批量建资产（委托 addBackendAsset，describe 置空） */
+export function addBackendAssets(
+  rows: Array<Pick<BackendAssetRow, 'projectId' | 'name' | 'type'>>,
+): BackendAssetRow[] {
+  return rows.map((row) => addBackendAsset({ ...row, describe: '' }));
+}
+
+/** 镜像后端 updateAssets：name/describe/remark/prompt 全量覆盖 */
+export function updateBackendAsset(
+  id: number,
+  patch: Pick<BackendAssetRow, 'name' | 'describe'> &
+    Partial<Pick<BackendAssetRow, 'remark' | 'prompt'>>,
+): BackendAssetRow | null {
+  const found = assets.find((a) => a.id === id);
+  if (!found) return null;
+  Object.assign(found, patch);
+  return { ...found };
+}
+
+/** 镜像后端 delAssets：级联删 o_image 与子资产 */
+export function deleteBackendAsset(id: number): void {
+  images = images.filter((img) => img.assetsId !== id);
+  assets = assets.filter((a) => a.id !== id && a.assetsId !== id);
+}
+
+/**
+ * 镜像后端 saveAssets：
+ * - 有 base64：写"文件"、插 o_image、把资产 imageId 指过去
+ * - 无 base64（真实后端允许的 prompt-only 更新）：只更新 prompt 与 imageId
+ */
+export function saveBackendAssetImage(body: {
+  assetId: number;
+  base64?: string | null;
+  type: string;
+  prompt?: string | null;
+  imageId?: number | null;
+}): void {
+  const found = assets.find((a) => a.id === body.assetId);
+  if (!found) return;
+  if (!body.base64) {
+    found.prompt = body.prompt ?? '';
+    if (body.imageId != null) found.imageId = body.imageId;
+    return;
+  }
+  const created: BackendImageRow = {
+    id: imageIdSeq++,
+    assetsId: body.assetId,
+    filePath: `/${found.projectId}/${body.type}/mock-${Date.now()}.png`,
+    type: body.type,
+    state: '已完成',
+    dataUrl: body.base64,
+  };
+  images.push(created);
+  found.imageId = created.id;
+  found.prompt = body.prompt ?? '';
+}
+
+/** o_image 行 → 静态托管 URL（真实后端 oss 路径；mock 上传图直接回 data URL 以便展示） */
+function imageSrc(row: BackendAssetRow): string | null {
+  if (row.imageId == null) return null;
+  const image = images.find((img) => img.id === row.imageId);
+  if (!image) return null;
+  return image.dataUrl ?? `http://localhost:10588/oss${image.filePath}`;
+}
+
+export type BackendAssetPageRow = BackendAssetRow & {
+  filePath: string | null;
+  state: string | null;
+  src: string | null;
+  sonAssets: unknown[];
+};
+
+/** 镜像后端 getAssetsApi：父资产分页 + join 图片，子资产挂 sonAssets */
+export function getBackendAssetPage(
+  projectId: number,
+  type: string,
+  name: string | undefined,
+  page: number,
+  limit: number,
+): { data: BackendAssetPageRow[]; total: number } {
+  const matches = assets
+    .filter((a) => a.projectId === projectId)
+    .filter((a) => a.type === type)
+    .filter((a) => (name ? a.name.includes(name) : true));
+  const parents = matches.filter((a) => a.assetsId == null);
+  const children = matches.filter((a) => a.assetsId != null);
+  const image = (a: BackendAssetRow) => images.find((img) => img.id === a.imageId);
+  const data = parents
+    .slice((page - 1) * limit, page * limit)
+    .map((parent) => ({
+      ...parent,
+      filePath: image(parent)?.filePath ?? null,
+      state: image(parent)?.state ?? null,
+      src: imageSrc(parent),
+      sonAssets: children
+        .filter((child) => child.assetsId === parent.id)
+        .map((child) => ({ ...child, src: imageSrc(child) })),
+    }));
+  return { data, total: parents.length };
+}
+

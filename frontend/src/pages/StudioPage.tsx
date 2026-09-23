@@ -13,7 +13,6 @@ import {
   submitEpisodeExportTask,
   submitSegmentVideoTask,
 } from '../lib/api';
-import { assetPreviewUrl } from '../lib/assets';
 import { generationCost } from '../lib/generationCost';
 import { insertAssetMention, parsePromptParts } from '../lib/promptMentions';
 import type { Asset, Episode, Model, ModelId, Segment, Shot } from '../types/api';
@@ -30,11 +29,11 @@ function chipClass(asset: Asset | undefined): string {
 }
 
 function MentionChip({ asset, assetId }: { asset: Asset | undefined; assetId: string }) {
-  const thumb = asset ? assetPreviewUrl(asset) : null;
+  const thumb = asset ? asset.imageUrl : null;
   return (
     <span className={`ds-refChip ${chipClass(asset)}`}>
       <span className="th">
-        {thumb ? <img src={thumb} alt="" /> : (asset?.emoji ?? assetId.slice(-1))}
+        {thumb ? <img src={thumb} alt="" /> : assetId.slice(-1)}
       </span>
       {asset?.name ?? assetId}
     </span>
@@ -461,11 +460,11 @@ export default function StudioPage() {
                 <div className="ds-libEmpty">暂无{type === 'prop' ? '道具' : '素材'}</div>
               ) : (
                 grouped[type].map((asset) => {
-                  const thumb = assetPreviewUrl(asset);
+                  const thumb = asset.imageUrl;
                   return (
                   <button key={asset.id} type="button" className="ds-libCard" onClick={() => insertAsset(asset)}>
                     <div className={`im${asset.type === 'scene' ? ' wide' : ''}`}>
-                      {thumb ? <img src={thumb} alt={asset.name} /> : <span className="em">{asset.emoji ?? '⬚'}</span>}
+                      {thumb ? <img src={thumb} alt={asset.name} /> : <span className="em">⬚</span>}
                     </div>
                     <div className="nm">{asset.name}</div>
                   </button>

@@ -25,7 +25,7 @@ function randomId(): string {
   return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
 }
 
-type TaskKind = 'outline' | 'novel' | 'image' | 'episode-split' | 'video' | 'export' | 'creative-image' | 'creative-video';
+type TaskKind = 'outline' | 'novel' | 'episode-split' | 'video' | 'export' | 'creative-image' | 'creative-video';
 
 type InternalTask = TaskStatus & {
   kind: TaskKind;
@@ -97,75 +97,50 @@ function nmingAssets(projectId: string): Asset[] {
       projectId,
       type: 'character',
       name: '林晚',
-      role: '主角',
       description: '现代穿越者，成为木叶孤女，知晓结局试图拯救鼬，却陷入权力漩涡。',
-      imageUrl: null,
-      emoji: null,
-      consistencyLocked: true,
-      status: 'pending',
-      alts: [
-        { name: '默认形象', imageUrl: `${DA}/linwan.png`, filter: '' },
-        { name: '和服·雨夜湿发', imageUrl: `${DA}/linwan.png`, filter: 'brightness(.82) saturate(1.25) hue-rotate(14deg) contrast(1.08)' },
-      ],
-      currentAlt: 0,
-      refs: ['c01 独白', 'c03 走位', 'c05 过肩近景', 'c06 泛红特写'],
+      imageUrl: `${DA}/linwan.png`,
+      prompt: null,
+      remark: null,
     },
     {
       id: `${projectId}-char-itachi`,
       projectId,
       type: 'character',
       name: '宇智波鼬',
-      role: '主角',
       description: '背负灭族悲剧的忍者，心思深沉，因任务与宿命被迫推开林晚。',
-      imageUrl: null,
-      emoji: null,
-      consistencyLocked: true,
-      status: 'pending',
-      alts: [
-        { name: '默认形象', imageUrl: `${DA}/itachi.png`, filter: '' },
-        { name: '任务夜行装', imageUrl: `${DA}/itachi.png`, filter: 'brightness(.8) contrast(1.25) saturate(.85)' },
-      ],
-      currentAlt: 0,
-      refs: ['c02 衣摆显露', 'c03 阴影走位', 'c04 质问中景', 'c06 悲凉特写'],
+      imageUrl: `${DA}/itachi.png`,
+      prompt: null,
+      remark: null,
     },
     {
       id: `${projectId}-char-shisui`,
       projectId,
       type: 'character',
       name: '宇智波止水',
-      role: '男二',
       description: '温柔守护型，暗中相救林晚，看穿她的心事并默默付出。',
       imageUrl: null,
-      emoji: '🦋',
-      consistencyLocked: false,
-      status: 'pending',
-      refs: ['第2集 草稿 预留'],
+      prompt: null,
+      remark: null,
     },
     {
       id: `${projectId}-char-elder`,
       projectId,
       type: 'character',
       name: '木叶长老',
-      role: '反派',
       description: '猜忌宇智波一族，利用林晚作为监视棋子挑起矛盾。',
       imageUrl: null,
-      emoji: '🧙',
-      consistencyLocked: false,
-      status: 'pending',
-      refs: ['第2集 草稿 预留'],
+      prompt: null,
+      remark: null,
     },
     {
       id: `${projectId}-scene-corridor`,
       projectId,
       type: 'scene',
       name: '木叶长廊',
-      role: '场景',
       description: '传统日式木质长廊，林晚与鼬深夜对峙的场所（月夜冷调）。',
-      imageUrl: null,
-      emoji: null,
-      consistencyLocked: true,
-      status: 'pending',
-      refs: ['片段1 全景', '片段2 中景/过肩', '片段3 收暗'],
+      imageUrl: `${DA}/corridor.jpg`,
+      prompt: null,
+      remark: null,
     },
   ];
 }
@@ -498,13 +473,6 @@ function defaultWorkflow(projectId: string): WorkflowState {
   };
 }
 
-function imageUrlFor(asset: Asset): string | null {
-  if (asset.id.endsWith('-char-linwan')) return `${DA}/linwan.png`;
-  if (asset.id.endsWith('-char-itachi')) return `${DA}/itachi.png`;
-  if (asset.id.endsWith('-scene-corridor')) return `${DA}/corridor.jpg`;
-  return null;
-}
-
 let projects = seedProjects();
 let creditsBalance = 940;
 
@@ -622,20 +590,6 @@ export function finalizeOutlineRecord(projectId: string): WorkflowState | undefi
   if (!outline) return undefined;
   outline.finalized = true;
   return setWorkflow(projectId, { outlineFinalized: true, unlockedStep: 2 });
-}
-
-export function listAssetRecords(projectId: string): Asset[] | undefined {
-  if (!getProject(projectId)) return undefined;
-  ensureOutlineAndAssets(projectId);
-  return assetsForProject(projectId);
-}
-
-export function patchAssetRecord(assetId: string, body: { consistencyLocked?: boolean; currentAlt?: number }): Asset | undefined {
-  const found = assets.get(assetId);
-  if (!found) return undefined;
-  if (body.consistencyLocked !== undefined) found.consistencyLocked = body.consistencyLocked;
-  if (body.currentAlt !== undefined) found.currentAlt = body.currentAlt;
-  return cloneAsset(found);
 }
 
 export function completeAssetsRecord(projectId: string): WorkflowState | undefined {
@@ -763,15 +717,6 @@ function finishTask(task: InternalTask): void {
     task.result = { projectId: task.projectId };
     return;
   }
-  if (task.kind === 'image' && task.assetId) {
-    const asset = assets.get(task.assetId);
-    if (asset) {
-      asset.imageUrl = imageUrlFor(asset);
-      asset.status = 'ready';
-      task.result = { assetId: asset.id, imageUrl: asset.imageUrl };
-    }
-    return;
-  }
   if (task.kind === 'episode-split' && task.projectId) {
     if (!episodes.has(task.projectId)) {
       episodes.set(task.projectId, nmingEpisodes(task.projectId));
@@ -854,12 +799,6 @@ export function createOutlineTask(projectId: string): TaskStatus {
 
 export function createNovelTask(projectId: string): TaskStatus {
   return createTask('novel', { projectId });
-}
-
-export function createAssetImageTask(assetId: string): TaskStatus | undefined {
-  const asset = assets.get(assetId);
-  if (!asset) return undefined;
-  return createTask('image', { assetId, projectId: asset.projectId });
 }
 
 export function createEpisodeSplitTask(projectId: string): TaskStatus | undefined {

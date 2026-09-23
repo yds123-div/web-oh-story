@@ -2,8 +2,9 @@ import { vi } from 'vitest';
 import { setupServer } from 'msw/node';
 import {
   addScript,
-  completeAssets,
+  createAsset,
   createProject,
+  deleteAsset,
   deleteProject,
   deleteScript,
   extractScriptAssets,
@@ -24,18 +25,18 @@ import {
   listTaskProjects,
   listTasks,
   listTemplates,
-  patchAsset,
   patchProject,
   patchSegment,
   projectHasAssets,
-  submitAssetImageTask,
   submitEpisodeExportTask,
   submitEpisodeSplitTask,
   submitOutlineTask,
   submitSegmentVideoTask,
+  updateAsset,
   updateScript,
+  uploadAssetImage,
 } from '../lib/api';
-import { addBackendAssets, DEMO_PROJECT_ID, resetBackendDb } from './backendDb';
+import { DEMO_PROJECT_ID, resetBackendDb } from './backendDb';
 import { getTaskRecord, resetDb } from './db';
 import { handlers } from './handlers';
 
@@ -205,40 +206,62 @@ describe('outline contract', () => {
   });
 });
 
-describe('assets contract', () => {
-  it('lists assets with stable ids and type tags', async () => {
-    const { assets } = await listAssets('proj-nming-muye');
-    expect(assets.map((a) => a.id)).toEqual([
-      'proj-nming-muye-char-linwan',
-      'proj-nming-muye-char-itachi',
-      'proj-nming-muye-char-shisui',
-      'proj-nming-muye-char-elder',
-      'proj-nming-muye-scene-corridor',
-    ]);
-    expect(assets.filter((a) => a.type === 'character')).toHaveLength(4);
-    expect(assets.filter((a) => a.type === 'scene')).toHaveLength(1);
-    expect(assets.filter((a) => a.type === 'prop')).toHaveLength(0);
-  });
-
-  it('generates a character image through the task API', async () => {
-    const { taskId } = await submitAssetImageTask('proj-nming-muye-char-linwan');
-    const status = await waitSucceeded(taskId);
-    expect(status.status).toBe('succeeded');
-    expect(status.result).toMatchObject({
-      assetId: 'proj-nming-muye-char-linwan',
-      imageUrl: '/demo-assets/linwan.png',
+describe('assets contract（后端契约：o_assets / o_image）', () => {
+  it('getAssetsApi: 类型映射 + 分页 total', async () => {
+    const result = await listAssets(String(DEMO_PROJECT_ID), {
+      type: 'character',
+      page: 1,
+      limit: 12,
     });
-    const { assets } = await listAssets('proj-nming-muye');
-    const linwan = assets.find((a) => a.id === 'proj-nming-muye-char-linwan');
-    expect(linwan?.imageUrl).toBe('/demo-assets/linwan.png');
-    expect(linwan?.status).toBe('ready');
+    expect(result.assets.map((a) => a.name).sort()).toEqual(['宇智波鼬', '林晚']);
+    expect(result.total).toBe(2);
+    expect(result.assets.every((a) => a.type === 'character')).toBe(true);
   });
 
-  it('persists consistency lock through PATCH', async () => {
-    const updated = await patchAsset('proj-nming-muye-char-linwan', { consistencyLocked: false });
-    expect(updated.consistencyLocked).toBe(false);
-    const { assets } = await listAssets('proj-nming-muye');
-    expect(assets.find((a) => a.id === 'proj-nming-muye-char-linwan')?.consistencyLocked).toBe(false);
+  it('addAssets → updateAssets → delAssets 全程持久化', async () => {
+    await createAsset({
+      projectId: String(DEMO_PROJECT_ID),
+      type: 'prop',
+      name: '苦无',
+      description: '忍者的投掷武器',
+    });
+    const created = (
+      await listAssets(String(DEMO_PROJECT_ID), { type: 'prop' })
+    ).assets.find((a) => a.name === '苦无')!;
+    expect(created).toBeDefined();
+
+    await updateAsset({
+      id: created.id,
+      name: '苦无·改',
+      description: '改良的投掷武器',
+      prompt: created.prompt,
+      remark: created.remark,
+    });
+    const afterUpdate = await listAssets(String(DEMO_PROJECT_ID), { type: 'prop' });
+    expect(afterUpdate.assets.find((a) => a.id === created.id)).toMatchObject({
+      name: '苦无·改',
+      description: '改良的投掷武器',
+    });
+
+    await deleteAsset(created.id);
+    const afterDelete = await listAssets(String(DEMO_PROJECT_ID), { type: 'prop' });
+    expect(afterDelete.assets.some((a) => a.id === created.id)).toBe(false);
+  });
+
+  it('saveAssets 上传图片后 imageUrl 指向静态托管路径（mock 回 data URL）', async () => {
+    const { assets: before } = await listAssets(String(DEMO_PROJECT_ID), { type: 'character' });
+    const linwan = before.find((a) => a.name === '林晚')!;
+
+    await uploadAssetImage({
+      assetId: linwan.id,
+      projectId: String(DEMO_PROJECT_ID),
+      type: 'character',
+      base64: 'data:image/png;base64,iVBORw0KGgo=',
+      prompt: linwan.prompt,
+    });
+
+    const { assets: after } = await listAssets(String(DEMO_PROJECT_ID), { type: 'character' });
+    expect(after.find((a) => a.id === linwan.id)?.imageUrl).toBe('data:image/png;base64,iVBORw0KGgo=');
   });
 });
 
@@ -270,7 +293,9 @@ describe('episodes and workflow chain', () => {
 
 async function prepareSplitEpisode() {
   await finalizeOutline('proj-nming-muye');
-  await completeAssets('proj-nming-muye');
+  // completeAssets 已无前端调用方，直接打 legacy mock 端点推进 mock 工作流
+  const res = await fetch('/api/projects/proj-nming-muye/assets/complete', { method: 'POST' });
+  if (!res.ok) throw new Error('completeAssets mock failed');
   const { taskId } = await submitEpisodeSplitTask('proj-nming-muye');
   await waitSucceeded(taskId);
 }
@@ -446,9 +471,10 @@ describe('MSW script contracts（镜像后端 zod 校验）', () => {
   });
 
   it('projectHasAssets reflects getAllAssets（门控数据源）', async () => {
-    await expect(projectHasAssets(String(DEMO_PROJECT_ID))).resolves.toBe(false);
-    addBackendAssets([{ projectId: DEMO_PROJECT_ID, name: '林晚', type: 'role' }]);
+    // 种子项目自带资产
     await expect(projectHasAssets(String(DEMO_PROJECT_ID))).resolves.toBe(true);
+    // 无资产项目 → false
+    await expect(projectHasAssets('999999')).resolves.toBe(false);
   });
 });
 
