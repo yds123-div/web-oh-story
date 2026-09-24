@@ -217,90 +217,73 @@ export type Outline = {
   screenplay: string;
 };
 
-export type EpisodeSegmentSummary = {
-  no: number;
-  title: string;
-  durationSec: number;
-};
-
+/**
+ * 分集 = 一个后端剧本（`o_script`）+ 该剧本下分镜的聚合。
+ * 后端没有"集"这个实体（领域映射：剧本即分集），集数就是剧本按 id 升序的序号。
+ */
 export type Episode = {
+  /** 即后端 scriptId，工作室页路由的 :episodeId 复用它 */
   id: string;
   projectId: string;
+  /** 集数（剧本按 id 升序的序号，从 1 开始） */
   number: number;
   title: string;
-  status: 'split' | 'draft';
-  segmentCount: number;
+  /** 该剧本的分镜数 */
+  storyboardCount: number;
+  /** 分镜总时长（秒）；分镜无时长记 0 */
   durationSec: number;
+  /** 封面：第一个有缩略图的分镜图；无分镜或无图为 null */
   coverUrl: string | null;
-  summary: string;
-  segments: EpisodeSegmentSummary[];
 };
 
 export type EpisodeListResponse = {
   episodes: Episode[];
 };
 
-export type ModelId = 'seedance-2.5' | 'minimax-h3-max' | 'wan-3.0';
+// ---- 分镜（后端 o_storyboard）----
 
-export type Model = {
-  id: ModelId;
+/** 分镜关联资产（后端 getStoryboardData 的 characters 项；type 为后端 role/scene/tool 翻译） */
+export type StoryboardCharacter = {
   name: string;
+  type: AssetType;
+  /** 资产缩略图 URL；资产尚未生图/上传为 null */
+  avatarUrl: string | null;
 };
 
-export type ModelListResponse = {
-  models: Model[];
-};
-
-export type Shot = {
+/**
+ * 分镜（读模型 = `/api/production/getStoryboardData`）。
+ * 后端该接口只回 prompt/duration/filePath/characters/index ——
+ * 不含 videoDesc 与 state（state 是图片生成态，由 09 的轮询接口给）。
+ */
+export type Storyboard = {
   id: string;
-  durationSec: number;
-  shotType: string;
-  camera: string;
-  action: string;
-  speaker: string;
-  voice: string;
-  line: string;
+  scriptId: string;
+  /** 分镜描述（新增/编辑写 o_storyboard.prompt） */
+  prompt: string;
+  /** 时长（秒）；后端未记录为 null */
+  durationSec: number | null;
+  /** 缩略图（后端静态托管小图）；未生成为 null */
+  imageUrl: string | null;
+  /** 关联资产 */
+  characters: StoryboardCharacter[];
 };
 
-export type Segment = {
-  id: string;
-  episodeId: string;
+/**
+ * 新增分镜 body（后端 addStoryboard，落库时同时建一条 o_videoTrack）。
+ * 后端无"景别/运镜"列，两者由页面拼进 prompt 文本。
+ */
+export type CreateStoryboardBody = {
   projectId: string;
-  no: number;
-  title: string;
-  durationSec: number;
-  generated: boolean;
-  videoUrl: string | null;
-  prompt: string;
-  shots: Shot[];
-  model: ModelId | null;
-  charCount: number;
-};
-
-export type SegmentListResponse = {
-  segments: Segment[];
-};
-
-export type PatchSegmentBody = {
-  prompt?: string;
-  shots?: Shot[];
-  title?: string;
-};
-
-export type CreateSegmentBody = {
+  scriptId: string;
+  /** 分镜描述（API 层同时写入 o_storyboard.prompt 与 videoDesc 两列） */
   prompt: string;
   durationSec: number;
-  title: string;
 };
 
-export type VideoTaskBody = {
-  model: ModelId;
-};
-
-export type ExportTaskBody = {
-  resolution?: string;
-  format?: string;
-  watermark?: string;
+/** 更新分镜 body（后端 editStoryboardInfo：prompt 与 videoDesc 必须同时给出、整行覆盖） */
+export type UpdateStoryboardBody = {
+  id: string;
+  prompt: string;
 };
 
 export type Template = {

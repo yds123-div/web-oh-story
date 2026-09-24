@@ -1,42 +1,34 @@
-import type { PatchSegmentBody } from '../types/api';
 import { delay, http, HttpResponse } from 'msw';
 import {
-  completeAssetsRecord,
-  createEpisodeExportTask,
-  createEpisodeSplitTask,
   createOutlineTask,
   createNovelTask,
-  createSegmentRecord,
-  createSegmentVideoTask,
   createCreativeTask,
   finalizeOutlineRecord,
   getCreditsBalance,
-  getEpisodeRecord,
   getOutlineRecord,
   getProject,
-  getWorkflowRecord,
-  isModelId,
-  listEpisodeRecords,
-  listModelRecords,
   listNotificationRecords,
-  listSegmentRecords,
   listTemplateRecords,
-  patchSegmentRecord,
 } from './db';
 import {
   addBackendAsset,
   addBackendProject,
   addBackendScript,
+  addBackendStoryboard,
   cancelBackendImage,
   deleteBackendAsset,
   deleteBackendProject,
   deleteBackendScripts,
+  deleteBackendStoryboard,
+  deleteBackendStoryboards,
   findBackendProject,
   getBackendAssetPage,
   getBackendAssets,
   getBackendProjects,
   getBackendScripts,
   getBackendScriptStates,
+  getBackendStoryboardCharacters,
+  getBackendStoryboards,
   getBackendTaskById,
   getBackendTasks,
   getProjectStatistics,
@@ -48,6 +40,7 @@ import {
   updateBackendAsset,
   updateBackendProject,
   updateBackendScript,
+  updateBackendStoryboard,
 } from './backendDb';
 
 function netDelay(ms: number): Promise<void> {
@@ -60,10 +53,18 @@ function envelope(data: unknown, message = '成功') {
   return HttpResponse.json({ code: 200, data, message });
 }
 
+/** 后端业务失败信封：HTTP 400 + `{code, data:null, message}`（storyboard 系列接口的真实行为） */
+function failEnvelope(message: string) {
+  return HttpResponse.json({ code: 400, data: null, message }, { status: 400 });
+}
+
 /** 复刻后端 validateFields 失败形状：HTTP 400 + `{message: '参数错误', errors}`（非信封） */
 function validateBody(
   body: Record<string, unknown>,
-  shape: Record<string, 'string' | 'number' | 'optionalNumber' | 'optionalString' | 'numberArray'>,
+  shape: Record<
+    string,
+    'string' | 'number' | 'optionalNumber' | 'optionalString' | 'numberArray' | 'nullableString'
+  >,
 ) {
   const errors: string[] = [];
   for (const [field, rule] of Object.entries(shape)) {
@@ -72,6 +73,10 @@ function validateBody(
     if (rule === 'string' && typeof value !== 'string') errors.push(`字段 ${field} 应为字符串`);
     if (rule === 'optionalNumber' && value != null && typeof value !== 'number') errors.push(`字段 ${field} 应为数字`);
     if (rule === 'optionalString' && value != null && typeof value !== 'string') errors.push(`字段 ${field} 应为字符串`);
+    // 复刻 z.string().nullable()：键必须存在，且为字符串或 null
+    if (rule === 'nullableString' && value !== null && typeof value !== 'string') {
+      errors.push(`字段 ${field} 应为字符串`);
+    }
     // 复刻 zod 的 z.array(z.number())：键必须存在且为数字数组
     if (
       rule === 'numberArray' &&
@@ -278,15 +283,6 @@ export const handlers = [
     return HttpResponse.json({ taskId: task.taskId }, { status: 202 });
   }),
 
-  http.get('/api/projects/:id/outline', async ({ params }) => {
-    await netDelay(80);
-    const outline = getOutlineRecord(String(params.id));
-    if (!outline) {
-      return HttpResponse.json({ message: '大纲不存在' }, { status: 404 });
-    }
-    return HttpResponse.json(outline);
-  }),
-
   http.post('/api/projects/:id/outline/finalize', async ({ params }) => {
     await netDelay(80);
     const workflow = finalizeOutlineRecord(String(params.id));
@@ -308,15 +304,6 @@ export const handlers = [
     }
     outline.screenplay = body.screenplay;
     return HttpResponse.json(outline);
-  }),
-
-  http.get('/api/projects/:id/workflow', async ({ params }) => {
-    await netDelay(40);
-    const workflow = getWorkflowRecord(String(params.id));
-    if (!workflow) {
-      return HttpResponse.json({ message: '项目不存在' }, { status: 404 });
-    }
-    return HttpResponse.json(workflow);
   }),
 
   // ===== 资产（后端契约：o_assets / o_image）=====
@@ -415,98 +402,6 @@ export const handlers = [
       imageId: body.imageId != null ? Number(body.imageId) : null,
     });
     return envelope({ message: '保存资产图片成功' }, '保存资产图片成功');
-  }),
-
-  http.post('/api/projects/:id/assets/complete', async ({ params }) => {
-    await netDelay(80);
-    const workflow = completeAssetsRecord(String(params.id));
-    if (!workflow) {
-      return HttpResponse.json({ message: '请先完成剧本定稿' }, { status: 400 });
-    }
-    return HttpResponse.json(workflow);
-  }),
-
-  http.post('/api/projects/:id/episode-split-tasks', async ({ params }) => {
-    await netDelay(120);
-    const task = createEpisodeSplitTask(String(params.id));
-    if (!task) {
-      return HttpResponse.json({ message: '请先完成资产步骤' }, { status: 400 });
-    }
-    return HttpResponse.json({ taskId: task.taskId }, { status: 202 });
-  }),
-
-  http.get('/api/projects/:id/episodes', async ({ params }) => {
-    await netDelay(80);
-    const list = listEpisodeRecords(String(params.id));
-    if (!list) {
-      return HttpResponse.json({ message: '项目不存在' }, { status: 404 });
-    }
-    return HttpResponse.json({ episodes: list });
-  }),
-
-  http.get('/api/models', async () => {
-    await netDelay(40);
-    return HttpResponse.json({ models: listModelRecords() });
-  }),
-
-  http.get('/api/episodes/:episodeId', async ({ params }) => {
-    await netDelay(80);
-    const episode = getEpisodeRecord(String(params.episodeId));
-    if (!episode) {
-      return HttpResponse.json({ message: '分集不存在' }, { status: 404 });
-    }
-    return HttpResponse.json(episode);
-  }),
-
-  http.get('/api/episodes/:episodeId/segments', async ({ params }) => {
-    await netDelay(80);
-    const list = listSegmentRecords(String(params.episodeId));
-    if (!list) {
-      return HttpResponse.json({ message: '分集不存在' }, { status: 404 });
-    }
-    return HttpResponse.json({ segments: list });
-  }),
-
-  http.patch('/api/segments/:id', async ({ params, request }) => {
-    await netDelay(80);
-    const body = (await request.json()) as PatchSegmentBody;
-    const updated = patchSegmentRecord(String(params.id), body);
-    if (!updated) {
-      return HttpResponse.json({ message: '片段不存在' }, { status: 404 });
-    }
-    return HttpResponse.json(updated);
-  }),
-
-  http.post('/api/episodes/:episodeId/segments', async ({ params, request }) => {
-    await netDelay(80);
-    const body = (await request.json()) as { prompt: string; durationSec: number; title: string };
-    const created = createSegmentRecord(String(params.episodeId), body);
-    if (!created) {
-      return HttpResponse.json({ message: '分集不存在' }, { status: 404 });
-    }
-    return HttpResponse.json(created, { status: 201 });
-  }),
-
-  http.post('/api/segments/:id/video-tasks', async ({ params, request }) => {
-    await netDelay(120);
-    const body = (await request.json()) as { model?: string };
-    if (!body.model || !isModelId(body.model)) {
-      return HttpResponse.json({ message: 'model 无效' }, { status: 400 });
-    }
-    const task = createSegmentVideoTask(String(params.id), body.model);
-    if (!task) {
-      return HttpResponse.json({ message: '片段不存在' }, { status: 404 });
-    }
-    return HttpResponse.json({ taskId: task.taskId }, { status: 202 });
-  }),
-
-  http.post('/api/episodes/:episodeId/export-tasks', async ({ params }) => {
-    await netDelay(120);
-    const task = createEpisodeExportTask(String(params.episodeId));
-    if (!task) {
-      return HttpResponse.json({ message: '分集不存在或尚未拆分' }, { status: 400 });
-    }
-    return HttpResponse.json({ taskId: task.taskId }, { status: 202 });
   }),
 
   http.get('/api/templates', async () => {
@@ -728,5 +623,93 @@ export const handlers = [
     const invalid = validateBody(body, { projectId: 'number' });
     if (invalid) return invalid;
     return envelope(getBackendAssets(Number(body.projectId)));
+  }),
+
+  // ===== 分镜（后端契约：o_storyboard / o_assets2Storyboard）=====
+
+  // 读模型：只回 prompt/duration/filePath/characters/index（不含 videoDesc 与 state）
+  http.post('/api/production/getStoryboardData', async ({ request }) => {
+    await netDelay(60);
+    const body = (await request.json()) as Record<string, unknown>;
+    const invalid = validateBody(body, { scriptId: 'number', projectId: 'number' });
+    if (invalid) return invalid;
+    const rows = getBackendStoryboards(Number(body.projectId), Number(body.scriptId));
+    return envelope(
+      rows.map((s) => ({
+        id: String(s.id),
+        createTime: s.createTime || undefined,
+        duration: s.duration ? Number(s.duration) : undefined,
+        // 复刻后端 u.oss.getSmallImageUrl：静态托管路径 + 小图尺寸参数
+        filePath: s.filePath ? `http://localhost:10588/oss${s.filePath}?size=20` : undefined,
+        prompt: s.prompt ?? undefined,
+        scriptId: s.scriptId ?? undefined,
+        characters: getBackendStoryboardCharacters(s.id),
+        index: null,
+      })),
+    );
+  }),
+
+  // 新增分镜（后端同事务建 o_videoTrack，只返回新分镜 id）
+  http.post('/api/production/storyboard/addStoryboard', async ({ request }) => {
+    await netDelay(60);
+    const body = (await request.json()) as Record<string, unknown>;
+    const invalid = validateBody(body, {
+      prompt: 'string',
+      duration: 'number',
+      state: 'string',
+      videoDesc: 'string',
+      shouldGenerateImage: 'number',
+      src: 'nullableString',
+      scriptId: 'number',
+      projectId: 'number',
+    });
+    if (invalid) return invalid;
+    const id = addBackendStoryboard({
+      scriptId: Number(body.scriptId),
+      projectId: Number(body.projectId),
+      prompt: String(body.prompt),
+      videoDesc: String(body.videoDesc),
+      duration: Number(body.duration),
+      state: String(body.state),
+      // 复刻后端：入参的 shouldGenerateImage 被忽略，按 src 是否为空自行决定
+      shouldGenerateImage: body.src ? 1 : 0,
+    });
+    return envelope({ id });
+  }),
+
+  // 编辑分镜（后端整行覆盖 prompt + videoDesc；命中 0 行也回成功）
+  http.post('/api/production/storyboard/editStoryboardInfo', async ({ request }) => {
+    await netDelay(60);
+    const body = (await request.json()) as Record<string, unknown>;
+    const invalid = validateBody(body, { id: 'number', prompt: 'string', videoDesc: 'string' });
+    if (invalid) return invalid;
+    updateBackendStoryboard(Number(body.id), {
+      prompt: String(body.prompt),
+      videoDesc: String(body.videoDesc),
+    });
+    return envelope({ message: '更新提示词成功' });
+  }),
+
+  // 删单个分镜（后端 removeFrame：连带清关联，分镜不存在时业务失败）
+  http.post('/api/production/storyboard/removeFrame', async ({ request }) => {
+    await netDelay(60);
+    const body = (await request.json()) as Record<string, unknown>;
+    const invalid = validateBody(body, { id: 'number' });
+    if (invalid) return invalid;
+    if (!deleteBackendStoryboard(Number(body.id))) return failEnvelope('未找到该分镜');
+    return envelope({ message: '视频删除成功' });
+  }),
+
+  // 批量删分镜（后端 batchDelete：ids 空或按 projectId 一条没命中都是业务失败）
+  http.post('/api/production/storyboard/batchDelete', async ({ request }) => {
+    await netDelay(60);
+    const body = (await request.json()) as Record<string, unknown>;
+    const invalid = validateBody(body, { ids: 'numberArray', projectId: 'number' });
+    if (invalid) return invalid;
+    const ids = body.ids as number[];
+    if (!ids.length) return failEnvelope('请先选择分镜');
+    const removed = deleteBackendStoryboards(ids, Number(body.projectId));
+    if (!removed) return failEnvelope('当前选择分镜不存在');
+    return envelope({ message: '视频删除成功' });
   }),
 ];

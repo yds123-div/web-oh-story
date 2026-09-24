@@ -1,13 +1,8 @@
 import type {
   AppNotification,
   Asset,
-  Episode,
-  Model,
-  ModelId,
   Outline,
   Project,
-  Segment,
-  Shot,
   TaskStatus,
   Template,
   WorkflowState,
@@ -25,15 +20,12 @@ function randomId(): string {
   return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
 }
 
-type TaskKind = 'outline' | 'novel' | 'episode-split' | 'video' | 'export' | 'creative-image' | 'creative-video';
+type TaskKind = 'outline' | 'novel' | 'creative-image' | 'creative-video';
 
 type InternalTask = TaskStatus & {
   kind: TaskKind;
   projectId?: string;
   assetId?: string;
-  segmentId?: string;
-  episodeId?: string;
-  model?: ModelId;
 };
 
 function seedProjects(): Project[] {
@@ -184,165 +176,6 @@ function nmingOutline(projectId: string, projectName: string, finalized: boolean
   };
 }
 
-function splitKind(kind: string): { shotType: string; camera: string } {
-  const [shotType = '', camera = ''] = kind.split(' · ');
-  return { shotType, camera };
-}
-
-function shot(
-  id: string,
-  durationSec: number,
-  kind: string,
-  action: string,
-  extra: Partial<Pick<Shot, 'speaker' | 'voice' | 'line'>> = {},
-): Shot {
-  return {
-    id,
-    durationSec,
-    ...splitKind(kind),
-    action,
-    speaker: extra.speaker ?? '',
-    voice: extra.voice ?? '',
-    line: extra.line ?? '',
-  };
-}
-
-function nmingSegments(projectId: string): Segment[] {
-  const episodeId = `${projectId}-ep-1`;
-  const linwan = `${projectId}-char-linwan`;
-  const itachi = `${projectId}-char-itachi`;
-  const corridor = `${projectId}-scene-corridor`;
-  const seg1Prompt = `@[${corridor}] 冷白月光洒在深色木地板上，两盏行灯未点亮，长廊空寂无声，只有不稳定的呼吸与轻微衣料声，由 2 个分镜组成。
-分镜 1 ⏱ 4s @[${linwan}] 身着木叶制式素色和服，站在左侧近景原木廊柱旁一手扶柱，肩背未完全挺直，指尖贴柱细颤；视线游离长廊空处，低声独白：「明明只是在家看火影……一睁眼，就来到了这里。我知道所有人的结局，唯独不知道，自己该怎么活下去。」
-分镜 2 ⏱ 9s 切面部特写：阴影边缘压出 @[${itachi}] 墨黑长袍衣摆一角，红色瞳孔先于面容显出微光；林晚听见缓慢脚步，胸口起伏骤停，眼睑微抬，视线转向右侧深处阴影，仍扶柱未动。`;
-  const seg2Prompt = `整体背景：场景设定在 @[${corridor}]，由 3 个分镜组成。
-分镜 1 ⏱ 3s 中景，镜头缓慢向左平移，冷白月光斜射粗糙木质地板形成明暗对比；@[${linwan}] 与 @[${itachi}] 相对而站，鼬在画面左侧深处廊柱阴影中缓步走向镜头前的林晚，停步对视，眉头微压、表情平静。
-分镜 2 ⏱ 4s 中景固定镜头，石质地灯光晕照亮两人之间的木地板；两人视线交互，鼬眼睑微收、目光锐利、眉头向内皱起，开口质问：「深夜在此，有何目的。长老安排你，来监视我？」
-分镜 3 ⏱ 7s 近景，越过鼬的右肩拍向画面右侧深处的林晚，冷月光打在林晚半边脸上；她起初略微低头，随后头部迅速抬起，眉头痛苦地蹙在一起，双眼微微睁大且眼眶泛红，急切否认：「我不是来监视你的！鼬，我知道你将要背负什么，我不想看你走向那条绝路！」`;
-  const seg3Prompt = `@[${corridor}] 月光稳定，行灯未亮，现场空寂只余两人呼吸，由 2 个分镜组成。
-分镜 1 ⏱ 6s @[${linwan}] 视线死死定在 @[${itachi}] 脸上，眼眶泛红：「我不想看你走向那条绝路！」鼬眼睑轻收窄，唇角极浅勾起便被红瞳深处的悲凉拖冷：「预言？外来之人，不要妄言命运。」随即肩线转开，原地转向月洞门方向。
-分镜 2 ⏱ 4s 鼬背向林晚，肩背稳定没有回头，低沉警告：「离我远一点，否则，你会被拖入深渊。」警告落下，林晚双手扶柱、身体无力下滑，指尖细颤传到袖口；画面收暗，居中白色字幕：「我知晓你的悲剧，却无法改写。」`;
-  return [
-    {
-      id: `${episodeId}-seg-1`,
-      episodeId,
-      projectId,
-      no: 1,
-      title: '穿越惊惶 · 扶柱独白',
-      durationSec: 13,
-      generated: true,
-      videoUrl: `${DA}/clip1.mp4`,
-      prompt: seg1Prompt,
-      charCount: 420,
-      model: 'seedance-2.5',
-      shots: [
-        shot(
-          'c01',
-          4,
-          '全景',
-          '林晚穿端正完整的木叶制式素色和服，站在廊柱旁以一手撑住柱身，肩背未完全挺直；视线游离长廊空处，喉间压下一口发颤的气，指尖贴着木面细细抖动。',
-          {
-            speaker: '林晚（惊惶痛苦，低声断续）',
-            line: '明明只是在家看火影……一睁眼，就来到了这里。我知道所有人的结局，唯独不知道，自己该怎么活下去。',
-          },
-        ),
-        shot(
-          'c02',
-          9,
-          '特写→近景',
-          '阴影边缘先压出鼬墨黑色长袍的一角，厚实衣摆随稳定步伐掠过幽暗木地板；红色瞳孔先于完整面容显出微光。林晚听见缓慢脚步，胸口起伏短促停住，眼睑微抬，视线从空长廊转向右侧深处阴影中的鼬，仍扶柱未动。',
-        ),
-      ],
-    },
-    {
-      id: `${episodeId}-seg-2`,
-      episodeId,
-      projectId,
-      no: 2,
-      title: '质问与否认',
-      durationSec: 14,
-      generated: true,
-      videoUrl: `${DA}/clip2.mp4`,
-      prompt: seg2Prompt,
-      charCount: 742,
-      model: 'seedance-2.5',
-      shots: [
-        shot(
-          'c03',
-          3,
-          '中景 · 缓慢左移',
-          '冷白月光斜射粗糙木质地板形成明暗对比；林晚与鼬相对而站，鼬在画面左侧深处廊柱阴影中缓步走向镜头前的林晚，停步对视，眉头微压、表情平静。',
-        ),
-        shot(
-          'c04',
-          4,
-          '中景 · 固定',
-          '石质地灯光晕照亮两人之间的木地板；两人视线交互，鼬眼睑微收、目光锐利、眉头向内皱起。',
-          {
-            speaker: '鼬',
-            voice: '[音调偏低，音色质感冷硬偏沉，声音厚重扎实，发音方式字正腔圆，气息平稳绵长，正常语速]',
-            line: '深夜在此，有何目的。长老安排你，来监视我？',
-          },
-        ),
-        shot(
-          'c05',
-          7,
-          '近景 · 过肩（越鼬右肩）',
-          '冷月光打在林晚半边脸上；她起初略微低头，随后头部迅速抬起，眉头痛苦地蹙在一起，双眼微微睁大且眼眶泛红，急切否认。',
-          {
-            speaker: '林晚',
-            voice: '[音调偏低，音色质感细腻柔软，声音适中，气息起伏带颤抖，快速语速]',
-            line: '我不是来监视你的！鼬，我知道你将要背负什么，我不想看你走向那条绝路！',
-          },
-        ),
-      ],
-    },
-    {
-      id: `${episodeId}-seg-3`,
-      episodeId,
-      projectId,
-      no: 3,
-      title: '预言 · 警告 · 无力挽留',
-      durationSec: 10,
-      generated: false,
-      videoUrl: null,
-      prompt: seg3Prompt,
-      charCount: 386,
-      model: null,
-      shots: [
-        shot(
-          'c06',
-          6,
-          '特写',
-          '林晚视线死死定在鼬脸上，喉咙在「绝路」处明显收紧；鼬眼睑轻轻收窄，唇角极浅地勾起一点弧度，笑意刚形成便被红瞳深处的悲凉拖冷，随即肩线转开，原地转向背景月洞门。',
-          {
-            speaker: '林晚 → 鼬',
-            line: '「我不想看你走向那条绝路！」 / 「预言？外来之人，不要妄言命运。」',
-          },
-        ),
-        shot(
-          'c07',
-          4,
-          '中景 → 黑屏',
-          '鼬背向林晚朝向长廊深处，肩背稳定没有回头；警告落下后林晚双手扶柱、身体无力下滑，泛红的眼睛停在鼬背影上。画面收暗切黑，居中出现白色字幕。',
-          {
-            speaker: '鼬（冷淡警告，低沉缓慢）',
-            line: '离我远一点，否则，你会被拖入深渊。 △ 黑屏字幕：我知晓你的悲剧，却无法改写。',
-          },
-        ),
-      ],
-    },
-  ];
-}
-
-const MODELS: Model[] = [
-  { id: 'seedance-2.5', name: 'Seedance 2.5' },
-  { id: 'minimax-h3-max', name: 'Minimax H3 Max' },
-  { id: 'wan-3.0', name: 'Wan 3.0' },
-];
-
-const MODEL_IDS = new Set<string>(MODELS.map((m) => m.id));
-
 function officialTemplates(): Template[] {
   return [
     {
@@ -443,39 +276,6 @@ function seedNotifications(): AppNotification[] {
   ];
 }
 
-function nmingEpisodes(projectId: string): Episode[] {
-  return [
-    {
-      id: `${projectId}-ep-1`,
-      projectId,
-      number: 1,
-      title: '异世囚笼',
-      status: 'split',
-      segmentCount: 3,
-      durationSec: 37,
-      coverUrl: `${DA}/corridor.jpg`,
-      summary: '片段1 穿越惊惶(13s) ｜ 片段2 质问与否认(14s) ｜ 片段3 预言·警告·无力挽留(10s)',
-      segments: [
-        { no: 1, title: '穿越惊惶', durationSec: 13 },
-        { no: 2, title: '质问与否认', durationSec: 14 },
-        { no: 3, title: '预言·警告·无力挽留', durationSec: 10 },
-      ],
-    },
-    {
-      id: `${projectId}-ep-2`,
-      projectId,
-      number: 2,
-      title: '未命名',
-      status: 'draft',
-      segmentCount: 0,
-      durationSec: 0,
-      coverUrl: null,
-      summary: '草稿 · 由第1集结尾钩子自动延展：林晚被高层约谈 · 止水暗中现身提醒',
-      segments: [],
-    },
-  ];
-}
-
 function defaultWorkflow(projectId: string): WorkflowState {
   return {
     projectId,
@@ -490,8 +290,6 @@ let creditsBalance = 940;
 
 let outlines = new Map<string, Outline>();
 let assets = new Map<string, Asset>();
-let episodes = new Map<string, Episode[]>();
-let segments = new Map<string, Segment>();
 let workflows = new Map<string, WorkflowState>();
 let notifications = seedNotifications();
 
@@ -536,8 +334,6 @@ function seedDemoContent(): void {
   outlines.set(DEMO_PROJECT_ID, outline);
   putAssets(nmingAssets(DEMO_PROJECT_ID));
   workflows.set(DEMO_PROJECT_ID, { ...defaultWorkflow(DEMO_PROJECT_ID), unlockedStep: 3, outlineFinalized: true, assetsCompleted: true });
-  episodes.set(DEMO_PROJECT_ID, nmingEpisodes(DEMO_PROJECT_ID));
-  putSegments(nmingSegments(DEMO_PROJECT_ID));
 }
 
 export function resetDb(): void {
@@ -548,8 +344,6 @@ export function resetDb(): void {
   creditsBalance = 940;
   outlines = new Map();
   assets = new Map();
-  episodes = new Map();
-  segments = new Map();
   workflows = new Map();
   notifications = seedNotifications();
   seedDemoContent();
@@ -576,7 +370,7 @@ export function getOutlineRecord(projectId: string): Outline | undefined {
   return outline ? cloneOutline(outline) : undefined;
 }
 
-export function getWorkflowRecord(projectId: string): WorkflowState | undefined {
+function getWorkflowRecord(projectId: string): WorkflowState | undefined {
   if (!getProject(projectId)) return undefined;
   const existing = workflows.get(projectId);
   if (existing) return cloneWorkflow(existing);
@@ -604,105 +398,12 @@ export function finalizeOutlineRecord(projectId: string): WorkflowState | undefi
   return setWorkflow(projectId, { outlineFinalized: true, unlockedStep: 2 });
 }
 
-export function completeAssetsRecord(projectId: string): WorkflowState | undefined {
-  const workflow = getWorkflowRecord(projectId);
-  if (!workflow || !workflow.outlineFinalized) return undefined;
-  return setWorkflow(projectId, { assetsCompleted: true, unlockedStep: 3 });
-}
-
-export function listEpisodeRecords(projectId: string): Episode[] | undefined {
-  if (!getProject(projectId)) return undefined;
-  return (episodes.get(projectId) ?? []).map((e) => ({ ...e, segments: e.segments.map((s) => ({ ...s })) }));
-}
-
-function cloneSegment(segment: Segment): Segment {
-  return { ...segment, shots: segment.shots.map((s) => ({ ...s })) };
-}
-
-function cloneEpisode(episode: Episode): Episode {
-  return { ...episode, segments: episode.segments.map((s) => ({ ...s })) };
-}
-
-function putSegments(list: Segment[]): void {
-  for (const segment of list) segments.set(segment.id, cloneSegment(segment));
-}
-
-function findEpisode(episodeId: string): Episode | undefined {
-  for (const list of episodes.values()) {
-    const found = list.find((e) => e.id === episodeId);
-    if (found) return found;
-  }
-  return undefined;
-}
-
-export function getEpisodeRecord(episodeId: string): Episode | undefined {
-  const found = findEpisode(episodeId);
-  return found ? cloneEpisode(found) : undefined;
-}
-
-export function listSegmentRecords(episodeId: string): Segment[] | undefined {
-  if (!findEpisode(episodeId)) return undefined;
-  return [...segments.values()]
-    .filter((s) => s.episodeId === episodeId)
-    .sort((a, b) => a.no - b.no)
-    .map(cloneSegment);
-}
-
-export function patchSegmentRecord(
-  segmentId: string,
-  body: { prompt?: string; shots?: Shot[]; title?: string },
-): Segment | undefined {
-  const found = segments.get(segmentId);
-  if (!found) return undefined;
-  if (body.prompt !== undefined) {
-    found.prompt = body.prompt;
-    found.charCount = body.prompt.length;
-  }
-  if (body.shots !== undefined) found.shots = body.shots.map((s) => ({ ...s }));
-  if (body.title !== undefined) found.title = body.title;
-  return cloneSegment(found);
-}
-
-export function createSegmentRecord(
-  episodeId: string,
-  body: { prompt: string; durationSec: number; title: string },
-): Segment | undefined {
-  const episode = findEpisode(episodeId);
-  if (!episode) return undefined;
-  const existing = listSegmentRecords(episodeId) ?? [];
-  const nextNo = existing.length + 1;
-  const newSegment: Segment = {
-    id: `${episodeId}-seg-${nextNo}`,
-    episodeId,
-    projectId: episode.projectId,
-    no: nextNo,
-    title: body.title,
-    durationSec: body.durationSec,
-    generated: false,
-    videoUrl: null,
-    prompt: body.prompt,
-    shots: [],
-    model: null,
-    charCount: body.prompt.length,
-  };
-  segments.set(newSegment.id, newSegment);
-  return cloneSegment(newSegment);
-}
-
-export function listModelRecords(): Model[] {
-  return MODELS.map((m) => ({ ...m }));
-}
-
 export function listTemplateRecords(): Template[] {
   return officialTemplates();
 }
 
 export function listNotificationRecords(): AppNotification[] {
   return notifications.map((n) => ({ ...n }));
-}
-
-export function isModelId(value: string): value is ModelId {
-  return MODEL_IDS.has(value);
 }
 
 function jitter(minMs: number, maxMs: number): number {
@@ -728,34 +429,6 @@ function finishTask(task: InternalTask): void {
     ensureOutlineAndAssets(task.projectId);
     task.result = { projectId: task.projectId };
     return;
-  }
-  if (task.kind === 'episode-split' && task.projectId) {
-    if (!episodes.has(task.projectId)) {
-      episodes.set(task.projectId, nmingEpisodes(task.projectId));
-      putSegments(nmingSegments(task.projectId));
-    }
-    task.result = { projectId: task.projectId, episodeCount: 1 };
-    return;
-  }
-  if (task.kind === 'video' && task.segmentId) {
-    const segment = segments.get(task.segmentId);
-    if (segment) {
-      segment.generated = true;
-      segment.videoUrl = `${import.meta.env.BASE_URL}demo-assets/clip${segment.no}.mp4`;
-      segment.model = task.model ?? segment.model;
-      task.result = { segmentId: segment.id, videoUrl: segment.videoUrl, model: segment.model };
-    }
-    return;
-  }
-  if (task.kind === 'export' && task.episodeId) {
-    const episode = findEpisode(task.episodeId);
-    const project = episode ? getProject(episode.projectId) : undefined;
-    const name = project?.name ?? 'DeepSFV';
-    const epNo = episode?.number ?? 1;
-    task.result = {
-      downloadUrl: `${DA}/clip1.mp4`,
-      fileName: `${name}_第${epNo}集_720P.mp4`,
-    };
   }
   if (task.kind === 'creative-image') {
     const mediaUrl = Math.random() < 0.5 ? `${DA}/linwan.png` : `${DA}/itachi.png`;
@@ -790,7 +463,7 @@ function advanceTask(taskId: string): void {
 
 function createTask(
   kind: TaskKind,
-  extra: { projectId?: string; assetId?: string; segmentId?: string; episodeId?: string; model?: ModelId },
+  extra: { projectId?: string; assetId?: string },
 ): TaskStatus {
   const taskId = `task-${randomId()}`;
   const task: InternalTask = {
@@ -811,24 +484,6 @@ export function createOutlineTask(projectId: string): TaskStatus {
 
 export function createNovelTask(projectId: string): TaskStatus {
   return createTask('novel', { projectId });
-}
-
-export function createEpisodeSplitTask(projectId: string): TaskStatus | undefined {
-  const workflow = getWorkflowRecord(projectId);
-  if (!workflow?.assetsCompleted) return undefined;
-  return createTask('episode-split', { projectId });
-}
-
-export function createSegmentVideoTask(segmentId: string, model: ModelId): TaskStatus | undefined {
-  const segment = segments.get(segmentId);
-  if (!segment) return undefined;
-  return createTask('video', { segmentId, projectId: segment.projectId, model });
-}
-
-export function createEpisodeExportTask(episodeId: string): TaskStatus | undefined {
-  const episode = findEpisode(episodeId);
-  if (!episode || episode.status !== 'split') return undefined;
-  return createTask('export', { episodeId, projectId: episode.projectId });
 }
 
 export function createCreativeTask(kind: 'creative-image' | 'creative-video'): TaskStatus {

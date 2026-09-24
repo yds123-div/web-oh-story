@@ -1,10 +1,10 @@
 import { useEffect, useState } from 'react';
-import { App, Button, Progress } from 'antd';
+import { App, Button, Typography } from 'antd';
 import { useNavigate, useParams } from 'react-router-dom';
 import { WorkflowHeader } from '../components/WorkflowHeader';
-import { useTask } from '../hooks/useTask';
-import { getOutline, getWorkflow, listEpisodes, submitEpisodeSplitTask } from '../lib/api';
-import { useWorkflowStore } from '../stores/workflowStore';
+import { useWorkflowStep } from '../hooks/useWorkflowStep';
+import { fetchProject, listEpisodes } from '../lib/api';
+import { errorMessage } from '../lib/errors';
 import type { Episode } from '../types/api';
 
 function formatDuration(sec: number): string {
@@ -13,51 +13,57 @@ function formatDuration(sec: number): string {
   return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
 }
 
+/**
+ * 分集视频：领域映射「剧本即分集」——后端没有"集"实体，
+ * 一个剧本就是一集，卡片直接展示该剧本的分镜数与总时长。
+ */
 export default function EpisodesPage() {
   const { message } = App.useApp();
   const { id = '' } = useParams();
   const navigate = useNavigate();
-  const setUnlocked = useWorkflowStore((s) => s.setUnlocked);
+  const { scripts } = useWorkflowStep();
   const [episodes, setEpisodes] = useState<Episode[]>([]);
-  const [taskId, setTaskId] = useState<string | null>(null);
   const [projectName, setProjectName] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [failed, setFailed] = useState(false);
 
-  const { task } = useTask(taskId, {
-    intervalMs: 2500,
-    onSucceeded: async () => {
-      const data = await listEpisodes(id);
-      setEpisodes(data.episodes);
-      setTaskId(null);
-    },
-    onFailed: (t) => message.error(t.error ?? '分集拆分失败'),
-  });
-
+  // 项目名是页面自身所需（门控查询不含），单独取
   useEffect(() => {
-    let cancelled = false;
-    const boot = async () => {
-      const wf = await getWorkflow(id);
-      if (cancelled) return;
-      setUnlocked(id, wf.unlockedStep);
-      const [data, outline] = await Promise.all([listEpisodes(id), getOutline(id)]);
-      if (cancelled) return;
-      setProjectName(outline.projectName);
-      if (data.episodes.length > 0) {
-        setEpisodes(data.episodes);
-        return;
+    const controller = new AbortController();
+    void (async () => {
+      try {
+        const project = await fetchProject(id, controller.signal);
+        setProjectName(project.name);
+      } catch (err) {
+        if (err instanceof DOMException && err.name === 'AbortError') return;
+        message.error(errorMessage(err, '加载项目失败'));
       }
-      const { taskId: nextId } = await submitEpisodeSplitTask(id);
-      if (!cancelled) setTaskId(nextId);
-    };
-    void boot().catch(() => {
-      if (!cancelled) message.error('加载分集失败');
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [id, message, setUnlocked]);
+    })();
+    return () => controller.abort();
+  }, [id, message]);
 
-  const splitting = episodes.length === 0;
-  const firstReady = episodes.find((e) => e.status === 'split');
+  // 门控 Provider 已拉过剧本列表；有剧本才聚合分镜统计，避免空项目白发请求
+  const hasScripts = (scripts?.length ?? 0) > 0;
+  useEffect(() => {
+    if (scripts == null) return;
+    if (!hasScripts) {
+      setEpisodes([]);
+      setLoading(false);
+      return;
+    }
+    const controller = new AbortController();
+    setFailed(false);
+    void listEpisodes(id, controller.signal)
+      .then((data) => setEpisodes(data.episodes))
+      .catch((err: unknown) => {
+        if (err instanceof DOMException && err.name === 'AbortError') return;
+        setFailed(true);
+      })
+      .finally(() => setLoading(false));
+    return () => controller.abort();
+  }, [id, scripts, hasScripts]);
+
+  const firstReady = episodes[0];
 
   return (
     <div className="ds-flowPage">
@@ -67,24 +73,16 @@ export default function EpisodesPage() {
           分集视频
         </div>
         <div style={{ fontSize: 13, color: 'var(--ant-color-text-tertiary)', marginTop: 6 }}>
-          {splitting ? '导演智能体正在拆分决策…' : '导演智能体已完成分集拆分决策 · 共 1 集'}
+          每个剧本就是一集 · 共 {episodes.length} 集
         </div>
 
         <div style={{ marginTop: 22 }}>
-          {splitting ? (
-            <div className="ds-epLoad">
-              <div className="ph" />
-              <div style={{ flex: 1 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
-                  <div className="ds-statusSpin" />
-                  <b style={{ fontSize: 14 }}>分集拆分中… {task?.progress ?? 0}%</b>
-                </div>
-                <Progress percent={task?.progress ?? 0} strokeColor={{ from: '#8b5cf6', to: '#6366f1' }} />
-                <div style={{ fontSize: 12, color: 'var(--ant-color-text-tertiary)', lineHeight: 1.8, marginTop: 8 }}>
-                  导演 James：原剧本已明确标注第1集，总字数两百余字，低于单集300字常规下限，但叙事闭环完整——严格保持原始 1
-                  集结构，不做强行拆解。
-                </div>
-              </div>
+          {loading ? null : failed ? (
+            <div className="ds-emptyBox">
+              <div style={{ fontSize: 28, marginBottom: 10 }}>⚠️</div>
+              <Typography.Text type="secondary" style={{ fontSize: 13 }}>
+                加载分集失败，请确认后端服务是否可用
+              </Typography.Text>
             </div>
           ) : (
             episodes.map((ep) => (
@@ -92,20 +90,18 @@ export default function EpisodesPage() {
                 key={ep.id}
                 type="button"
                 className="ds-epCard"
-                style={{ opacity: ep.status === 'draft' ? 0.75 : 1, marginBottom: 14 }}
-                onClick={() => {
-                  if (ep.status !== 'split') {
-                    message.info('第2集为草稿，待导演智能体拆分决策');
-                    return;
-                  }
-                  navigate(`/project/${id}/episode/${ep.id}`);
-                }}
+                style={{ marginBottom: 14 }}
+                onClick={() => navigate(`/project/${id}/episode/${ep.id}`)}
               >
                 <div className="cv">
-                  {ep.coverUrl ? <img src={ep.coverUrl} alt={ep.title} /> : <span className="draft">第{ep.number}集 · 草稿</span>}
-                  <span className={`ds-status ${ep.status === 'split' ? 'ok' : 'no'}`} style={{ position: 'absolute', top: 10, left: 10 }}>
+                  {ep.coverUrl ? (
+                    <img src={ep.coverUrl} alt={ep.title} />
+                  ) : (
+                    <span className="draft">第{ep.number}集</span>
+                  )}
+                  <span className="ds-status ok" style={{ position: 'absolute', top: 10, left: 10 }}>
                     <i className="ds-dot" />
-                    {ep.status === 'split' ? '已拆分' : '未拆分'}
+                    {ep.storyboardCount > 0 ? '已建分镜' : '待建分镜'}
                   </span>
                 </div>
                 <div className="bd">
@@ -113,11 +109,9 @@ export default function EpisodesPage() {
                     第{ep.number}集：{ep.title}
                   </h4>
                   <div className="mt">
-                    {ep.status === 'split'
-                      ? `共 ${ep.segmentCount} 个片段 · 总时长 ${formatDuration(ep.durationSec)} · 9:16`
-                      : '草稿 · 待拆分'}
-                    <br />
-                    {ep.summary}
+                    {ep.storyboardCount > 0
+                      ? `共 ${ep.storyboardCount} 个分镜 · 总时长 ${formatDuration(ep.durationSec)}`
+                      : '还没有分镜 · 进入后新建'}
                   </div>
                 </div>
               </button>
@@ -126,7 +120,7 @@ export default function EpisodesPage() {
         </div>
       </div>
       <div className="ds-flowBar">
-        <span className="msg">分集就绪后，进入片段编辑器生成视频</span>
+        <span className="msg">分集就绪后，进入分镜工作区编排分镜</span>
         <Button className="ds-ghost ds-pill" size="small" onClick={() => navigate(`/project/${id}/assets`)}>
           上一步
         </Button>
@@ -137,7 +131,7 @@ export default function EpisodesPage() {
           disabled={!firstReady}
           onClick={() => firstReady && navigate(`/project/${id}/episode/${firstReady.id}`)}
         >
-          进入片段编辑 ◆60
+          进入分镜工作区
         </Button>
       </div>
     </div>

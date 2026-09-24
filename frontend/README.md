@@ -22,13 +22,16 @@ pnpm test
 pnpm build
 ```
 
-## 全流程走查（MSW）
+## 主线走查（对接真实后端）
 
-1. 打开 `/`，看到《逆命木叶》等项目卡；顶栏积分来自 `GET /api/credits`，铃铛打开通知中心。
-2. **创意** `/idea`：官方示例模板卡 →「套用」进入 `/create?templateId=`，创作入口预填剧本文本与名称。
-3. **创作** `/create`：粘贴或上传剧本（txt/pdf/doc/docx/md，≤30 万字）→ 立即创作 ◆32 → 大纲任务进度 → STEP1。
-4. **STEP1** `/project/:id/outline`：设定 / 摘要 / 资产提取 → 剧本定稿，解锁 STEP2。
-5. **STEP2** `/project/:id/assets`：生成角色形象（任务进度 + 图片）→ 一致性锁定 → 进入分集。
-6. **STEP3** `/project/:id/episodes`：导演拆分任务 → 第 1 集（3 片段 / 37s）→ 进入片段编辑器。
-7. **片段编辑器**：编辑提示词（`@` 引用资产 chip）、切换 Seedance 2.5 / Minimax H3 Max / Wan 3.0、生成 ◆1300 / 再次生成 ◆406、预览 `clip*.mp4`、时间轴切换片段。
-8. **合成导出**：⬇ 合成 → 进度弹窗 → 下载成片 mp4。
+领域映射：**剧本即分集** —— 后端没有"集"实体，一个剧本就是一集。
+
+1. 打开 `/`，看到后端真实项目卡（角色数 / 剧本数 / 视频数 / 分镜数来自统计接口）。
+2. **创作** `/create`：粘贴剧本文本 → 保存为后端剧本。
+3. **STEP1** `/project/:id/scripts`：剧本列表，可编辑 / 删除 / 触发 AI 提取资产。
+4. **STEP2** `/project/:id/assets`：资产工坊，真实资产的增删改 + 图片上传 + AI 润色 / 生图。
+5. **STEP3** `/project/:id/episodes`：分集视频，每个剧本一张卡，显示分镜数与总时长。
+6. **分镜工作区** `/project/:id/episode/:scriptId`：分镜列表（缩略图 / 描述 / 时长 / 关联资产），
+   新建 / 编辑 / 单删 / 批量删全部走后端分镜接口。
+
+后续（未接）：分镜图片与视频轨道链路见 `.scratch/backend-integration/issues/09-image-video-pipeline.md`。

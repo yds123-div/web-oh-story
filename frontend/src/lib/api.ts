@@ -8,25 +8,21 @@ import type {
   AssetType,
   CreateAssetBody,
   CreateProjectBody,
-  CreateSegmentBody,
+  CreateStoryboardBody,
   CreditsResponse,
   Episode,
   EpisodeListResponse,
-  ExportTaskBody,
-  ModelListResponse,
   NotificationListResponse,
   NovelTaskBody,
   Outline,
   OutlineTaskBody,
-  PatchSegmentBody,
   Project,
   ProjectListResponse,
   ProjectStatistics,
   Script,
   ScriptExtractState,
   ScriptListResponse,
-  Segment,
-  SegmentListResponse,
+  Storyboard,
   SubmitTaskResponse,
   TaskListParams,
   TaskListResponse,
@@ -37,7 +33,7 @@ import type {
   TemplateListResponse,
   UpdateAssetBody,
   UpdateScriptBody,
-  VideoTaskBody,
+  UpdateStoryboardBody,
   WorkflowState,
 } from '../types/api';
 
@@ -310,10 +306,6 @@ export function submitNovelTask(projectId: string, body: NovelTaskBody): Promise
   });
 }
 
-export function getOutline(projectId: string): Promise<Outline> {
-  return apiFetch(`/api/projects/${projectId}/outline`);
-}
-
 export function finalizeOutline(projectId: string): Promise<WorkflowState> {
   return apiFetch(`/api/projects/${projectId}/outline/finalize`, { method: 'POST' });
 }
@@ -323,10 +315,6 @@ export function updateScreenplay(projectId: string, screenplay: string): Promise
     method: 'PATCH',
     body: JSON.stringify({ screenplay }),
   });
-}
-
-export function getWorkflow(projectId: string): Promise<WorkflowState> {
-  return apiFetch(`/api/projects/${projectId}/workflow`);
 }
 
 // ===== 资产（后端 o_assets / o_image）=====
@@ -490,49 +478,124 @@ export async function uploadAssetImage(body: {
   });
 }
 
-export function submitEpisodeSplitTask(projectId: string): Promise<SubmitTaskResponse> {
-  return apiFetch(`/api/projects/${projectId}/episode-split-tasks`, { method: 'POST' });
+// ===== 分集（剧本即分集：后端 o_script + 其分镜聚合）=====
+
+function toEpisode(script: Script, number: number, storyboards: Storyboard[]): Episode {
+  return {
+    id: script.id,
+    projectId: script.projectId,
+    number,
+    title: script.name,
+    storyboardCount: storyboards.length,
+    durationSec: storyboards.reduce((sum, s) => sum + (s.durationSec ?? 0), 0),
+    coverUrl: storyboards.find((s) => s.imageUrl)?.imageUrl ?? null,
+  };
 }
 
-export function listEpisodes(projectId: string): Promise<EpisodeListResponse> {
-  return apiFetch(`/api/projects/${projectId}/episodes`);
+/**
+ * 分集列表：后端没有"集"这个实体，一个剧本就是一集。
+ * 逐剧本取分镜（getStoryboardData 只认 scriptId）聚合出分镜数、总时长与封面。
+ */
+export async function listEpisodes(
+  projectId: string,
+  signal?: AbortSignal,
+): Promise<EpisodeListResponse> {
+  const { scripts } = await listScripts(projectId, signal);
+  const ordered = [...scripts].sort((a, b) => Number(a.id) - Number(b.id));
+  const storyboardsPerScript = await Promise.all(
+    ordered.map((script) => listStoryboards(projectId, script.id, signal)),
+  );
+  return {
+    episodes: ordered.map((script, i) => toEpisode(script, i + 1, storyboardsPerScript[i] ?? [])),
+  };
 }
 
-export function getEpisode(episodeId: string): Promise<Episode> {
-  return apiFetch(`/api/episodes/${episodeId}`);
+// ===== 分镜（后端 o_storyboard）=====
+
+/** getStoryboardData 返回的一行；后端会整键省掉无值的 duration/filePath/index */
+export type StoryboardRow = {
+  id: string | number;
+  scriptId?: number;
+  prompt?: string;
+  duration?: number;
+  /** 后端静态托管的小图 URL；无图时该键不存在 */
+  filePath?: string;
+  /** 关联资产（type 为后端 role/scene/tool） */
+  characters?: { name?: string; type?: string; avatar?: string }[];
+  /** 分镜排序位（仅 AI 分镜 Agent 与 FlowData 写；本页暂不消费） */
+  index?: number | null;
+};
+
+function toStoryboard(row: StoryboardRow): Storyboard {
+  return {
+    id: String(row.id),
+    scriptId: row.scriptId != null ? String(row.scriptId) : '',
+    prompt: row.prompt ?? '',
+    durationSec: typeof row.duration === 'number' ? row.duration : null,
+    imageUrl: row.filePath ? row.filePath : null,
+    characters: (row.characters ?? []).map((c) => ({
+      name: c.name ?? '',
+      type: FRONTEND_ASSET_TYPES[c.type ?? ''] ?? 'material',
+      avatarUrl: c.avatar ?? null,
+    })),
+  };
 }
 
-export function listSegments(episodeId: string): Promise<SegmentListResponse> {
-  return apiFetch(`/api/episodes/${episodeId}/segments`);
+/** 分镜列表（进入工作室页即加载当前剧本的真实分镜） */
+export async function listStoryboards(
+  projectId: string,
+  scriptId: string,
+  signal?: AbortSignal,
+): Promise<Storyboard[]> {
+  const rows = await postJson<StoryboardRow[] | null>(
+    '/api/production/getStoryboardData',
+    { scriptId: Number(scriptId), projectId: Number(projectId) },
+    { signal },
+  );
+  return (rows ?? []).map(toStoryboard);
 }
 
-export function patchSegment(segmentId: string, body: PatchSegmentBody): Promise<Segment> {
-  return apiFetch(`/api/segments/${segmentId}`, { method: 'PATCH', body: JSON.stringify(body) });
+/**
+ * 新增分镜：后端同事务建一条 o_videoTrack（09 的视频轨道以它为单位），返回新分镜 id。
+ * state/shouldGenerateImage 按后端「未生成 + 无图」的约定给值。
+ *
+ * 描述同时写入 prompt 与 videoDesc 两列：后端没有「景别/运镜」列，两者由页面拼进描述文本；
+ * 而 09 的 AI 生成视频提示词以 videoDesc 为核心输入，只写 prompt 会让它读不到。
+ */
+export async function createStoryboard(body: CreateStoryboardBody): Promise<string> {
+  const data = await postJson<{ id: number }>('/api/production/storyboard/addStoryboard', {
+    prompt: body.prompt,
+    duration: body.durationSec,
+    state: '未生成',
+    videoDesc: body.prompt,
+    shouldGenerateImage: 0,
+    src: null,
+    scriptId: Number(body.scriptId),
+    projectId: Number(body.projectId),
+  });
+  return String(data.id);
 }
 
-export function createSegment(episodeId: string, body: CreateSegmentBody): Promise<Segment> {
-  return apiFetch(`/api/episodes/${episodeId}/segments`, {
-    method: 'POST',
-    body: JSON.stringify(body),
+/** 编辑分镜描述（后端 editStoryboardInfo 整行覆盖 prompt + videoDesc，故两者同值回传） */
+export async function updateStoryboard(body: UpdateStoryboardBody): Promise<void> {
+  await postJson('/api/production/storyboard/editStoryboardInfo', {
+    id: Number(body.id),
+    prompt: body.prompt,
+    videoDesc: body.prompt,
   });
 }
 
-export function submitSegmentVideoTask(segmentId: string, body: VideoTaskBody): Promise<SubmitTaskResponse> {
-  return apiFetch(`/api/segments/${segmentId}/video-tasks`, {
-    method: 'POST',
-    body: JSON.stringify(body),
-  });
+/** 删除单个分镜（后端 removeFrame：连带清掉该分镜独占的视频轨道） */
+export async function deleteStoryboard(id: string): Promise<void> {
+  await postJson('/api/production/storyboard/removeFrame', { id: Number(id) });
 }
 
-export function submitEpisodeExportTask(episodeId: string, body: ExportTaskBody = {}): Promise<SubmitTaskResponse> {
-  return apiFetch(`/api/episodes/${episodeId}/export-tasks`, {
-    method: 'POST',
-    body: JSON.stringify(body),
+/** 批量删除分镜（后端 batchDelete 按 projectId 过滤；ids 为空会被后端拒绝） */
+export async function deleteStoryboards(projectId: string, ids: string[]): Promise<void> {
+  await postJson('/api/production/storyboard/batchDelete', {
+    ids: ids.map(Number),
+    projectId: Number(projectId),
   });
-}
-
-export function listModels(): Promise<ModelListResponse> {
-  return apiFetch('/api/models');
 }
 
 export function listTemplates(): Promise<TemplateListResponse> {

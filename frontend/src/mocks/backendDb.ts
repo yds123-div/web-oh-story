@@ -91,6 +91,9 @@ let scripts: BackendScriptRow[] = [];
 let assets: BackendAssetRow[] = [];
 let images: BackendImageRow[] = [];
 let imageIdSeq = 1;
+let storyboards: BackendStoryboardRow[] = [];
+/** o_storyboard 自增 id 计数器（与真实后端的 rowid 自增一致） */
+let storyboardIdSeq = 1;
 /** 图像供应商 key 开关：镜像真实后端「key 未配置时生图必失败」的默认态 */
 let imageVendorEnabled = false;
 /** generalStatistics 的模拟计数（真实后端按 o_assets/o_script 等表统计） */
@@ -219,6 +222,49 @@ function seed(): void {
   images = [];
   imageIdSeq = 1;
   imageVendorEnabled = false;
+  // 种子分镜：覆盖「有缩略图 / 无缩略图」与「有关联资产 / 无关联资产」四种展示分支
+  storyboardIdSeq = 1;
+  storyboards = [
+    {
+      id: storyboardIdSeq++,
+      scriptId: 1,
+      projectId: DEMO_PROJECT_ID,
+      prompt: '长廊夜景：林晚独自伫立，月光透过木窗洒下',
+      videoDesc: '长廊夜景：林晚独自伫立，月光透过木窗洒下',
+      duration: 4,
+      state: '未生成',
+      filePath: '',
+      shouldGenerateImage: 0,
+      associateAssetsIds: [101, 103],
+      createTime: 1758000070000,
+    },
+    {
+      id: storyboardIdSeq++,
+      scriptId: 1,
+      projectId: DEMO_PROJECT_ID,
+      prompt: '林晚回头，叫住长廊尽头经过的宇智波鼬',
+      videoDesc: '林晚回头，叫住长廊尽头经过的宇智波鼬',
+      duration: 3,
+      state: '未生成',
+      filePath: '/1/storyboard/mock-2.png',
+      shouldGenerateImage: 1,
+      associateAssetsIds: [101, 102],
+      createTime: 1758000071000,
+    },
+    {
+      id: storyboardIdSeq++,
+      scriptId: 1,
+      projectId: DEMO_PROJECT_ID,
+      prompt: '两人对视，鼬神色冷漠，林晚欲言又止',
+      videoDesc: '两人对视，鼬神色冷漠，林晚欲言又止',
+      duration: 5,
+      state: '未生成',
+      filePath: '',
+      shouldGenerateImage: 0,
+      associateAssetsIds: [],
+      createTime: 1758000072000,
+    },
+  ];
   statsByProject = new Map([
     [DEMO_PROJECT_ID, { roleCount: 2, scriptCount: 1, videoCount: 0, storyboardCount: 3 }],
   ]);
@@ -599,4 +645,95 @@ export function cancelBackendImage(imageId: number): boolean {
   if (!image) return false;
   image.state = IMAGE_STATE.FAILED;
   return true;
+}
+
+// ===== 分镜（复刻后端 o_storyboard / o_assets2Storyboard 契约）=====
+
+/** 后端 `o_storyboard` 表一行（id 为全局 rowid 自增，与真实后端一致） */
+export type BackendStoryboardRow = {
+  id: number;
+  scriptId: number;
+  projectId: number;
+  /** 分镜描述（后端无「景别/运镜」列，两者由页面拼进该文本） */
+  prompt: string;
+  /** 视频提示词生成的核心输入（09 用）；本 mock 与 prompt 同值 */
+  videoDesc: string;
+  duration: number;
+  /** 未生成 / 生成中 / 已完成 / 生成失败 */
+  state: string;
+  /** 后端静态托管的原图路径；无图为空串 */
+  filePath: string;
+  shouldGenerateImage: number;
+  /** 关联资产 id（o_assets2Storyboard 的行） */
+  associateAssetsIds: number[];
+  createTime: number;
+};
+
+/** 镜像后端 getStoryboardData：按 scriptId + projectId 查，index 全为 NULL 时按 id 升序（= 插入顺序） */
+export function getBackendStoryboards(projectId: number, scriptId: number): BackendStoryboardRow[] {
+  return storyboards
+    .filter((s) => s.scriptId === scriptId && s.projectId === projectId)
+    .sort((a, b) => a.id - b.id)
+    .map((s) => ({ ...s, associateAssetsIds: [...s.associateAssetsIds] }));
+}
+
+/** 镜像后端 addStoryboard：同事务建 o_videoTrack（09 才操作轨道），返回新分镜 id */
+export function addBackendStoryboard(row: {
+  scriptId: number;
+  projectId: number;
+  prompt: string;
+  videoDesc: string;
+  duration: number;
+  state: string;
+  shouldGenerateImage: number;
+}): number {
+  const created: BackendStoryboardRow = {
+    ...row,
+    id: storyboardIdSeq++,
+    filePath: '',
+    associateAssetsIds: [],
+    createTime: Date.now(),
+  };
+  storyboards.push(created);
+  return created.id;
+}
+
+/** 镜像后端 editStoryboardInfo：prompt 与 videoDesc 整行覆盖 */
+export function updateBackendStoryboard(
+  id: number,
+  patch: { prompt: string; videoDesc: string },
+): boolean {
+  const found = storyboards.find((s) => s.id === id);
+  if (!found) return false;
+  found.prompt = patch.prompt;
+  found.videoDesc = patch.videoDesc;
+  return true;
+}
+
+/** 镜像后端 removeFrame：连带清掉 o_assets2Storyboard 关联 */
+export function deleteBackendStoryboard(id: number): boolean {
+  const before = storyboards.length;
+  storyboards = storyboards.filter((s) => s.id !== id);
+  return storyboards.length < before;
+}
+
+/** 镜像后端 batchDelete：按 projectId 过滤后批量删；返回实际命中数 */
+export function deleteBackendStoryboards(ids: number[], projectId: number): number {
+  const matched = storyboards.filter((s) => ids.includes(s.id) && s.projectId === projectId);
+  storyboards = storyboards.filter((s) => !matched.some((m) => m.id === s.id));
+  return matched.length;
+}
+
+/** 分镜关联的资产（getStoryboardData 的 characters 项：name/type + 有图时的 avatar） */
+export function getBackendStoryboardCharacters(
+  storyboardId: number,
+): { name: string; type: string; avatar?: string }[] {
+  const found = storyboards.find((s) => s.id === storyboardId);
+  if (!found) return [];
+  return found.associateAssetsIds.flatMap((assetId) => {
+    const asset = assets.find((a) => a.id === assetId);
+    if (!asset) return [];
+    const avatar = imageSrc(asset);
+    return [{ name: asset.name, type: asset.type, ...(avatar ? { avatar } : {}) }];
+  });
 }

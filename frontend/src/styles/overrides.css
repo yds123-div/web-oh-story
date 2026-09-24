@@ -2190,3 +2190,108 @@ html[data-theme='light'] .ds-chip.on {
   }
 }
 
+
+/* 分镜工作区（StudioPage）：分镜卡片列表 + 批量勾选 */
+.ds-sbList {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 18px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.ds-sbCard {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  background: var(--ant-color-bg-container);
+  border: 1px solid var(--ant-color-border-secondary);
+  border-radius: 14px;
+  padding: 14px 16px;
+}
+.ds-sbChk {
+  width: 15px;
+  height: 15px;
+  flex-shrink: 0;
+  cursor: pointer;
+}
+.ds-sbNo {
+  width: 26px;
+  height: 26px;
+  border-radius: 8px;
+  background: var(--ant-color-primary-bg);
+  color: var(--ant-color-primary);
+  font-size: 12px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.ds-sbThumb {
+  width: 104px;
+  height: 62px;
+  border-radius: 9px;
+  overflow: hidden;
+  background: var(--ant-color-bg-elevated);
+  border: 1px solid var(--ant-color-border-secondary);
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.ds-sbThumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.ds-sbThumb .em {
+  font-size: 18px;
+  color: var(--ant-color-text-quaternary);
+}
+.ds-sbBody {
+  flex: 1;
+  min-width: 0;
+}
+.ds-sbPrompt {
+  font-size: 13px;
+  line-height: 1.65;
+  margin-bottom: 8px;
+  word-break: break-word;
+}
+.ds-sbMeta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+}
+.ds-sbTag {
+  font-size: 10.5px;
+  color: var(--ant-color-text-tertiary);
+  background: var(--ant-color-bg-elevated);
+  border-radius: 999px;
+  padding: 2px 9px;
+}
+.ds-sbTag.muted {
+  color: var(--ant-color-text-quaternary);
+}
+.ds-sbOps {
+  display: flex;
+  gap: 8px;
+  flex-shrink: 0;
+}
+.ds-emptyBox {
+  margin: 60px auto;
+  text-align: center;
+  padding: 34px 24px;
+  max-width: 420px;
+  border: 1px dashed var(--ant-color-border);
+  border-radius: 14px;
+  background: var(--ant-color-bg-container);
+}
+.ds-sbPreview {
+  border-top: 1px dashed var(--ant-color-border);
+  padding-top: 10px;
+  margin-top: 4px;
+}
