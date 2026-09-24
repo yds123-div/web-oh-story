@@ -286,6 +286,104 @@ export type UpdateStoryboardBody = {
   prompt: string;
 };
 
+// ---- 分镜图片 / 视频轨道 / 视频（后端 o_storyboard.state、o_videoTrack、o_video）----
+
+/**
+ * 分镜图片生成状态（`o_storyboard.state` 翻译）：
+ * none=未生成、running=生成中、done=已完成、failed=生成失败
+ */
+export type StoryboardImageStatus = 'none' | 'running' | 'done' | 'failed';
+
+/**
+ * 视频提示词生成状态（`o_videoTrack.state` 翻译）：
+ * none=从未生成（后端 NULL）、running=生成中、done=已完成、failed=生成失败
+ */
+export type VideoPromptStatus = 'none' | 'running' | 'done' | 'failed';
+
+/**
+ * 视频生成状态（`o_video.state` 翻译）：
+ * none=未生成、running=生成中、done=生成成功、failed=生成失败
+ */
+export type VideoStatus = 'none' | 'running' | 'done' | 'failed';
+
+/** 分镜图片轮询的一拍（后端 pollingImage 只回已离开「生成中」的分镜） */
+export type StoryboardImageState = {
+  id: string;
+  status: StoryboardImageStatus;
+  /** 生成失败原因（o_storyboard.reason） */
+  errorReason: string | null;
+  /** 后端静态托管的小图 URL；无图为 null */
+  imageUrl: string | null;
+};
+
+/** 轨道上的一次视频生成结果（o_video 一行） */
+export type TrackVideo = {
+  id: string;
+  /** 所属轨道（o_video.videoTrackId）；后端未关联时为 null */
+  trackId: string | null;
+  status: VideoStatus;
+  /** 成片 URL（后端静态托管）；未生成为 null */
+  url: string | null;
+  errorReason: string | null;
+};
+
+/**
+ * 工作台的一条视频轨道（o_videoTrack + 它对应的分镜）。
+ * 后端 addStoryboard 一镜一轨，故轨道与分镜 1:1；批量建分镜时同一 track 名会复用轨道，
+ * 届时 `storyboardId` 取该轨下第一条分镜。
+ */
+export type WorkbenchTrack = {
+  /** o_videoTrack.id */
+  id: string;
+  /** 该轨道对应的分镜 id；轨道下无分镜为 null */
+  storyboardId: string | null;
+  /** 分镜序号（1 起，按分镜顺序）；无分镜为 null */
+  number: number | null;
+  /** 分镜描述 */
+  description: string;
+  /** 分镜缩略图 */
+  imageUrl: string | null;
+  /** 轨道时长（秒）；后端未记录为 null */
+  durationSec: number | null;
+  /** AI 生成的视频提示词（o_videoTrack.prompt） */
+  videoPrompt: string;
+  promptStatus: VideoPromptStatus;
+  /** 提示词生成失败原因（o_videoTrack.reason） */
+  promptErrorReason: string | null;
+  /** 当前选中的视频版本 id；未选择为 null */
+  selectedVideoId: string | null;
+  /** 该轨道下的视频版本（o_video 行，含生成中与失败） */
+  videos: TrackVideo[];
+};
+
+/**
+ * 工作台读模型（getGenerateData 的轨道 + getVideoList 的视频版本合并）。
+ * storyboards 只带图片链路所需的字段，供分镜工作区叠加到分镜卡上。
+ */
+export type Workbench = {
+  storyboards: (StoryboardImageState & {
+    /** 该分镜的视频轨道 id（后端 addStoryboard 同事务创建） */
+    trackId: string | null;
+  })[];
+  tracks: WorkbenchTrack[];
+};
+
+/** 视频提示词轮询的一拍（后端 checkVideoPrompt 只回终态） */
+export type VideoPromptState = {
+  id: string;
+  status: VideoPromptStatus;
+  prompt: string;
+  errorReason: string | null;
+};
+
+/** 视频状态轮询的一拍（后端 checkVideoStateList 只回终态） */
+export type VideoState = {
+  id: string;
+  status: VideoStatus;
+  url: string | null;
+  errorReason: string | null;
+};
+
 export type Template = {
   id: string;
   name: string;

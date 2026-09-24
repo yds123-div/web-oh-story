@@ -32,6 +32,9 @@ export default defineConfig(({ mode }) => {
       setupFiles: './src/test/setup.ts',
       // lib/llm.test.ts 是 npx tsx 手动运行的真实 LLM 冒烟脚本（非 vitest 套件）
       exclude: [...configDefaults.exclude, '**/src/lib/llm.test.ts'],
+      // 页面级用例会走真实的轮询节奏（生图 2.5s、提示词 3s、视频 5s 一拍），
+      // 默认 5s 单测超时不够——超时值放宽，不缩短生产用的轮询间隔
+      testTimeout: 30_000,
     },
   };
 });

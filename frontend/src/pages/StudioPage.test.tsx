@@ -3,11 +3,17 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { App as AntApp, ConfigProvider } from 'antd';
 import { setupServer } from 'msw/node';
 import { http, HttpResponse } from 'msw';
+import { vi } from 'vitest';
 import StudioPage from './StudioPage';
 import { WorkflowGate } from '../components/WorkflowGate';
 import { WorkflowStepProvider } from '../hooks/useWorkflowStep';
 import { handlers } from '../mocks/handlers';
-import { DEMO_PROJECT_ID, resetBackendDb } from '../mocks/backendDb';
+import {
+  DEMO_PROJECT_ID,
+  resetBackendDb,
+  setBackendImageVendorEnabled,
+  setBackendVideoPromptFailReason,
+} from '../mocks/backendDb';
 
 const server = setupServer(...handlers);
 
@@ -165,5 +171,180 @@ describe('StudioPage 分镜工作区', () => {
     renderPage();
 
     expect(await screen.findByText(/这个剧本还没有分镜/)).toBeInTheDocument();
+  });
+});
+
+// 生图轮询间隔 2.5s、视频轮询间隔 5s（页面按生产节奏配的），断言要给够时间
+const IMAGE_WAIT = { timeout: 15_000 };
+const VIDEO_WAIT = { timeout: 25_000 };
+
+function cardTextsAll(): string[] {
+  return Array.from(document.querySelectorAll('.ds-sbCard')).map((c) => c.textContent ?? '');
+}
+
+async function waitForCards(count: number): Promise<void> {
+  await waitFor(() => expect(document.querySelectorAll('.ds-sbCard')).toHaveLength(count));
+}
+
+describe('StudioPage 分镜图片链路', () => {
+  it('批量生成图片（无 key）：失败原因内联在卡片上、可重试、不阻塞页面', async () => {
+    renderPage();
+    await waitForCards(3);
+
+    fireEvent.click(screen.getByRole('button', { name: /生成图片/ }));
+
+    await waitFor(() => expect(cardTextsAll()[0]).toContain('生图失败'), IMAGE_WAIT);
+    expect(cardTextsAll()[0]).toContain('图像供应商未配置 key');
+    // 失败不阻塞：分镜卡照常可编辑可删除
+    expect(screen.getAllByRole('button', { name: /编\s*辑/ })).toHaveLength(3);
+
+    // 每张失败的卡片都带「重试生图」
+    expect(screen.getAllByRole('button', { name: /重试生图/ })).toHaveLength(3);
+    fireEvent.click(screen.getAllByRole('button', { name: /重试生图/ })[0]!);
+    await waitFor(() => expect(cardTextsAll()[0]).toContain('生图失败'), IMAGE_WAIT);
+  });
+
+  it('批量生成图片（key 到位）：缩略图出现，刷新后仍在', async () => {
+    setBackendImageVendorEnabled(true);
+    const view = renderPage();
+    await waitForCards(3);
+
+    fireEvent.click(screen.getByRole('button', { name: /生成图片/ }));
+
+    await waitFor(
+      () => {
+        const thumbs = Array.from(document.querySelectorAll('.ds-sbThumb'));
+        expect(thumbs.every((t) => t.querySelector('img') != null)).toBe(true);
+      },
+      IMAGE_WAIT,
+    );
+
+    view.unmount();
+    renderPage();
+    await waitForCards(3);
+    const thumbs = Array.from(document.querySelectorAll('.ds-sbThumb'));
+    expect(thumbs.every((t) => t.querySelector('img') != null)).toBe(true);
+  });
+
+  it('「只补未出图的」在全部已出图时不重复提交', async () => {
+    setBackendImageVendorEnabled(true);
+    renderPage();
+    await waitForCards(3);
+
+    fireEvent.click(screen.getByRole('button', { name: /生成图片/ }));
+    await waitFor(
+      () => expect(screen.getAllByText('图片已生成')).toHaveLength(3),
+      IMAGE_WAIT,
+    );
+
+    // 三条都已出图 → 目标为空，只提示不提交
+    fireEvent.click(screen.getByRole('button', { name: /只补未出图的/ }));
+    expect(await screen.findByText('没有可生成的分镜')).toBeInTheDocument();
+  });
+
+  it('预览拼图：弹窗里显示后端拼好的 data URL 图', async () => {
+    setBackendImageVendorEnabled(true);
+    renderPage();
+    await waitForCards(3);
+
+    fireEvent.click(screen.getByRole('button', { name: /生成图片/ }));
+    await waitFor(() => expect(screen.getAllByText('图片已生成')).toHaveLength(3), IMAGE_WAIT);
+
+    fireEvent.click(screen.getByRole('button', { name: /预览拼图/ }));
+    const img = await screen.findByAltText('分镜拼图预览');
+    expect(img.getAttribute('src')).toContain('data:image/jpeg;base64,');
+  });
+
+  it('下载拼图：把后端回的 PNG 交给浏览器下载', async () => {
+    setBackendImageVendorEnabled(true);
+    // jsdom 没有 createObjectURL，直接挂到 URL 上并在用例结束时摘掉
+    const urlWithBlob = URL as unknown as {
+      createObjectURL?: (blob: Blob) => string;
+      revokeObjectURL?: (url: string) => void;
+    };
+    const createObjectURL = vi.fn(() => 'blob:storyboard');
+    const revokeObjectURL = vi.fn();
+    urlWithBlob.createObjectURL = createObjectURL;
+    urlWithBlob.revokeObjectURL = revokeObjectURL;
+    const clicked: string[] = [];
+    const clickSpy = vi
+      .spyOn(HTMLAnchorElement.prototype, 'click')
+      .mockImplementation(function (this: HTMLAnchorElement) {
+        clicked.push(this.download);
+      });
+
+    try {
+      renderPage();
+      await waitForCards(3);
+      fireEvent.click(screen.getByRole('button', { name: /生成图片/ }));
+      await waitFor(() => expect(screen.getAllByText('图片已生成')).toHaveLength(3), IMAGE_WAIT);
+
+      fireEvent.click(screen.getByRole('button', { name: /下载拼图/ }));
+
+      await waitFor(() => expect(clicked).toEqual(['storyboard-preview.png']));
+      expect(createObjectURL).toHaveBeenCalledOnce();
+      expect(revokeObjectURL).toHaveBeenCalledOnce();
+    } finally {
+      clickSpy.mockRestore();
+      delete urlWithBlob.createObjectURL;
+      delete urlWithBlob.revokeObjectURL;
+    }
+  });
+});
+
+describe('StudioPage 单分镜的视频提示词与视频', () => {
+  it('生成视频提示词：文本模型结果持久化到轨道，可编辑后重读', async () => {
+    const view = renderPage();
+    await waitForCards(3);
+
+    fireEvent.click(screen.getAllByRole('button', { name: /生成提示词/ })[0]!);
+
+    await waitFor(() => expect(cardTextsAll()[0]).toContain('镜头'), { timeout: 8000 });
+    expect(cardTextsAll()[0]).toContain('提示词已生成');
+
+    // 改提示词 → 保存 → 重新挂载后仍是改过的值
+    fireEvent.click(screen.getAllByRole('button', { name: /改提示词/ })[0]!);
+    const dialog = await screen.findByRole('dialog');
+    fireEvent.change(within(dialog).getByRole('textbox'), { target: { value: '手工改过的提示词' } });
+    fireEvent.click(within(dialog).getByRole('button', { name: SAVE_BTN }));
+    await waitFor(() => expect(cardTextsAll()[0]).toContain('手工改过的提示词'));
+
+    view.unmount();
+    renderPage();
+    await waitForCards(3);
+    expect(cardTextsAll()[0]).toContain('手工改过的提示词');
+  });
+
+  it('提示词生成失败时展示后端原因（不假装成功）', async () => {
+    setBackendVideoPromptFailReason('视觉手册未定义');
+    renderPage();
+    await waitForCards(3);
+
+    fireEvent.click(screen.getAllByRole('button', { name: /生成提示词/ })[0]!);
+
+    await waitFor(() => expect(cardTextsAll()[0]).toContain('提示词生成失败'), { timeout: 8000 });
+    expect(cardTextsAll()[0]).toContain('视觉手册未定义');
+  });
+
+  it('生成视频（无 key）：提交后轮询到失败态，原因挂在卡片上', async () => {
+    renderPage();
+    await waitForCards(3);
+
+    fireEvent.click(screen.getAllByRole('button', { name: /生成提示词/ })[0]!);
+    await waitFor(() => expect(cardTextsAll()[0]).toContain('提示词已生成'), { timeout: 8000 });
+
+    fireEvent.click(screen.getAllByRole('button', { name: /生成视频/ })[0]!);
+
+    await waitFor(() => expect(cardTextsAll()[0]).toContain('视频生成失败'), VIDEO_WAIT);
+    expect(cardTextsAll()[0]).toContain('缺少API Key');
+  });
+
+  it('没生成提示词时不能生成视频（按钮禁用）', async () => {
+    renderPage();
+    await waitForCards(3);
+
+    const videoButtons = screen.getAllByRole('button', { name: /生成视频/ });
+    expect(videoButtons).toHaveLength(3);
+    expect(videoButtons[0]).toBeDisabled();
   });
 });

@@ -2,17 +2,33 @@ import { vi } from 'vitest';
 import { setupServer } from 'msw/node';
 import {
   addScript,
+  batchGenerateTrackVideoPrompts,
+  batchGenerateTrackVideos,
   createAsset,
   createProject,
   createStoryboard,
+  createVideoTrack,
   deleteAsset,
   deleteProject,
   deleteStoryboard,
   deleteStoryboards,
+  deleteTrackVideo,
+  deleteVideoTrack,
+  downloadStoryboardPreview,
   batchPolishAssetPrompts,
   cancelAssetImageGeneration,
+  fetchWorkbench,
   generateAssetImage,
+  generateStoryboardImages,
+  generateTrackVideo,
+  generateTrackVideoPrompt,
   polishAssetPrompt,
+  pollStoryboardImages,
+  pollStoryboardImagesUntilSettled,
+  pollVideoPromptsUntilSettled,
+  pollVideosUntilSettled,
+  previewStoryboardImages,
+  selectTrackVideo,
   deleteScript,
   extractScriptAssets,
   pollScriptAssets,
@@ -35,9 +51,16 @@ import {
   updateAsset,
   updateScript,
   updateStoryboard,
+  updateTrackVideoDuration,
+  updateTrackVideoPrompt,
   uploadAssetImage,
 } from '../lib/api';
-import { DEMO_PROJECT_ID, resetBackendDb, setBackendImageVendorEnabled } from './backendDb';
+import {
+  DEMO_PROJECT_ID,
+  resetBackendDb,
+  setBackendImageVendorEnabled,
+  setBackendVideoVendorEnabled,
+} from './backendDb';
 import { getTaskRecord, resetDb } from './db';
 import { handlers } from './handlers';
 
@@ -528,5 +551,303 @@ describe('MSW asset AI contracts（润色 / 生图，镜像后端 assetsGenerate
     await cancelAssetImageGeneration(row.imageId!);
     const cancelled = (await findAssetRow('101'))!;
     expect(cancelled.imageState).toBe('failed');
+  });
+});
+
+describe('MSW 分镜图片契约（镜像后端 production/storyboard）', () => {
+  const projectId = String(DEMO_PROJECT_ID);
+  const scriptId = '1';
+
+  async function storyboardIds(): Promise<string[]> {
+    return (await listStoryboards(projectId, scriptId)).map((s) => s.id);
+  }
+
+  /**
+   * 这条刻意绕过 API client 直接打 handler：客户端恒发 compulsory:true，
+   * 正是为了绕开这个后端行为。用例本身是那份决定的证据。
+   */
+  it('后端契约：compulsory 缺省时 shouldGenerateImage=0 的分镜被跳过（前端因此恒发 true）', async () => {
+    const ids = await storyboardIds();
+    const res = await fetch('/api/production/storyboard/batchGenerateImage', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ projectId: Number(projectId), scriptId: Number(scriptId), storyboardIds: ids.map(Number) }),
+    });
+    const body = (await res.json()) as { data: { id: number; state: string; shouldGenerateImage: number }[] };
+
+    // 种子分镜 1 与 3 的 shouldGenerateImage=0（建时 src 为空），只有 2 是 1
+    expect(body.data.map((r) => `${r.id}:${r.state}`)).toEqual(['1:未生成', '2:生成中', '3:未生成']);
+    expect(body.data.map((r) => r.shouldGenerateImage)).toEqual([0, 1, 0]);
+
+    // 被跳过的两条停在「未生成」；被受理的那条整行不出现在轮询结果里（= 生成中）
+    const tick = await pollStoryboardImages(ids);
+    expect(tick.map((s) => `${s.id}:${s.status}`).sort()).toEqual(['1:none', '3:none']);
+    // 等状态机跑完也没有第 2 条的图——它压根没被受理
+    await pollStoryboardImagesUntilSettled(ids, { onTick: () => {}, intervalMs: 10 });
+    const settled = await pollStoryboardImages(ids);
+    expect(settled.every((s) => s.imageUrl === null)).toBe(true);
+  });
+
+  it('批量生图（客户端恒发 compulsory:true）：全部分镜都进入生成并最终出图', async () => {
+    const ids = await storyboardIds();
+    await generateStoryboardImages({ projectId, scriptId, storyboardIds: ids });
+
+    const states: string[] = [];
+    await pollStoryboardImagesUntilSettled(ids, {
+      onTick: (tick) => states.splice(0, states.length, ...tick.map((s) => `${s.id}:${s.status}`)),
+      intervalMs: 10,
+    });
+
+    // 图像供应商默认未配 key：全部落到「生成失败」并带原因
+    expect(states.sort()).toEqual(['1:failed', '2:failed', '3:failed']);
+    const failed = await pollStoryboardImages(ids);
+    expect(failed.every((s) => s.errorReason === '图像供应商未配置 key')).toBe(true);
+    expect(failed.every((s) => s.imageUrl === null)).toBe(true);
+  });
+
+  it('图像 key 到位（setBackendImageVendorEnabled）后能真出图，预览与下载可用', async () => {
+    setBackendImageVendorEnabled(true);
+    const ids = await storyboardIds();
+
+    await generateStoryboardImages({ projectId, scriptId, storyboardIds: ids });
+    await pollStoryboardImagesUntilSettled(ids, { onTick: () => {}, intervalMs: 10 });
+
+    const done = await pollStoryboardImages(ids);
+    expect(done.every((s) => s.status === 'done')).toBe(true);
+    expect(done.every((s) => s.imageUrl?.includes('/oss/'))).toBe(true);
+
+    const preview = await previewStoryboardImages(ids);
+    expect(preview?.startsWith('data:image/jpeg;base64,')).toBe(true);
+    const blob = await downloadStoryboardPreview(ids);
+    expect(blob?.type).toBe('image/png');
+
+    // 没有一张有效图时：预览回 null、下载回 null（后端 204）
+    await expect(previewStoryboardImages(['99999'])).resolves.toBeNull();
+    await expect(downloadStoryboardPreview(['99999'])).resolves.toBeNull();
+  });
+
+  it('重查分镜列表后缩略图就是刚生成的图（刷新不丢）', async () => {
+    setBackendImageVendorEnabled(true);
+    const ids = await storyboardIds();
+    await generateStoryboardImages({ projectId, scriptId, storyboardIds: ids });
+    await pollStoryboardImagesUntilSettled(ids, { onTick: () => {}, intervalMs: 10 });
+
+    const storyboards = await listStoryboards(projectId, scriptId);
+    expect(storyboards.every((s) => s.imageUrl?.includes('/oss/'))).toBe(true);
+  });
+});
+
+describe('MSW 工作台契约（镜像后端 production/workbench）', () => {
+  const projectId = String(DEMO_PROJECT_ID);
+  const scriptId = '1';
+
+  it('读模型：轨道与分镜一一对应，提示词/生图/视频三列状态各自翻译', async () => {
+    const { tracks, storyboards } = await fetchWorkbench(projectId, scriptId);
+
+    expect(tracks).toHaveLength(3);
+    expect(tracks.map((t) => t.storyboardId)).toEqual(['1', '2', '3']);
+    expect(tracks.map((t) => t.number)).toEqual([1, 2, 3]);
+    // 种子轨道没写 duration，回退到分镜时长
+    expect(tracks.map((t) => t.durationSec)).toEqual([4, 3, 5]);
+    expect(tracks.every((t) => t.promptStatus === 'none')).toBe(true);
+    expect(storyboards.map((s) => s.status)).toEqual(['none', 'none', 'none']);
+    // 分镜 2 种子里带缩略图
+    expect(storyboards[1]?.imageUrl).toContain('/oss/1/storyboard/mock-2.png');
+  });
+
+  it('单个轨道生成提示词：同步落库并持久化，可编辑后重读', async () => {
+    const { tracks } = await fetchWorkbench(projectId, scriptId);
+    const trackId = tracks[0]!.id;
+
+    const prompt = await generateTrackVideoPrompt({
+      trackId,
+      storyboardId: tracks[0]!.storyboardId!,
+      projectId,
+      model: 'volcengine:doubao-seedance-2-0-260128',
+      mode: 'text',
+    });
+    expect(prompt).toContain('镜头');
+
+    const after = await fetchWorkbench(projectId, scriptId);
+    expect(after.tracks[0]).toMatchObject({ videoPrompt: prompt, promptStatus: 'done' });
+
+    await updateTrackVideoPrompt(trackId, '手动改过的提示词');
+    const edited = await fetchWorkbench(projectId, scriptId);
+    expect(edited.tracks[0]).toMatchObject({ videoPrompt: '手动改过的提示词', promptStatus: 'done' });
+  });
+
+  it('批量生成提示词：受理后进入生成中，轮询到终态后各轨道提示词落库', async () => {
+    const { tracks } = await fetchWorkbench(projectId, scriptId);
+    const ids = tracks.map((t) => t.id);
+
+    await batchGenerateTrackVideoPrompts({
+      projectId,
+      tracks: tracks.map((t) => ({ trackId: t.id, storyboardId: t.storyboardId! })),
+      model: 'volcengine:doubao-seedance-2-0-260128',
+      mode: 'text',
+    });
+
+    await pollVideoPromptsUntilSettled(
+      { projectId, scriptId, trackIds: ids },
+      { onTick: () => {}, intervalMs: 10 },
+    );
+
+    const after = await fetchWorkbench(projectId, scriptId);
+    expect(after.tracks.every((t) => t.promptStatus === 'done')).toBe(true);
+    expect(after.tracks.every((t) => t.videoPrompt.length > 0)).toBe(true);
+  });
+
+  it('视频生成（无 key）：失败原因清晰，可重试，版本可选择与切换', async () => {
+    const { tracks } = await fetchWorkbench(projectId, scriptId);
+    const track = tracks[0]!;
+
+    const videoId = await generateTrackVideo({
+      projectId,
+      scriptId,
+      trackId: track.id,
+      storyboardId: track.storyboardId!,
+      prompt: '镜头1：电影感中景',
+      model: 'volcengine:doubao-seedance-2-0-260128',
+      mode: 'text',
+      resolution: '720p',
+      durationSec: 4,
+    });
+
+    await pollVideosUntilSettled({ projectId, scriptId, videoIds: [videoId] }, { onTick: () => {}, intervalMs: 10 });
+
+    const failed = await fetchWorkbench(projectId, scriptId);
+    const versions = failed.tracks[0]!.videos;
+    expect(versions).toHaveLength(1);
+    expect(versions[0]).toMatchObject({ status: 'failed', url: null, errorReason: '缺少API Key' });
+
+    // 再点一次是新的版本（不是覆盖），失败态可重试
+    const retryId = await generateTrackVideo({
+      projectId,
+      scriptId,
+      trackId: track.id,
+      storyboardId: track.storyboardId!,
+      prompt: '镜头1：电影感中景',
+      model: 'volcengine:doubao-seedance-2-0-260128',
+      mode: 'text',
+      resolution: '720p',
+      durationSec: 4,
+    });
+    await pollVideosUntilSettled({ projectId, scriptId, videoIds: [retryId] }, { onTick: () => {}, intervalMs: 10 });
+    expect((await fetchWorkbench(projectId, scriptId)).tracks[0]!.videos).toHaveLength(2);
+  });
+
+  it('视频 key 到位后：生成成功并可切换选中版本，删除版本后选中态被清空', async () => {
+    setBackendVideoVendorEnabled(true);
+    const { tracks } = await fetchWorkbench(projectId, scriptId);
+    const track = tracks[0]!;
+    const genBody = {
+      projectId,
+      scriptId,
+      trackId: track.id,
+      storyboardId: track.storyboardId!,
+      prompt: '镜头1：电影感中景',
+      model: 'volcengine:doubao-seedance-2-0-260128',
+      mode: 'text',
+      resolution: '720p',
+      durationSec: 4,
+    };
+
+    const first = await generateTrackVideo(genBody);
+    const second = await generateTrackVideo(genBody);
+    await pollVideosUntilSettled({ projectId, scriptId, videoIds: [first, second] }, { onTick: () => {}, intervalMs: 10 });
+
+    const done = await fetchWorkbench(projectId, scriptId);
+    expect(done.tracks[0]!.videos.map((v) => v.status)).toEqual(['done', 'done']);
+    expect(done.tracks[0]!.videos.every((v) => v.url?.includes('/oss/'))).toBe(true);
+
+    // 默认没选任何版本
+    expect(done.tracks[0]!.selectedVideoId).toBeNull();
+
+    await selectTrackVideo(track.id, second);
+    expect((await fetchWorkbench(projectId, scriptId)).tracks[0]!.selectedVideoId).toBe(second);
+
+    // 切到另一版
+    await selectTrackVideo(track.id, first);
+    expect((await fetchWorkbench(projectId, scriptId)).tracks[0]!.selectedVideoId).toBe(first);
+
+    // 删掉正在使用的版本 → 选中态回到未选择
+    await deleteTrackVideo(first);
+    const afterDelete = await fetchWorkbench(projectId, scriptId);
+    expect(afterDelete.tracks[0]!.selectedVideoId).toBeNull();
+    expect(afterDelete.tracks[0]!.videos).toHaveLength(1);
+  });
+
+  it('批量生成视频：每个轨道各落一版，返回 videoId 与 trackId 对应关系', async () => {
+    const { tracks } = await fetchWorkbench(projectId, scriptId);
+    const created = await batchGenerateTrackVideos({
+      projectId,
+      scriptId,
+      tracks: tracks.map((t) => ({
+        trackId: t.id,
+        storyboardId: t.storyboardId!,
+        prompt: '镜头提示词',
+        durationSec: t.durationSec ?? 4,
+      })),
+      model: 'volcengine:doubao-seedance-2-0-260128',
+      mode: 'text',
+      resolution: '720p',
+    });
+
+    expect(created.map((c) => c.trackId)).toEqual(tracks.map((t) => t.id));
+    await pollVideosUntilSettled(
+      { projectId, scriptId, videoIds: created.map((c) => c.videoId) },
+      { onTick: () => {}, intervalMs: 10 },
+    );
+
+    const after = await fetchWorkbench(projectId, scriptId);
+    expect(after.tracks.every((t) => t.videos.length === 1)).toBe(true);
+  });
+
+  it('轨道时长可改（updateVideoDuration 落库后读模型跟着变）', async () => {
+    const { tracks } = await fetchWorkbench(projectId, scriptId);
+    await updateTrackVideoDuration(tracks[0]!.id, 8);
+
+    const after = await fetchWorkbench(projectId, scriptId);
+    expect(after.tracks[0]!.durationSec).toBe(8);
+  });
+
+  it('删除分镜后轨道会变成孤立轨道（后端 removeFrame 的真实行为，可手工清理）', async () => {
+    const before = await fetchWorkbench(projectId, scriptId);
+    const removedTrackId = before.tracks[0]!.id;
+    await deleteStoryboard(before.tracks[0]!.storyboardId!);
+
+    const after = await fetchWorkbench(projectId, scriptId);
+    // 轨道数不变：后端只在「该 track 名下只有一条分镜」时才删轨道，
+    // 而 addStoryboard 建的分镜 track 列为 NULL，判断永远不成立
+    expect(after.tracks).toHaveLength(3);
+    const orphan = after.tracks.find((t) => t.id === removedTrackId)!;
+    expect(orphan).toMatchObject({ storyboardId: null, number: null, description: '' });
+
+    // 剩下的分镜序号重排，但轨道自己的 id 不变
+    expect(after.tracks.map((t) => t.storyboardId)).toEqual([null, '2', '3']);
+    expect(after.tracks.slice(1).map((t) => t.number)).toEqual([1, 2]);
+
+    // deleteTrack 是这条孤立轨道的清理路径
+    await deleteVideoTrack(removedTrackId);
+    expect((await fetchWorkbench(projectId, scriptId)).tracks).toHaveLength(2);
+  });
+
+  it('addTrack / deleteTrack 已接好（页面不调用，仅契约保真）', async () => {
+    const trackId = await createVideoTrack(projectId, scriptId, 5);
+    const withTrack = await fetchWorkbench(projectId, scriptId);
+    const orphan = withTrack.tracks.find((t) => t.id === trackId)!;
+    expect(orphan).toMatchObject({ storyboardId: null, number: null, durationSec: 5 });
+
+    await deleteVideoTrack(trackId);
+    const after = await fetchWorkbench(projectId, scriptId);
+    expect(after.tracks.find((t) => t.id === trackId)).toBeUndefined();
+  });
+
+  it('项目没配视频模型时读模型给出可读原因（后端用 400 套了成功信封）', async () => {
+    await createProject({ ...NEW_PROJECT_BODY, videoModel: '' });
+    const projects = await listProjects();
+    const blank = projects.projects.reduce((a, b) => (Number(b.id) > Number(a.id) ? b : a));
+
+    await expect(fetchWorkbench(blank.id, scriptId)).rejects.toThrow('项目未配置视频模型');
   });
 });

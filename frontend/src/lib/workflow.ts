@@ -1,6 +1,6 @@
 import type { WorkflowStep } from '../types/api';
 
-export type WorkflowPage = 'scripts' | 'assets' | 'episodes' | 'studio';
+export type WorkflowPage = 'scripts' | 'assets' | 'episodes' | 'studio' | 'workbench';
 
 /** 门控数据源（按后端真实状态查询） */
 export type WorkflowProgress = {
@@ -28,7 +28,10 @@ export function workflowRedirect(
   if (requested === 'assets' && unlockedStep < 2) {
     return `/project/${projectId}/scripts`;
   }
-  if ((requested === 'episodes' || requested === 'studio') && unlockedStep < 3) {
+  if (
+    (requested === 'episodes' || requested === 'studio' || requested === 'workbench') &&
+    unlockedStep < 3
+  ) {
     // 无剧本直接送回剧本页，避免"资产页→剧本页"的两跳
     return unlockedStep < 2
       ? `/project/${projectId}/scripts`

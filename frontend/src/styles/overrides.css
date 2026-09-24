@@ -2295,3 +2295,114 @@ html[data-theme='light'] .ds-chip.on {
   padding-top: 10px;
   margin-top: 4px;
 }
+
+/* 分镜卡上的图片/视频链路（09）：常驻说明条、失败原因、轨道提示词 */
+.ds-sbNotice {
+  padding: 7px 20px;
+  border-bottom: 1px solid var(--ant-color-border-secondary);
+  background: var(--ant-color-bg-elevated);
+  flex-shrink: 0;
+}
+.ds-sbCard {
+  /* 卡片内容变高（提示词框 + 失败原因），顶对齐比居中更好读 */
+  align-items: flex-start;
+}
+.ds-sbCard .ds-sbNo,
+.ds-sbCard .ds-sbThumb {
+  margin-top: 2px;
+}
+.ds-sbBody .ds-promptBox {
+  padding: 8px 11px;
+  border-radius: 10px;
+  margin-top: 9px;
+  background: var(--ant-color-bg-elevated);
+}
+.ds-sbFail {
+  margin-top: 7px;
+  font-size: 11.5px;
+  line-height: 1.6;
+  color: var(--ant-color-error);
+  background: var(--ant-color-error-bg);
+  border: 1px solid var(--ant-color-error-border);
+  border-radius: 8px;
+  padding: 6px 10px;
+  word-break: break-word;
+}
+.ds-promptText.empty {
+  color: var(--ant-color-text-quaternary);
+}
+.ds-sbOps {
+  flex-direction: column;
+  align-items: stretch;
+}
+.ds-sbOps .ant-btn {
+  white-space: nowrap;
+}
+
+/* 工作台（WorkbenchPage）：轨道总览 + 批量生成 */
+.ds-wbStats {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 14px;
+  margin-bottom: 16px;
+}
+/* ds-statCard 在资产页是可点的筛选卡，这里是纯展示 */
+.ds-wbStats .ds-statCard {
+  cursor: default;
+}
+/* 工作台的页头复用 ds-flowHead，但右侧要放批量按钮（原规则只给 ds-studioHead 定义了 .right） */
+.ds-flowHead .right {
+  margin-left: auto;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.ds-wbRow {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  background: var(--ant-color-bg-container);
+  border: 1px solid var(--ant-color-border-secondary);
+  border-radius: 14px;
+  padding: 14px 16px;
+}
+.ds-wbRow .info {
+  flex: 1;
+  min-width: 0;
+}
+.ds-wbRow .desc {
+  font-size: 13px;
+  line-height: 1.6;
+  margin-bottom: 8px;
+  word-break: break-word;
+}
+.ds-wbRow .ops {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: stretch;
+  flex-shrink: 0;
+}
+.ds-wbRow .ops .ant-btn {
+  white-space: nowrap;
+}
+.ds-wbVideos {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+}
+.ds-wbVideo {
+  border: 1px solid var(--ant-color-border-secondary);
+  border-radius: 10px;
+  padding: 6px 10px;
+  font-size: 11.5px;
+  background: var(--ant-color-bg-elevated);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.ds-wbVideo.on {
+  border-color: var(--ant-color-primary);
+  background: var(--ant-color-primary-bg);
+}

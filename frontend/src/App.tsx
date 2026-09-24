@@ -14,6 +14,7 @@ const OutlinePage = lazy(() => import('./pages/OutlinePage'));
 const AssetsPage = lazy(() => import('./pages/AssetsPage'));
 const EpisodesPage = lazy(() => import('./pages/EpisodesPage'));
 const StudioPage = lazy(() => import('./pages/StudioPage'));
+const WorkbenchPage = lazy(() => import('./pages/WorkbenchPage'));
 const CanvasPage = lazy(() => import('./pages/CanvasPage'));
 const PlazaPage = lazy(() => import('./pages/PlazaPage'));
 const SpacePage = lazy(() => import('./pages/SpacePage'));
@@ -78,6 +79,16 @@ export default function App() {
                 <WorkflowStepProvider>
                   <WorkflowGate page="studio">
                     <StudioPage />
+                  </WorkflowGate>
+                </WorkflowStepProvider>
+              }
+            />
+            <Route
+              path="/project/:id/episode/:episodeId/bench"
+              element={
+                <WorkflowStepProvider>
+                  <WorkflowGate page="workbench">
+                    <WorkbenchPage />
                   </WorkflowGate>
                 </WorkflowStepProvider>
               }

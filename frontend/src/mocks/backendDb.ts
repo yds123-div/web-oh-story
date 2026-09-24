@@ -7,6 +7,7 @@
 import type { ProjectStatistics } from '../types/api';
 import { EXTRACT_STATE } from '../lib/extractState';
 import { IMAGE_STATE, PROMPT_STATE } from '../lib/assetGenState';
+import { STORYBOARD_IMAGE_STATE, VIDEO_PROMPT_STATE, VIDEO_STATE } from '../lib/videoGenState';
 
 export type BackendProjectRow = {
   id: number;
@@ -92,8 +93,21 @@ let assets: BackendAssetRow[] = [];
 let images: BackendImageRow[] = [];
 let imageIdSeq = 1;
 let storyboards: BackendStoryboardRow[] = [];
+let tracks: BackendTrackRow[] = [];
+let videos: BackendVideoRow[] = [];
 /** o_storyboard 自增 id 计数器（与真实后端的 rowid 自增一致） */
 let storyboardIdSeq = 1;
+/** o_videoTrack id 计数器（真实后端用 Date.now()，mock 用递增避免同毫秒撞号） */
+let trackIdSeq = 1;
+/** o_video id 计数器 */
+let videoIdSeq = 1;
+/** 视频供应商 key 开关：镜像真实后端「未配置时视频生成必失败」的默认态 */
+let videoVendorEnabled = false;
+/**
+ * 视频提示词生成的失败开关。默认 null：文本模型 key 已配好（09 的前置条件），
+ * 提示词生成应当成功。测试置为原因字符串即可验证失败态展示。
+ */
+let videoPromptFailReason: string | null = null;
 /** 图像供应商 key 开关：镜像真实后端「key 未配置时生图必失败」的默认态 */
 let imageVendorEnabled = false;
 /** generalStatistics 的模拟计数（真实后端按 o_assets/o_script 等表统计） */
@@ -222,52 +236,79 @@ function seed(): void {
   images = [];
   imageIdSeq = 1;
   imageVendorEnabled = false;
-  // 种子分镜：覆盖「有缩略图 / 无缩略图」与「有关联资产 / 无关联资产」四种展示分支
+  // 种子分镜：覆盖「有缩略图 / 无缩略图」与「有关联资产 / 无关联资产」四种展示分支。
+  // 每条同事务带一条 o_videoTrack（镜像后端 addStoryboard 的行为）。
   storyboardIdSeq = 1;
-  storyboards = [
+  trackIdSeq = 1;
+  videoIdSeq = 1;
+  videoVendorEnabled = false;
+  videoPromptFailReason = null;
+  tracks = [];
+  videos = [];
+  const seedStoryboards: Omit<BackendStoryboardRow, 'id' | 'trackId'>[] = [
     {
-      id: storyboardIdSeq++,
       scriptId: 1,
       projectId: DEMO_PROJECT_ID,
       prompt: '长廊夜景：林晚独自伫立，月光透过木窗洒下',
       videoDesc: '长廊夜景：林晚独自伫立，月光透过木窗洒下',
       duration: 4,
-      state: '未生成',
+      state: STORYBOARD_IMAGE_STATE.NONE,
+      reason: null,
       filePath: '',
       shouldGenerateImage: 0,
       associateAssetsIds: [101, 103],
       createTime: 1758000070000,
     },
     {
-      id: storyboardIdSeq++,
       scriptId: 1,
       projectId: DEMO_PROJECT_ID,
       prompt: '林晚回头，叫住长廊尽头经过的宇智波鼬',
       videoDesc: '林晚回头，叫住长廊尽头经过的宇智波鼬',
       duration: 3,
-      state: '未生成',
+      state: STORYBOARD_IMAGE_STATE.NONE,
+      reason: null,
       filePath: '/1/storyboard/mock-2.png',
       shouldGenerateImage: 1,
       associateAssetsIds: [101, 102],
       createTime: 1758000071000,
     },
     {
-      id: storyboardIdSeq++,
       scriptId: 1,
       projectId: DEMO_PROJECT_ID,
       prompt: '两人对视，鼬神色冷漠，林晚欲言又止',
       videoDesc: '两人对视，鼬神色冷漠，林晚欲言又止',
       duration: 5,
-      state: '未生成',
+      state: STORYBOARD_IMAGE_STATE.NONE,
+      reason: null,
       filePath: '',
       shouldGenerateImage: 0,
       associateAssetsIds: [],
       createTime: 1758000072000,
     },
   ];
+  storyboards = seedStoryboards.map((row) => {
+    const track = createTrack(DEMO_PROJECT_ID, row.scriptId, row.duration);
+    return { ...row, id: storyboardIdSeq++, trackId: track.id };
+  });
   statsByProject = new Map([
     [DEMO_PROJECT_ID, { roleCount: 2, scriptCount: 1, videoCount: 0, storyboardCount: 3 }],
   ]);
+}
+
+/** 建一条 o_videoTrack（addStoryboard 与 addTrack 共用） */
+function createTrack(projectId: number, scriptId: number, duration: number | null): BackendTrackRow {
+  const created: BackendTrackRow = {
+    id: trackIdSeq++,
+    projectId,
+    scriptId,
+    duration,
+    prompt: null,
+    state: null,
+    reason: null,
+    videoId: null,
+  };
+  tracks.push(created);
+  return created;
 }
 
 seed();
@@ -661,12 +702,45 @@ export type BackendStoryboardRow = {
   duration: number;
   /** 未生成 / 生成中 / 已完成 / 生成失败 */
   state: string;
+  /** 生图失败原因（后端 o_storyboard.reason） */
+  reason: string | null;
   /** 后端静态托管的原图路径；无图为空串 */
   filePath: string;
+  /** 同事务创建的 o_videoTrack id（后端 addStoryboard 一镜一轨） */
+  trackId: number | null;
   shouldGenerateImage: number;
   /** 关联资产 id（o_assets2Storyboard 的行） */
   associateAssetsIds: number[];
   createTime: number;
+};
+
+/** 后端 `o_videoTrack` 表一行 */
+export type BackendTrackRow = {
+  id: number;
+  projectId: number;
+  scriptId: number;
+  duration: number | null;
+  /** AI 生成的视频提示词 */
+  prompt: string | null;
+  /** NULL=从未生成 / 生成中 / 已完成 / 生成失败 */
+  state: string | null;
+  /** 提示词生成失败原因 */
+  reason: string | null;
+  /** 当前选中的视频版本（后端列名 videoId；未选择为 null） */
+  videoId: number | null;
+};
+
+/** 后端 `o_video` 表一行 */
+export type BackendVideoRow = {
+  id: number;
+  projectId: number;
+  scriptId: number;
+  videoTrackId: number;
+  filePath: string;
+  /** 生成中 / 生成成功 / 生成失败 */
+  state: string;
+  errorReason: string | null;
+  time: number;
 };
 
 /** 镜像后端 getStoryboardData：按 scriptId + projectId 查，index 全为 NULL 时按 id 升序（= 插入顺序） */
@@ -677,7 +751,7 @@ export function getBackendStoryboards(projectId: number, scriptId: number): Back
     .map((s) => ({ ...s, associateAssetsIds: [...s.associateAssetsIds] }));
 }
 
-/** 镜像后端 addStoryboard：同事务建 o_videoTrack（09 才操作轨道），返回新分镜 id */
+/** 镜像后端 addStoryboard：同事务建 o_videoTrack，返回新分镜 id */
 export function addBackendStoryboard(row: {
   scriptId: number;
   projectId: number;
@@ -687,10 +761,13 @@ export function addBackendStoryboard(row: {
   state: string;
   shouldGenerateImage: number;
 }): number {
+  const track = createTrack(row.projectId, row.scriptId, null);
   const created: BackendStoryboardRow = {
     ...row,
     id: storyboardIdSeq++,
+    reason: null,
     filePath: '',
+    trackId: track.id,
     associateAssetsIds: [],
     createTime: Date.now(),
   };
@@ -710,7 +787,15 @@ export function updateBackendStoryboard(
   return true;
 }
 
-/** 镜像后端 removeFrame：连带清掉 o_assets2Storyboard 关联 */
+/**
+ * 镜像后端 removeFrame：删分镜与 o_assets2Storyboard 关联。
+ *
+ * **刻意不删 o_videoTrack** —— 这是实测出来的后端真实行为：removeFrame 只在
+ * 「该 track 名下只有这一条分镜」时才删轨道，而它的判断依据是 `o_storyboard.track`
+ * 这一列（按 track 名分组），addStoryboard 建的分镜这列恒为 NULL，
+ * 于是 `where("track", null)` 会命中该剧本下**所有**分镜，计数永远不等于 1，
+ * 轨道就留下来了。实测：删掉 3 条分镜之一后轨道数仍是 3。
+ */
 export function deleteBackendStoryboard(id: number): boolean {
   const before = storyboards.length;
   storyboards = storyboards.filter((s) => s.id !== id);
@@ -735,5 +820,260 @@ export function getBackendStoryboardCharacters(
     if (!asset) return [];
     const avatar = imageSrc(asset);
     return [{ name: asset.name, type: asset.type, ...(avatar ? { avatar } : {}) }];
+  });
+}
+
+// ===== 分镜图片 / 工作台轨道 / 视频（复刻后端 storyboard + workbench 契约）=====
+
+/** mock 用固定延迟代替真实推理（真实后端单张 4-45s，测试里不能真等） */
+const MOCK_GENERATE_MS = 200;
+
+/** 未配 key 时的失败原因：图像侧沿用资产生图的文案，视频侧沿用真实后端「缺少API Key」 */
+const DEFAULT_IMAGE_FAIL_REASON = '图像供应商未配置 key';
+const DEFAULT_VIDEO_FAIL_REASON = '缺少API Key';
+
+/** 按 id 取分镜（pollingImage / previewImage / downPreviewImage 用） */
+export function findBackendStoryboards(ids: number[]): BackendStoryboardRow[] {
+  return storyboards.filter((s) => ids.includes(s.id));
+}
+
+/** 视频供应商 key 开关：镜像真实后端「未配置时视频生成必失败」的默认态 */
+export function setBackendVideoVendorEnabled(enabled: boolean): void {
+  videoVendorEnabled = enabled;
+}
+
+export function setBackendVideoPromptFailReason(reason: string | null): void {
+  videoPromptFailReason = reason;
+}
+
+/**
+ * 镜像后端 batchGenerateImage：先按 compulsory 决定每个分镜的 state，再在后台生成。
+ * - compulsory=true：全部置「生成中」并全部生成（**前端恒发 true**，见 api.ts 的说明）
+ * - compulsory=false：shouldGenerateImage=0 的置「未生成」且**跳过生成**，其余置「生成中」
+ * 返回受理时的行（后端就是先 res.send 再跑生成循环）。
+ */
+export function runStoryboardImageStateMachine(
+  projectId: number,
+  scriptId: number,
+  storyboardIds: number[],
+  options: { compulsory?: boolean; failReason?: string } = {},
+): BackendStoryboardRow[] {
+  const matched = storyboards.filter(
+    (s) => s.projectId === projectId && s.scriptId === scriptId && storyboardIds.includes(s.id),
+  );
+  for (const storyboard of matched) {
+    if (options.compulsory) {
+      storyboard.state = STORYBOARD_IMAGE_STATE.RUNNING;
+      storyboard.shouldGenerateImage = 1;
+    } else if (storyboard.shouldGenerateImage === 0) {
+      storyboard.state = STORYBOARD_IMAGE_STATE.NONE;
+    } else {
+      storyboard.state = STORYBOARD_IMAGE_STATE.RUNNING;
+    }
+  }
+  const generateList = options.compulsory
+    ? matched
+    : matched.filter((s) => s.shouldGenerateImage !== 0);
+  // 与资产生图共用同一个图像供应商开关：没配 key 时镜像真实后端的失败态
+  const failReason =
+    options.failReason ?? (imageVendorEnabled ? undefined : DEFAULT_IMAGE_FAIL_REASON);
+
+  schedule(MOCK_GENERATE_MS, () => {
+    for (const storyboard of generateList) {
+      if (failReason) {
+        storyboard.filePath = '';
+        storyboard.reason = failReason;
+        storyboard.state = STORYBOARD_IMAGE_STATE.FAILED;
+        continue;
+      }
+      storyboard.filePath = `/${projectId}/assets/${scriptId}/mock-${storyboard.id}.png`;
+      storyboard.reason = null;
+      storyboard.state = STORYBOARD_IMAGE_STATE.DONE;
+    }
+  });
+  return matched;
+}
+
+/** 镜像后端 getGenerateData 的 storyboardList：filePath 换成小图 URL 并同时给 src */
+export function getBackendStoryboardGenerateRows(
+  projectId: number,
+  scriptId: number,
+): (BackendStoryboardRow & { src: string })[] {
+  return getBackendStoryboards(projectId, scriptId).map((s) => ({
+    ...s,
+    src: s.filePath ? `http://localhost:10588/oss${s.filePath}?size=20` : '',
+  }));
+}
+
+/** 镜像后端 getGenerateData 的 trackList（o_videoTrack where projectId + scriptId） */
+export function getBackendTracks(projectId: number, scriptId: number): BackendTrackRow[] {
+  return tracks.filter((t) => t.projectId === projectId && t.scriptId === scriptId).map((t) => ({ ...t }));
+}
+
+/** 镜像后端 addTrack：建一条空轨道并返回 id */
+export function addBackendTrack(projectId: number, scriptId: number, duration?: number): number {
+  return createTrack(projectId, scriptId, duration ?? null).id;
+}
+
+/** 镜像后端 deleteTrack：删轨道并把该轨上的分镜 trackId 置空 */
+export function deleteBackendTrack(id: number): void {
+  tracks = tracks.filter((t) => t.id !== id);
+  for (const storyboard of storyboards) {
+    if (storyboard.trackId === id) storyboard.trackId = null;
+  }
+}
+
+/** 镜像后端 updateVideoPrompt：整列覆盖 */
+export function setBackendTrackPrompt(id: number, prompt: string): void {
+  const found = tracks.find((t) => t.id === id);
+  if (found) found.prompt = prompt;
+}
+
+/** 镜像后端 updateVideoDuration */
+export function setBackendTrackDuration(id: number, duration: number): void {
+  const found = tracks.find((t) => t.id === id);
+  if (found) found.duration = duration;
+}
+
+/** 提示词生成的假产出（镜像后端文本模型写回 o_videoTrack.prompt） */
+function fakeVideoPrompt(trackId: number): string {
+  return `镜头 ${trackId}：电影感中景，缓慢推进，清冷月光在木质长廊投下阴影，冷蓝色调，浅景深，氛围压抑克制。`;
+}
+
+/** 单个轨道的视频提示词生成（镜像后端 generateVideoPrompt 的同步路径） */
+export function runSingleVideoPrompt(
+  id: number,
+  options: { failReason?: string } = {},
+): { ok: true; prompt: string } | { ok: false; reason: string } {
+  const track = tracks.find((t) => t.id === id);
+  if (!track) return { ok: false, reason: '未找到该轨道' };
+  const failReason = options.failReason ?? videoPromptFailReason ?? undefined;
+  if (failReason) {
+    track.state = VIDEO_PROMPT_STATE.FAILED;
+    track.reason = failReason;
+    return { ok: false, reason: failReason };
+  }
+  track.prompt = fakeVideoPrompt(track.id);
+  track.state = VIDEO_PROMPT_STATE.DONE;
+  track.reason = null;
+  return { ok: true, prompt: track.prompt };
+}
+
+/** 镜像后端 batchGeneratePrompt：受理时置「生成中」并立即返回，后台并发生成 */
+export function runBatchVideoPromptStateMachine(
+  trackIds: number[],
+  options: { failReason?: string } = {},
+): void {
+  for (const track of tracks) {
+    if (trackIds.includes(track.id)) track.state = VIDEO_PROMPT_STATE.RUNNING;
+  }
+  schedule(MOCK_GENERATE_MS, () => {
+    for (const id of trackIds) {
+      const track = tracks.find((t) => t.id === id);
+      if (!track) continue;
+      if (options.failReason) {
+        track.state = VIDEO_PROMPT_STATE.FAILED;
+        track.reason = options.failReason;
+        continue;
+      }
+      track.prompt = fakeVideoPrompt(track.id);
+      track.state = VIDEO_PROMPT_STATE.DONE;
+      track.reason = null;
+    }
+  });
+}
+
+/** 镜像后端 checkVideoPrompt：只回终态（已完成 / 生成失败）的轨道 */
+export function getBackendTrackPromptStates(
+  trackIds: number[],
+): { id: number; state: string; reason: string | null; prompt: string | null }[] {
+  return tracks
+    .filter(
+      (t) =>
+        trackIds.includes(t.id) &&
+        (t.state === VIDEO_PROMPT_STATE.DONE || t.state === VIDEO_PROMPT_STATE.FAILED),
+    )
+    .map((t) => ({ id: t.id, state: t.state as string, reason: t.reason, prompt: t.prompt }));
+}
+
+/**
+ * 镜像后端 getVideoList：按**分镜的 trackId** 反查 o_video，回**原始** state。
+ *
+ * 注意这里是从分镜出发、不是从 o_videoTrack 表出发：后端写的是
+ * `whereIn("videoTrackId", storyboardList.map(s => s.trackId))`。
+ * 差别在孤立轨道上——分镜被删后轨道还在，但它的视频**不会**出现在这个接口里。
+ */
+export function getBackendVideos(
+  projectId: number,
+  scriptId: number,
+): (BackendVideoRow & { src: string })[] {
+  const trackIds = getBackendStoryboards(projectId, scriptId)
+    .map((s) => s.trackId)
+    .filter((id): id is number => id != null);
+  return videos
+    .filter((v) => trackIds.includes(v.videoTrackId))
+    .map((v) => ({ ...v, src: `http://localhost:10588/oss${v.filePath}?size=20` }));
+}
+
+/** 镜像后端 generateVideo：受理即插一条「生成中」的 o_video，返回其 id */
+export function addBackendVideo(projectId: number, scriptId: number, trackId: number): number {
+  const id = videoIdSeq++;
+  videos.push({
+    id,
+    projectId,
+    scriptId,
+    videoTrackId: trackId,
+    filePath: `/${projectId}/video/mock-${id}.mp4`,
+    state: VIDEO_STATE.RUNNING,
+    errorReason: null,
+    time: Date.now(),
+  });
+  return id;
+}
+
+/** 镜像后端 checkVideoStateList：只回终态（生成成功 / 生成失败）的视频 */
+export function getBackendVideoStates(videoIds: number[]): (BackendVideoRow & { src: string })[] {
+  return videos
+    .filter(
+      (v) =>
+        videoIds.includes(v.id) && (v.state === VIDEO_STATE.DONE || v.state === VIDEO_STATE.FAILED),
+    )
+    .map((v) => ({ ...v, src: `http://localhost:10588/oss${v.filePath}?size=20` }));
+}
+
+/** 镜像后端 selectVideo：写 o_videoTrack.videoId */
+export function selectBackendTrackVideo(trackId: number, videoId: number): void {
+  const found = tracks.find((t) => t.id === trackId);
+  if (found) found.videoId = videoId;
+}
+
+/** 镜像后端 delVideo：删视频并把选中它的轨道 videoId 置空 */
+export function deleteBackendVideo(id: number): void {
+  videos = videos.filter((v) => v.id !== id);
+  for (const track of tracks) {
+    if (track.videoId === id) track.videoId = null;
+  }
+}
+
+/**
+ * 镜像后端视频生成的异步收尾：到点把「生成中」写成成功/失败。
+ * 没配视频 key（默认）时一律失败，与真实后端一致；
+ * 测试里 `setBackendVideoVendorEnabled(true)` 模拟「key 到位」。
+ */
+export function runVideoStateMachine(videoIds: number[], options: { failReason?: string } = {}): void {
+  const failReason =
+    options.failReason ?? (videoVendorEnabled ? undefined : DEFAULT_VIDEO_FAIL_REASON);
+  schedule(MOCK_GENERATE_MS, () => {
+    for (const id of videoIds) {
+      const video = videos.find((v) => v.id === id);
+      if (!video) continue;
+      if (failReason) {
+        video.state = VIDEO_STATE.FAILED;
+        video.errorReason = failReason;
+        continue;
+      }
+      video.state = VIDEO_STATE.DONE;
+      video.errorReason = null;
+    }
   });
 }

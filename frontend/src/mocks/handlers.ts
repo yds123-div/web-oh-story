@@ -15,33 +15,51 @@ import {
   addBackendProject,
   addBackendScript,
   addBackendStoryboard,
+  addBackendTrack,
+  addBackendVideo,
   cancelBackendImage,
   deleteBackendAsset,
   deleteBackendProject,
   deleteBackendScripts,
   deleteBackendStoryboard,
   deleteBackendStoryboards,
+  deleteBackendTrack,
+  deleteBackendVideo,
   findBackendProject,
+  findBackendStoryboards,
   getBackendAssetPage,
   getBackendAssets,
   getBackendProjects,
   getBackendScripts,
   getBackendScriptStates,
   getBackendStoryboardCharacters,
+  getBackendStoryboardGenerateRows,
   getBackendStoryboards,
   getBackendTaskById,
   getBackendTasks,
+  getBackendTrackPromptStates,
+  getBackendTracks,
+  getBackendVideoStates,
+  getBackendVideos,
   getProjectStatistics,
   runAssetImageGeneration,
   runBatchPolishStateMachine,
+  runBatchVideoPromptStateMachine,
   runExtractStateMachine,
   runSinglePolish,
+  runSingleVideoPrompt,
+  runStoryboardImageStateMachine,
+  runVideoStateMachine,
   saveBackendAssetImage,
+  selectBackendTrackVideo,
+  setBackendTrackDuration,
+  setBackendTrackPrompt,
   updateBackendAsset,
   updateBackendProject,
   updateBackendScript,
   updateBackendStoryboard,
 } from './backendDb';
+import { STORYBOARD_IMAGE_STATE } from '../lib/videoGenState';
 
 function netDelay(ms: number): Promise<void> {
   if (import.meta.env.MODE === 'test') return Promise.resolve();
@@ -63,7 +81,13 @@ function validateBody(
   body: Record<string, unknown>,
   shape: Record<
     string,
-    'string' | 'number' | 'optionalNumber' | 'optionalString' | 'numberArray' | 'nullableString'
+    | 'string'
+    | 'number'
+    | 'optionalNumber'
+    | 'optionalString'
+    | 'optionalBoolean'
+    | 'numberArray'
+    | 'nullableString'
   >,
 ) {
   const errors: string[] = [];
@@ -73,6 +97,9 @@ function validateBody(
     if (rule === 'string' && typeof value !== 'string') errors.push(`字段 ${field} 应为字符串`);
     if (rule === 'optionalNumber' && value != null && typeof value !== 'number') errors.push(`字段 ${field} 应为数字`);
     if (rule === 'optionalString' && value != null && typeof value !== 'string') errors.push(`字段 ${field} 应为字符串`);
+    if (rule === 'optionalBoolean' && value != null && typeof value !== 'boolean') {
+      errors.push(`字段 ${field} 应为布尔值`);
+    }
     // 复刻 z.string().nullable()：键必须存在，且为字符串或 null
     if (rule === 'nullableString' && value !== null && typeof value !== 'string') {
       errors.push(`字段 ${field} 应为字符串`);
@@ -87,6 +114,39 @@ function validateBody(
   }
   if (errors.length === 0) return null;
   return HttpResponse.json({ message: '参数错误', errors }, { status: 400 });
+}
+
+/** 复刻 zod 的 z.array(z.object({ id: z.number(), sources: z.string() }))（info / uploadData 共用） */
+function isSourceItemArray(value: unknown): boolean {
+  return (
+    Array.isArray(value) &&
+    value.every(
+      (item) =>
+        typeof item === 'object' &&
+        item !== null &&
+        typeof (item as Record<string, unknown>).id === 'number' &&
+        typeof (item as Record<string, unknown>).sources === 'string',
+    )
+  );
+}
+
+/**
+ * 复刻 zod 的 z.array(z.object({...}))：非空数组且每项满足给定字段规则。
+ * batchGeneratePrompt 与 batchGenerateVideo 的 trackData 形状不同，但校验套路一致。
+ */
+function isNonEmptyArrayOf(
+  value: unknown,
+  fields: Record<string, 'number' | 'string' | 'sourceItems'>,
+): boolean {
+  if (!Array.isArray(value) || value.length === 0) return false;
+  return value.every((item) => {
+    if (typeof item !== 'object' || item === null) return false;
+    const record = item as Record<string, unknown>;
+    return Object.entries(fields).every(([field, rule]) => {
+      if (rule === 'sourceItems') return isSourceItemArray(record[field]);
+      return typeof record[field] === rule;
+    });
+  });
 }
 
 export const handlers = [
@@ -711,5 +771,324 @@ export const handlers = [
     const removed = deleteBackendStoryboards(ids, Number(body.projectId));
     if (!removed) return failEnvelope('当前选择分镜不存在');
     return envelope({ message: '视频删除成功' });
+  }),
+
+  // ===== 分镜图片（后端 production/storyboard 契约）=====
+
+  // 批量生图（后端受理即返回：先置 state 再后台生成；storyboardIds 空 / 查不到都是业务失败）
+  http.post('/api/production/storyboard/batchGenerateImage', async ({ request }) => {
+    await netDelay(60);
+    const body = (await request.json()) as Record<string, unknown>;
+    const invalid = validateBody(body, {
+      storyboardIds: 'numberArray',
+      projectId: 'number',
+      scriptId: 'number',
+      concurrentCount: 'optionalNumber',
+      compulsory: 'optionalBoolean',
+    });
+    if (invalid) return invalid;
+    const storyboardIds = body.storyboardIds as number[];
+    if (!storyboardIds.length) return failEnvelope('storyboardIds不能为空');
+    const rows = runStoryboardImageStateMachine(
+      Number(body.projectId),
+      Number(body.scriptId),
+      storyboardIds,
+      { compulsory: body.compulsory === true },
+    );
+    // 后端查不到分镜时用 HTTP 500 + 错误信封（不是 400），照抄
+    if (!rows.length) {
+      return HttpResponse.json({ code: 400, data: null, message: '未查到分镜数据' }, { status: 500 });
+    }
+    return envelope(
+      rows.map((s) => ({
+        id: s.id,
+        prompt: s.prompt,
+        associateAssetsIds: s.associateAssetsIds,
+        src: null,
+        state: s.state,
+        videoDesc: s.videoDesc,
+        shouldGenerateImage: s.shouldGenerateImage,
+      })),
+    );
+  }),
+
+  // 生图轮询（后端 whereNot state=生成中：**正在生成的整行不返回**）
+  http.post('/api/production/storyboard/pollingImage', async ({ request }) => {
+    await netDelay(60);
+    const body = (await request.json()) as Record<string, unknown>;
+    const invalid = validateBody(body, { ids: 'numberArray' });
+    if (invalid) return invalid;
+    const ids = body.ids as number[];
+    const rows = findBackendStoryboards(ids)
+      .filter((s) => s.state !== STORYBOARD_IMAGE_STATE.RUNNING)
+      .map((s) => ({
+        id: s.id,
+        state: s.state,
+        reason: s.reason,
+        filePath: s.filePath,
+        prompt: s.prompt,
+        src: s.filePath ? `http://localhost:10588/oss${s.filePath}?size=20` : null,
+      }));
+    return envelope(rows);
+  }),
+
+  // 拼图预览（后端把多张图合成一张带 S01… 标号的 JPEG，无有效图回 null）
+  http.post('/api/production/storyboard/previewImage', async ({ request }) => {
+    await netDelay(80);
+    const body = (await request.json()) as Record<string, unknown>;
+    const invalid = validateBody(body, { storyboardIds: 'numberArray' });
+    if (invalid) return invalid;
+    const hasImage = findBackendStoryboards(body.storyboardIds as number[]).some(
+      (s) => s.state === STORYBOARD_IMAGE_STATE.DONE && s.filePath,
+    );
+    // 1x1 透明 JPEG 的头，仅用于断言前缀与可解码性
+    return envelope(hasImage ? 'data:image/jpeg;base64,/9j/4AAQSkZJRg==' : null);
+  }),
+
+  // 拼图下载（后端回 PNG 附件；一张有效图都没有时回 204）
+  http.post('/api/production/storyboard/downPreviewImage', async ({ request }) => {
+    await netDelay(80);
+    const body = (await request.json()) as Record<string, unknown>;
+    const invalid = validateBody(body, { storyboardIds: 'numberArray' });
+    if (invalid) return invalid;
+    const hasImage = findBackendStoryboards(body.storyboardIds as number[]).some(
+      (s) => s.state === STORYBOARD_IMAGE_STATE.DONE && s.filePath,
+    );
+    if (!hasImage) return new HttpResponse(null, { status: 204 });
+    const png = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+    return new HttpResponse(png, {
+      status: 200,
+      headers: {
+        'Content-Type': 'image/png',
+        'Content-Disposition': 'attachment; filename=storyboard-preview.png',
+      },
+    });
+  }),
+
+  // ===== 工作台轨道（后端 production/workbench 契约）=====
+
+  // 工作台读模型：轨道（o_videoTrack）+ 分镜（含生图 state / trackId）
+  http.post('/api/production/workbench/getGenerateData', async ({ request }) => {
+    await netDelay(60);
+    const body = (await request.json()) as Record<string, unknown>;
+    const invalid = validateBody(body, { projectId: 'number', scriptId: 'number' });
+    if (invalid) return invalid;
+    const projectId = Number(body.projectId);
+    const scriptId = Number(body.scriptId);
+    const project = findBackendProject(projectId);
+    // 后端在项目没配视频模型时用 HTTP 400 包了一个成功信封（data 是原因、message 恒「成功」）
+    if (!project?.videoModel) {
+      return HttpResponse.json({ code: 200, data: '项目未配置视频模型', message: '成功' }, { status: 400 });
+    }
+    const storyboardRows = getBackendStoryboardGenerateRows(projectId, scriptId);
+    const trackRows = getBackendTracks(projectId, scriptId);
+    const videos = getBackendVideos(projectId, scriptId);
+    return envelope({
+      storyboardList: storyboardRows.map((s) => ({ ...s, filePath: s.src })),
+      trackList: trackRows.map((t) => ({
+        id: t.id,
+        duration: t.duration ?? 0,
+        prompt: t.prompt || '',
+        state: t.state ?? '未生成',
+        reason: t.reason ?? '',
+        // 后端是 Number(videoId)：未选择时为 0（不是 null）
+        selectVideoId: Number(t.videoId ?? 0),
+        // 后端这里还回 medias（资产/音频参考）与 videoList；适配层不消费它们，
+        // 这里只保留形状不还原其拼装规则，避免 mock 假装实现了没验证过的逻辑。
+        medias: storyboardRows
+          .filter((s) => s.trackId === t.id)
+          .map((s) => ({ src: s.src, id: s.id, fileType: 'image' as const, sources: 'storyboard' })),
+        videoList: videos
+          .filter((v) => v.videoTrackId === t.id)
+          .map((v) => ({ id: v.id, src: v.src, state: v.state, errorReason: v.errorReason })),
+      })),
+    });
+  }),
+
+  // 轨道上的视频版本（后端回 o_video 原始 state：生成中/生成成功/生成失败）
+  http.post('/api/production/workbench/getVideoList', async ({ request }) => {
+    await netDelay(60);
+    const body = (await request.json()) as Record<string, unknown>;
+    const invalid = validateBody(body, { projectId: 'number', scriptId: 'number' });
+    if (invalid) return invalid;
+    return envelope(getBackendVideos(Number(body.projectId), Number(body.scriptId)));
+  }),
+
+  // 新建空轨道（页面不调用：addStoryboard 已同事务建轨）
+  http.post('/api/production/workbench/addTrack', async ({ request }) => {
+    await netDelay(60);
+    const body = (await request.json()) as Record<string, unknown>;
+    const invalid = validateBody(body, {
+      projectId: 'number',
+      scriptId: 'number',
+      duration: 'optionalNumber',
+    });
+    if (invalid) return invalid;
+    const trackId = addBackendTrack(
+      Number(body.projectId),
+      Number(body.scriptId),
+      body.duration != null ? Number(body.duration) : undefined,
+    );
+    return envelope(trackId);
+  }),
+
+  http.post('/api/production/workbench/deleteTrack', async ({ request }) => {
+    await netDelay(60);
+    const body = (await request.json()) as Record<string, unknown>;
+    const invalid = validateBody(body, { id: 'number' });
+    if (invalid) return invalid;
+    deleteBackendTrack(Number(body.id));
+    return envelope({ message: '视频段删除成功' });
+  }),
+
+  http.post('/api/production/workbench/selectVideo', async ({ request }) => {
+    await netDelay(60);
+    const body = (await request.json()) as Record<string, unknown>;
+    const invalid = validateBody(body, { trackId: 'number', videoId: 'number' });
+    if (invalid) return invalid;
+    selectBackendTrackVideo(Number(body.trackId), Number(body.videoId));
+    return envelope({ message: '视频选择成功' });
+  }),
+
+  http.post('/api/production/workbench/delVideo', async ({ request }) => {
+    await netDelay(60);
+    const body = (await request.json()) as Record<string, unknown>;
+    const invalid = validateBody(body, { id: 'number' });
+    if (invalid) return invalid;
+    deleteBackendVideo(Number(body.id));
+    return envelope({ message: '视频删除成功' });
+  }),
+
+  // 视频状态轮询（后端 whereIn state=[生成成功,生成失败]：**生成中的整行不返回**）
+  http.post('/api/production/workbench/checkVideoStateList', async ({ request }) => {
+    await netDelay(60);
+    const body = (await request.json()) as Record<string, unknown>;
+    const invalid = validateBody(body, {
+      projectId: 'number',
+      scriptId: 'number',
+      videoIds: 'numberArray',
+    });
+    if (invalid) return invalid;
+    return envelope(getBackendVideoStates(body.videoIds as number[]));
+  }),
+
+  // 单个轨道的视频提示词生成（同步接口：等文本模型返回）
+  http.post('/api/production/workbench/generateVideoPrompt', async ({ request }) => {
+    await netDelay(80);
+    const body = (await request.json()) as Record<string, unknown>;
+    const invalid = validateBody(body, { trackId: 'number', projectId: 'number', model: 'string', mode: 'string' });
+    if (invalid) return invalid;
+    if (!isSourceItemArray(body.info)) {
+      return HttpResponse.json({ message: '参数错误', errors: ['字段 info 应为 [{id, sources}]'] }, { status: 400 });
+    }
+    const result = runSingleVideoPrompt(Number(body.trackId));
+    if (!result.ok) return failEnvelope(result.reason);
+    return envelope(result.prompt);
+  }),
+
+  // 批量视频提示词生成（后端受理即返回，后台并发；进度走 checkVideoPrompt 轮询）
+  http.post('/api/production/workbench/batchGeneratePrompt', async ({ request }) => {
+    await netDelay(80);
+    const body = (await request.json()) as Record<string, unknown>;
+    const invalid = validateBody(body, {
+      projectId: 'number',
+      model: 'string',
+      mode: 'string',
+      concurrentCount: 'optionalNumber',
+    });
+    if (invalid) return invalid;
+    const trackData = body.trackData;
+    if (!isNonEmptyArrayOf(trackData, { trackId: 'number', info: 'sourceItems' })) {
+      return HttpResponse.json({ message: '参数错误', errors: ['字段 trackData 应为轨道数组'] }, { status: 400 });
+    }
+    runBatchVideoPromptStateMachine((trackData as { trackId: number }[]).map((t) => Number(t.trackId)));
+    return envelope('开始生成提示词');
+  }),
+
+  // 视频提示词轮询（后端 whereIn state=[已完成,生成失败]：生成中的整行不返回）
+  http.post('/api/production/workbench/checkVideoPrompt', async ({ request }) => {
+    await netDelay(60);
+    const body = (await request.json()) as Record<string, unknown>;
+    const invalid = validateBody(body, {
+      projectId: 'number',
+      scriptId: 'number',
+      trackIds: 'numberArray',
+    });
+    if (invalid) return invalid;
+    return envelope(getBackendTrackPromptStates(body.trackIds as number[]));
+  }),
+
+  http.post('/api/production/workbench/updateVideoPrompt', async ({ request }) => {
+    await netDelay(60);
+    const body = (await request.json()) as Record<string, unknown>;
+    const invalid = validateBody(body, { id: 'number', prompt: 'optionalString' });
+    if (invalid) return invalid;
+    setBackendTrackPrompt(Number(body.id), body.prompt != null ? String(body.prompt) : '');
+    return envelope('更新成功');
+  }),
+
+  http.post('/api/production/workbench/updateVideoDuration', async ({ request }) => {
+    await netDelay(60);
+    const body = (await request.json()) as Record<string, unknown>;
+    const invalid = validateBody(body, { id: 'number', duration: 'optionalNumber' });
+    if (invalid) return invalid;
+    if (body.duration != null) setBackendTrackDuration(Number(body.id), Number(body.duration));
+    return envelope('更新成功');
+  }),
+
+  // 视频生成（异步接口：受理即落一条「生成中」的 o_video 并返回其 id）
+  http.post('/api/production/workbench/generateVideo', async ({ request }) => {
+    await netDelay(80);
+    const body = (await request.json()) as Record<string, unknown>;
+    const invalid = validateBody(body, {
+      projectId: 'number',
+      scriptId: 'number',
+      trackId: 'number',
+      prompt: 'string',
+      model: 'string',
+      mode: 'string',
+      resolution: 'string',
+      duration: 'number',
+      audio: 'optionalBoolean',
+    });
+    if (invalid) return invalid;
+    if (!isSourceItemArray(body.uploadData)) {
+      return HttpResponse.json({ message: '参数错误', errors: ['字段 uploadData 应为 [{id, sources}]'] }, { status: 400 });
+    }
+    const videoId = addBackendVideo(Number(body.projectId), Number(body.scriptId), Number(body.trackId));
+    runVideoStateMachine([videoId]);
+    return envelope(videoId);
+  }),
+
+  // 批量视频生成（返回每个轨道新落的 o_video id）
+  http.post('/api/production/workbench/batchGenerateVideo', async ({ request }) => {
+    await netDelay(80);
+    const body = (await request.json()) as Record<string, unknown>;
+    const invalid = validateBody(body, {
+      projectId: 'number',
+      scriptId: 'number',
+      model: 'string',
+      mode: 'string',
+      resolution: 'string',
+      audio: 'optionalBoolean',
+    });
+    if (invalid) return invalid;
+    const trackData = body.trackData;
+    if (
+      !isNonEmptyArrayOf(trackData, {
+        trackId: 'number',
+        prompt: 'string',
+        duration: 'number',
+        uploadData: 'sourceItems',
+      })
+    ) {
+      return HttpResponse.json({ message: '参数错误', errors: ['字段 trackData 应为轨道数组'] }, { status: 400 });
+    }
+    const created = (trackData as { trackId: number }[]).map((track) => ({
+      videoId: addBackendVideo(Number(body.projectId), Number(body.scriptId), Number(track.trackId)),
+      trackId: Number(track.trackId),
+    }));
+    runVideoStateMachine(created.map((c) => c.videoId));
+    return envelope(created);
   }),
 ];

@@ -98,7 +98,8 @@ async function httpErrorMessage(response: Response): Promise<string> {
   return detail;
 }
 
-export async function apiFetch<T>(path: string, init: RequestInit = {}): Promise<T> {
+/** 带鉴权地发一次请求，并把 HTTP 层的失败（401/非 2xx/网络）统一转成错误对象 */
+async function send(path: string, init: RequestInit): Promise<Response> {
   const headers = new Headers(init.headers);
   headers.set('Authorization', `Bearer ${getAuthToken()}`);
   if (init.body !== undefined && !headers.has('Content-Type') && !(init.body instanceof FormData)) {
@@ -123,6 +124,22 @@ export async function apiFetch<T>(path: string, init: RequestInit = {}): Promise
   if (!response.ok) {
     throw new HttpError(response.status, await httpErrorMessage(response));
   }
+
+  return response;
+}
+
+/**
+ * 二进制响应（分镜拼图下载：后端直接回 PNG 附件，没有信封）。
+ * 后端在「没有一张有效图」时回 204，此处返回 null 交由调用方提示。
+ */
+export async function apiFetchBlob(path: string, init: RequestInit = {}): Promise<Blob | null> {
+  const response = await send(path, init);
+  if (response.status === 204) return null;
+  return response.blob();
+}
+
+export async function apiFetch<T>(path: string, init: RequestInit = {}): Promise<T> {
+  const response = await send(path, init);
 
   if (response.status === 204) {
     return undefined as T;

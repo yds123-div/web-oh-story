@@ -1,6 +1,11 @@
-import { apiFetch } from './http';
+import { apiFetch, apiFetchBlob, HttpError } from './http';
 import { extractStatusFromState, isExtractionActive } from './extractState';
 import { imageStatusFromState, isPromptActive, promptStatusFromState } from './assetGenState';
+import {
+  storyboardImageStatusFromState,
+  videoPromptStatusFromState,
+  videoStatusFromState,
+} from './videoGenState';
 import type {
   AddScriptBody,
   Asset,
@@ -23,6 +28,7 @@ import type {
   ScriptExtractState,
   ScriptListResponse,
   Storyboard,
+  StoryboardImageState,
   SubmitTaskResponse,
   TaskListParams,
   TaskListResponse,
@@ -31,9 +37,14 @@ import type {
   TaskStateName,
   TaskStatus,
   TemplateListResponse,
+  TrackVideo,
   UpdateAssetBody,
   UpdateScriptBody,
   UpdateStoryboardBody,
+  VideoPromptState,
+  VideoState,
+  Workbench,
+  WorkbenchTrack,
   WorkflowState,
 } from '../types/api';
 
@@ -944,4 +955,633 @@ export async function projectHasAssets(projectId: string, signal?: AbortSignal):
     { signal },
   );
   return (rows ?? []).length > 0;
+}
+
+// ===== 分镜图片（后端 production/storyboard 接口族）=====
+
+/**
+ * 图像服务的后端并发数。服务端单卡串行，实测 4 路并发会让单张从 4s 掉到 45s 级，
+ * 反而比串行慢一个数量级，故这里显式压到 2（后端默认 5 太激进）。
+ */
+const IMAGE_CONCURRENT_COUNT = 2;
+
+/**
+ * 提交分镜图片批量生成。后端在响应发出前就把 state 置好，随后在后台按并发数生成，
+ * 故此处不返回结果，进度由 pollStoryboardImagesUntilSettled 轮询。
+ *
+ * **`compulsory` 恒为 true**：后端非 compulsory 路径只生成 `shouldGenerateImage !== 0`
+ * 的分镜，而 `addStoryboard` 在 `src` 为空时写的是 `shouldGenerateImage = 0`
+ * （实测：全新分镜非 compulsory 提交后整批停在「未生成」，一张都不生成）。
+ * 界面上的「只生成未出图的」由调用方在 storyboardIds 上过滤，不靠这个开关。
+ */
+export async function generateStoryboardImages(body: {
+  projectId: string;
+  scriptId: string;
+  storyboardIds: string[];
+  concurrentCount?: number;
+}): Promise<void> {
+  await postJson('/api/production/storyboard/batchGenerateImage', {
+    projectId: Number(body.projectId),
+    scriptId: Number(body.scriptId),
+    storyboardIds: body.storyboardIds.map(Number),
+    compulsory: true,
+    concurrentCount: body.concurrentCount ?? IMAGE_CONCURRENT_COUNT,
+  });
+}
+
+/** pollingImage 返回的一行：后端已把 filePath 换成小图 URL */
+type StoryboardImageRow = {
+  id: string | number;
+  state?: string | null;
+  reason?: string | null;
+  src?: string | null;
+};
+
+function toStoryboardImageState(row: StoryboardImageRow): StoryboardImageState {
+  return {
+    id: String(row.id),
+    status: storyboardImageStatusFromState(row.state ?? null),
+    errorReason: row.reason ? row.reason : null,
+    imageUrl: row.src ? row.src : null,
+  };
+}
+
+/**
+ * 分镜图片轮询一拍。后端 `whereNot("state", "生成中")` ——
+ * **正在生成的分镜整个不出现在响应里**，调用方须把「缺失的 id」理解为「仍在生成」。
+ */
+export async function pollStoryboardImages(
+  ids: string[],
+  signal?: AbortSignal,
+): Promise<StoryboardImageState[]> {
+  const rows = await postJson<StoryboardImageRow[] | null>(
+    '/api/production/storyboard/pollingImage',
+    { ids: ids.map(Number) },
+    { signal },
+  );
+  return (rows ?? []).map(toStoryboardImageState);
+}
+
+/** 分镜生图轮询超时（后端任务丢失/模型挂起时兜底，避免无限轮询） */
+export class StoryboardImagePollTimeoutError extends Error {
+  constructor(message = '分镜图片生成超时') {
+    super(message);
+    this.name = 'StoryboardImagePollTimeoutError';
+  }
+}
+
+/** 分镜图片批量生成轮询间隔（真实图像模型单张数十秒） */
+const STORYBOARD_IMAGE_POLL_INTERVAL_MS = 2500;
+
+/**
+ * 轮询直到每个分镜都从响应里「出现」（= 离开「生成中」到达终态）。
+ * 与资产提取轮询相反：那边缺失=已被删、可以直接停；这边缺失=仍在生成、必须继续等。
+ */
+export async function pollStoryboardImagesUntilSettled(
+  ids: string[],
+  options: {
+    onTick: (states: StoryboardImageState[]) => void;
+    intervalMs?: number;
+    timeoutMs?: number;
+  },
+  signal?: AbortSignal,
+): Promise<void> {
+  await pollUntilAllPresent(
+    ids,
+    (innerSignal) => pollStoryboardImages(ids, innerSignal),
+    {
+      onTick: options.onTick,
+      intervalMs: options.intervalMs ?? STORYBOARD_IMAGE_POLL_INTERVAL_MS,
+      timeoutMs: options.timeoutMs ?? 5 * 60_000,
+      timeoutError: () => new StoryboardImagePollTimeoutError(),
+    },
+    signal,
+  );
+}
+
+/**
+ * 分镜图片预览：后端把多张图等比缩放后拼成一张带 S01… 标号的网格图，
+ * 以 `data:image/jpeg;base64,…` 返回；一张有效图都没有时回 null。
+ */
+export async function previewStoryboardImages(storyboardIds: string[]): Promise<string | null> {
+  const dataUrl = await postJson<string | null>('/api/production/storyboard/previewImage', {
+    storyboardIds: storyboardIds.map(Number),
+  });
+  return dataUrl ?? null;
+}
+
+/**
+ * 分镜图片预览下载：后端回 PNG 附件（非信封），一张有效图都没有时回 204 → null。
+ * 调用方负责把 Blob 转成浏览器下载。
+ */
+export async function downloadStoryboardPreview(storyboardIds: string[]): Promise<Blob | null> {
+  return apiFetchBlob('/api/production/storyboard/downPreviewImage', {
+    method: 'POST',
+    body: JSON.stringify({ storyboardIds: storyboardIds.map(Number) }),
+  });
+}
+
+// ===== 工作台轨道（后端 production/workbench 接口族）=====
+
+/** 后端 `o_videoTrack` 表一行 */
+type VideoTrackRow = {
+  id: number;
+  projectId?: number | null;
+  scriptId?: number | null;
+  duration?: number | string | null;
+  prompt?: string | null;
+  state?: string | null;
+  reason?: string | null;
+  /**
+   * 当前选中的视频版本。**响应里的键叫 `selectVideoId`**（后端
+   * `selectVideoId: Number(item?.videoId)` —— 表列名 videoId，出参改名了），
+   * 未选择时是 0 而不是 null。
+   */
+  selectVideoId?: number | null;
+};
+
+/** 后端 `o_video` 表一行 */
+type VideoRow = {
+  id: number;
+  videoTrackId?: number | null;
+  state?: string | null;
+  errorReason?: string | null;
+  filePath?: string | null;
+  /** 后端拼好的静态托管 URL（getVideoList / checkVideoStateList 都会带上） */
+  src?: string | null;
+};
+
+function toTrackVideo(row: VideoRow): TrackVideo {
+  const status = videoStatusFromState(row.state ?? null);
+  return {
+    id: String(row.id),
+    trackId: row.videoTrackId != null ? String(row.videoTrackId) : null,
+    status,
+    // 后端在受理时就预分配了 filePath，所以失败的行也带 src——那个地址下面没有文件。
+    // 只有真正生成成功的版本才对外给 url，免得页面拿它去 <video src> 撞 404。
+    url: status === 'done' && row.src ? row.src : null,
+    errorReason: row.errorReason ? row.errorReason : null,
+  };
+}
+
+/**
+ * 轨道上的视频版本列表（后端 getVideoList）。后端按分镜的 trackId 反查 o_video，
+ * 返回的是**原始 state**（生成中/生成成功/生成失败）——比 getGenerateData 的
+ * videoList 可靠（后者用「已完成」判成功，会把「生成成功」的行掉成「未生成」）。
+ */
+export async function listTrackVideos(
+  projectId: string,
+  scriptId: string,
+  signal?: AbortSignal,
+): Promise<TrackVideo[]> {
+  const rows = await postJson<VideoRow[] | null>(
+    '/api/production/workbench/getVideoList',
+    { projectId: Number(projectId), scriptId: Number(scriptId) },
+    { signal },
+  );
+  return (rows ?? []).map(toTrackVideo);
+}
+
+/** getGenerateData 返回的分镜行（= o_storyboard 整行，filePath 已被换成小图 URL） */
+type GenerateStoryboardRow = {
+  id: number;
+  prompt?: string | null;
+  duration?: number | string | null;
+  state?: string | null;
+  reason?: string | null;
+  trackId?: number | null;
+  /** 后端把 filePath 换成小图 URL 后同时回 filePath 与 src；无图为空串 */
+  src?: string | null;
+};
+
+type GenerateData = {
+  storyboardList?: GenerateStoryboardRow[] | null;
+  trackList?: VideoTrackRow[] | null;
+};
+
+function toSeconds(value: number | string | null | undefined): number | null {
+  if (value == null) return null;
+  const n = Number(value);
+  return Number.isFinite(n) ? n : null;
+}
+
+/**
+ * 工作台读模型：`getGenerateData`（轨道 + 分镜）+ `getVideoList`（视频版本）合并。
+ *
+ * 为什么要合并：轨道上的提示词与状态只有 getGenerateData 给，而视频版本的
+ * 真实 state 只有 getVideoList 给（见 listTrackVideos 注释）。
+ *
+ * 轨道时长取「轨道自己的 duration，没有则用分镜的 duration」——addStoryboard
+ * 建轨时不传 duration，只靠分镜时长兜底才不会让视频生成拿到 0。
+ */
+export async function fetchWorkbench(
+  projectId: string,
+  scriptId: string,
+  signal?: AbortSignal,
+): Promise<Workbench> {
+  const [data, videos] = await Promise.all([
+    fetchGenerateData(projectId, scriptId, signal),
+    listTrackVideos(projectId, scriptId, signal),
+  ]);
+
+  const storyboardRows = data.storyboardList ?? [];
+  const storyboards = storyboardRows.map((row) => ({
+    id: String(row.id),
+    status: storyboardImageStatusFromState(row.state ?? null),
+    errorReason: row.reason ? row.reason : null,
+    imageUrl: row.src ? row.src : null,
+    trackId: row.trackId != null ? String(row.trackId) : null,
+  }));
+  const storyboardByTrack = new Map<string, { row: GenerateStoryboardRow; number: number }>();
+  storyboardRows.forEach((row, i) => {
+    if (row.trackId == null) return;
+    const key = String(row.trackId);
+    if (!storyboardByTrack.has(key)) storyboardByTrack.set(key, { row, number: i + 1 });
+  });
+
+  const tracks: WorkbenchTrack[] = (data.trackList ?? []).map((track) => {
+    const trackId = String(track.id);
+    const matched = storyboardByTrack.get(trackId);
+    // 轨道自己的 duration 读到 0 也算「没设」——addStoryboard 建轨时不写 duration，
+    // getGenerateData 把 null 折成 0，所以不能只用 ?? 判空，否则视频生成会拿到 0 秒。
+    const ownDuration = toSeconds(track.duration);
+    // 后端 selectVideoId 是 Number(videoId)：未选择时是 0 或 NaN，都不是合法 id
+    const selectedVideoId = Number(track.selectVideoId);
+    return {
+      id: trackId,
+      storyboardId: matched ? String(matched.row.id) : null,
+      number: matched ? matched.number : null,
+      description: matched?.row.prompt ?? '',
+      imageUrl: matched?.row.src ? matched.row.src : null,
+      durationSec: ownDuration ? ownDuration : toSeconds(matched?.row.duration),
+      videoPrompt: track.prompt ?? '',
+      promptStatus: videoPromptStatusFromState(track.state ?? null),
+      promptErrorReason: track.reason ? track.reason : null,
+      selectedVideoId: Number.isFinite(selectedVideoId) && selectedVideoId > 0 ? String(selectedVideoId) : null,
+      videos: videos.filter((video) => video.trackId === trackId),
+    };
+  });
+
+  return { storyboards, tracks };
+}
+
+async function fetchGenerateData(
+  projectId: string,
+  scriptId: string,
+  signal?: AbortSignal,
+): Promise<GenerateData> {
+  try {
+    const data = await postJson<GenerateData | null>(
+      '/api/production/workbench/getGenerateData',
+      { projectId: Number(projectId), scriptId: Number(scriptId) },
+      { signal },
+    );
+    return data ?? {};
+  } catch (err) {
+    // 后端在「项目未配置视频模型」时返回 HTTP 400 却套了成功信封
+    // （data 是原因文案、message 恒为默认的「成功」），是该接口唯一会出现的
+    // 400 +「成功」组合，翻译成可读原因而不是把「成功」当错误弹给用户。
+    if (err instanceof HttpError && err.status === 400 && err.message === '成功') {
+      throw new Error('项目未配置视频模型，无法加载工作台');
+    }
+    throw err;
+  }
+}
+
+/**
+ * 新建一条空轨道（后端 addTrack，返回 trackId）。
+ * 页面不直接调用：新增分镜时后端 addStoryboard 已在同事务里建轨，
+ * 再建会产生没有分镜的孤立轨道（getGenerateData 会把它列出来但 medias 为空）。
+ */
+export async function createVideoTrack(
+  projectId: string,
+  scriptId: string,
+  durationSec?: number,
+): Promise<string> {
+  const payload: Record<string, unknown> = {
+    projectId: Number(projectId),
+    scriptId: Number(scriptId),
+  };
+  if (durationSec != null) payload.duration = durationSec;
+  const trackId = await postJson<number>('/api/production/workbench/addTrack', payload);
+  return String(trackId);
+}
+
+/** 删除轨道（后端 deleteTrack：连带把该轨上的分镜 trackId 置空） */
+export async function deleteVideoTrack(trackId: string): Promise<void> {
+  await postJson('/api/production/workbench/deleteTrack', { id: Number(trackId) });
+}
+
+/** 选择/切换轨道使用的视频版本（后端 selectVideo，写 o_videoTrack.videoId） */
+export async function selectTrackVideo(trackId: string, videoId: string): Promise<void> {
+  await postJson('/api/production/workbench/selectVideo', {
+    trackId: Number(trackId),
+    videoId: Number(videoId),
+  });
+}
+
+/** 删除一个视频版本（后端 delVideo：连带把选中它的轨道 videoId 置空） */
+export async function deleteTrackVideo(videoId: string): Promise<void> {
+  await postJson('/api/production/workbench/delVideo', { id: Number(videoId) });
+}
+
+/**
+ * 视频生成状态轮询一拍。后端 `whereIn("state", ["生成成功","生成失败"])` ——
+ * **生成中的视频整个不出现在响应里**，缺失即「仍在生成」。
+ */
+export async function pollVideoStates(
+  params: { projectId: string; scriptId: string; videoIds: string[] },
+  signal?: AbortSignal,
+): Promise<VideoState[]> {
+  const rows = await postJson<VideoRow[] | null>(
+    '/api/production/workbench/checkVideoStateList',
+    {
+      projectId: Number(params.projectId),
+      scriptId: Number(params.scriptId),
+      videoIds: params.videoIds.map(Number),
+    },
+    { signal },
+  );
+  return (rows ?? []).map((row) => {
+    const video = toTrackVideo(row);
+    return {
+      id: video.id,
+      status: video.status,
+      url: video.url,
+      errorReason: video.errorReason,
+    };
+  });
+}
+
+/** 视频生成轮询超时 */
+export class VideoPollTimeoutError extends Error {
+  constructor(message = '视频生成超时') {
+    super(message);
+    this.name = 'VideoPollTimeoutError';
+  }
+}
+
+/** 视频生成轮询间隔（真实视频模型按分钟计） */
+const VIDEO_POLL_INTERVAL_MS = 5000;
+
+/** 轮询直到每个视频都离开「生成中」（后端只回终态，缺失即仍在生成） */
+export async function pollVideosUntilSettled(
+  params: { projectId: string; scriptId: string; videoIds: string[] },
+  options: {
+    onTick: (states: VideoState[]) => void;
+    intervalMs?: number;
+    timeoutMs?: number;
+  },
+  signal?: AbortSignal,
+): Promise<void> {
+  await pollUntilAllPresent(
+    params.videoIds,
+    (innerSignal) => pollVideoStates(params, innerSignal),
+    {
+      onTick: options.onTick,
+      intervalMs: options.intervalMs ?? VIDEO_POLL_INTERVAL_MS,
+      timeoutMs: options.timeoutMs ?? 10 * 60_000,
+      timeoutError: () => new VideoPollTimeoutError(),
+    },
+    signal,
+  );
+}
+
+// ===== 视频提示词与视频生成（后端 workbench 接口族）=====
+
+/**
+ * 提示词/视频生成共用的轨道输入。`sources` 恒为 storyboard：
+ * 一镜一轨，参考图就是该分镜自己的画面（分镜还没生图时后端取不到 filePath，
+ * 视频模型会以纯文生视频跑）。
+ */
+export type TrackGenInput = {
+  trackId: string;
+  storyboardId: string;
+};
+
+function toInfoItems(items: TrackGenInput[]): { id: number; sources: string }[] {
+  return items.map((item) => ({ id: Number(item.storyboardId), sources: 'storyboard' }));
+}
+
+/**
+ * 单个轨道的视频提示词 AI 生成（同步接口：等文本模型返回，已写入 o_videoTrack.prompt）。
+ * 后端失败时把轨道置「生成失败」并以 HTTP 400 + 错误信封返回原因。
+ * model/mode 来自项目配置（o_project.videoModel / mode）——后端用它们挑提示词模板，
+ * 模型名本身不影响这条链路（真正的调用固定走 universalAi 文本模型）。
+ */
+export async function generateTrackVideoPrompt(
+  body: TrackGenInput & { projectId: string; model: string; mode: string },
+): Promise<string> {
+  const text = await postJson<string | null>('/api/production/workbench/generateVideoPrompt', {
+    trackId: Number(body.trackId),
+    projectId: Number(body.projectId),
+    info: toInfoItems([body]),
+    model: body.model,
+    mode: body.mode,
+  });
+  if (text == null) throw new Error('提示词生成结果为空');
+  return text;
+}
+
+/**
+ * 批量视频提示词生成（异步接口：后端受理后立即返回，后台按并发数生成，
+ * 结果写入各轨道）。进度由 pollVideoPromptsUntilSettled 轮询。
+ */
+export async function batchGenerateTrackVideoPrompts(body: {
+  projectId: string;
+  tracks: TrackGenInput[];
+  model: string;
+  mode: string;
+  concurrentCount?: number;
+}): Promise<void> {
+  const payload: Record<string, unknown> = {
+    projectId: Number(body.projectId),
+    trackData: body.tracks.map((track) => ({
+      trackId: Number(track.trackId),
+      info: toInfoItems([track]),
+    })),
+    model: body.model,
+    mode: body.mode,
+  };
+  if (body.concurrentCount != null) payload.concurrentCount = body.concurrentCount;
+  await postJson('/api/production/workbench/batchGeneratePrompt', payload);
+}
+
+/** checkVideoPrompt 返回的一行（后端只回「已完成/生成失败」的轨道） */
+type VideoPromptRow = {
+  id: number;
+  state?: string | null;
+  reason?: string | null;
+  prompt?: string | null;
+};
+
+/**
+ * 视频提示词轮询一拍。后端 `whereIn("state", ["已完成","生成失败"])` ——
+ * 还在生成的轨道不出现在响应里，缺失即「仍在生成」。
+ */
+export async function pollVideoPrompts(
+  params: { projectId: string; scriptId: string; trackIds: string[] },
+  signal?: AbortSignal,
+): Promise<VideoPromptState[]> {
+  const rows = await postJson<VideoPromptRow[] | null>(
+    '/api/production/workbench/checkVideoPrompt',
+    {
+      projectId: Number(params.projectId),
+      scriptId: Number(params.scriptId),
+      trackIds: params.trackIds.map(Number),
+    },
+    { signal },
+  );
+  return (rows ?? []).map((row) => ({
+    id: String(row.id),
+    status: videoPromptStatusFromState(row.state ?? null),
+    prompt: row.prompt ?? '',
+    errorReason: row.reason ? row.reason : null,
+  }));
+}
+
+/** 视频提示词轮询超时 */
+export class VideoPromptPollTimeoutError extends Error {
+  constructor(message = '视频提示词生成超时') {
+    super(message);
+    this.name = 'VideoPromptPollTimeoutError';
+  }
+}
+
+/** 视频提示词轮询间隔（文本模型，一轨约十秒级） */
+const VIDEO_PROMPT_POLL_INTERVAL_MS = 3000;
+
+/** 轮询直到每个轨道的提示词都离开「生成中」 */
+export async function pollVideoPromptsUntilSettled(
+  params: { projectId: string; scriptId: string; trackIds: string[] },
+  options: {
+    onTick: (states: VideoPromptState[]) => void;
+    intervalMs?: number;
+    timeoutMs?: number;
+  },
+  signal?: AbortSignal,
+): Promise<void> {
+  await pollUntilAllPresent(
+    params.trackIds,
+    (innerSignal) => pollVideoPrompts(params, innerSignal),
+    {
+      onTick: options.onTick,
+      intervalMs: options.intervalMs ?? VIDEO_PROMPT_POLL_INTERVAL_MS,
+      timeoutMs: options.timeoutMs ?? 5 * 60_000,
+      timeoutError: () => new VideoPromptPollTimeoutError(),
+    },
+    signal,
+  );
+}
+
+/** 编辑并保存视频提示词（后端 updateVideoPrompt，整列覆盖） */
+export async function updateTrackVideoPrompt(trackId: string, prompt: string): Promise<void> {
+  await postJson('/api/production/workbench/updateVideoPrompt', {
+    id: Number(trackId),
+    prompt,
+  });
+}
+
+/** 修改轨道时长（后端 updateVideoDuration，视频生成按它定长） */
+export async function updateTrackVideoDuration(trackId: string, durationSec: number): Promise<void> {
+  await postJson('/api/production/workbench/updateVideoDuration', {
+    id: Number(trackId),
+    duration: durationSec,
+  });
+}
+
+/**
+ * 视频生成（异步接口：后端先落一条 o_video「生成中」并立即返回其 id，
+ * 生成结果写回该行）。失败态由 pollVideosUntilSettled 轮询出来。
+ * model/mode/resolution 来自项目配置；resolution 见 config/project.ts 的说明。
+ */
+export async function generateTrackVideo(
+  body: TrackGenInput & {
+    projectId: string;
+    scriptId: string;
+    prompt: string;
+    model: string;
+    mode: string;
+    resolution: string;
+    durationSec: number;
+    audio?: boolean;
+  },
+): Promise<string> {
+  const payload: Record<string, unknown> = {
+    projectId: Number(body.projectId),
+    scriptId: Number(body.scriptId),
+    trackId: Number(body.trackId),
+    uploadData: toInfoItems([body]),
+    prompt: body.prompt,
+    model: body.model,
+    mode: body.mode,
+    resolution: body.resolution,
+    duration: body.durationSec,
+  };
+  if (body.audio != null) payload.audio = body.audio;
+  const videoId = await postJson<number>('/api/production/workbench/generateVideo', payload);
+  return String(videoId);
+}
+
+/** 批量视频生成（异步接口：返回每个轨道新落的 o_video id） */
+export async function batchGenerateTrackVideos(body: {
+  projectId: string;
+  scriptId: string;
+  tracks: (TrackGenInput & { prompt: string; durationSec: number })[];
+  model: string;
+  mode: string;
+  resolution: string;
+  audio?: boolean;
+}): Promise<{ videoId: string; trackId: string }[]> {
+  const payload: Record<string, unknown> = {
+    projectId: Number(body.projectId),
+    scriptId: Number(body.scriptId),
+    trackData: body.tracks.map((track) => ({
+      trackId: Number(track.trackId),
+      uploadData: toInfoItems([track]),
+      prompt: track.prompt,
+      duration: track.durationSec,
+    })),
+    model: body.model,
+    mode: body.mode,
+    resolution: body.resolution,
+  };
+  if (body.audio != null) payload.audio = body.audio;
+  const rows = await postJson<{ videoId: number; trackId: number }[] | null>(
+    '/api/production/workbench/batchGenerateVideo',
+    payload,
+  );
+  return (rows ?? []).map((row) => ({ videoId: String(row.videoId), trackId: String(row.trackId) }));
+}
+
+/**
+ * 轮询到「每个 id 都出现在响应里」为止。
+ *
+ * 生图 / 视频 / 提示词三条轮询接口的后端行为一致：**只回终态行，进行中的行整条省略**。
+ * 所以「缺失」= 仍在生成（而不是像资产提取那样代表被删），必须继续等；
+ * 超时是唯一的退出兜底，由调用方按自己的文案抛出。
+ */
+async function pollUntilAllPresent<T extends { id: string }>(
+  ids: string[],
+  fetchTick: (signal?: AbortSignal) => Promise<T[]>,
+  options: {
+    onTick: (rows: T[]) => void;
+    intervalMs: number;
+    timeoutMs: number;
+    timeoutError: () => Error;
+  },
+  signal?: AbortSignal,
+): Promise<void> {
+  const startedAt = Date.now();
+  for (;;) {
+    const rows = await fetchTick(signal);
+    if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
+    options.onTick(rows);
+
+    const seen = new Set(rows.map((row) => row.id));
+    if (ids.every((id) => seen.has(id))) return;
+
+    if (Date.now() - startedAt > options.timeoutMs) throw options.timeoutError();
+    await waitForTick(options.intervalMs, signal);
+  }
 }
