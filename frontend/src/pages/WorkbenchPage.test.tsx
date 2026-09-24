@@ -173,6 +173,26 @@ describe('WorkbenchPage 工作台', () => {
     expect((players[1] as HTMLVideoElement).getAttribute('src')).toContain('/oss/');
   });
 
+  it('先失败后成功：拿到成片后不再挂失败红框（历史失败只留在版本 chip 上）', async () => {
+    renderPage();
+    await waitForRows(3);
+    await generateAllPrompts();
+
+    // 第一步：无 key，必定失败 → 红框 + 原因
+    await generateVideoOnce(0);
+    await waitFor(() => expect(rows()[0]).toContain('视频生成失败：缺少API Key'), VIDEO_WAIT);
+
+    // 第二步：key 到位后重试成功
+    setBackendVideoVendorEnabled(true);
+    await generateVideoOnce(0);
+    await waitFor(() => expect(rows()[0]).toContain('视频已生成 1 版'), VIDEO_WAIT);
+
+    // 红框消失，但失败版本仍在列表里（chip 上标着「（失败）」）
+    expect(rows()[0]).not.toContain('视频生成失败：');
+    expect(rows()[0]).toContain('第 1 版（失败）');
+    expect(rows()[0]).toContain('第 2 版');
+  });
+
   it('改提示词后立即持久化（重新挂载仍在）', async () => {
     const view = renderPage();
     await waitForRows(3);

@@ -673,11 +673,14 @@ export default function StudioPage() {
                   {track?.promptStatus === 'failed' && track.promptErrorReason ? (
                     <div className="ds-sbFail">提示词生成失败：{track.promptErrorReason}</div>
                   ) : null}
-                  {track && track.videos.some((v) => v.status === 'failed') ? (
-                    <div className="ds-sbFail">
-                      视频生成失败：
-                      {track.videos.find((v) => v.status === 'failed')?.errorReason || '未知原因'}
-                    </div>
+                  {/* 已经有能用的成片时不再挂红框（历史失败只由版本 chip 的「（失败）」表达） */}
+                  {track && !track.videos.some((v) => v.status === 'done') ? (
+                    track.videos.some((v) => v.status === 'failed') ? (
+                      <div className="ds-sbFail">
+                        视频生成失败：
+                        {track.videos.find((v) => v.status === 'failed')?.errorReason || '未知原因'}
+                      </div>
+                    ) : null
                   ) : null}
                   {track ? (
                     <div className="ds-promptBox">

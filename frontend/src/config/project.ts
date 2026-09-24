@@ -43,13 +43,16 @@ export const VIDEO_RATIO_OPTIONS = [
 export const IMAGE_MODEL_OPTIONS = [{ value: 'dp:z-image-turbo', label: 'Z-Image-Turbo' }];
 
 /**
- * 视频模型：全部未配 key（调用会以「缺少API Key」失败，属预期）。
- * 仍列真实可用的 `<供应商>:<模型名>`，key 一到位无需改代码即可产出成片。
- * 默认那条还有额外好处：模型名命中 `seedance.*2-0`，后端会挑
- * data/modelPrompt/video/seedance2Multi-parameterMode.md 当提示词模板，
- * 而不是回退到通用的 o_prompt 文档。
+ * 视频模型选项，value 必须是 `<供应商id>:<模型名>`。
+ *
+ * - `dp:minimax-h3` 是**当前唯一真能出片**的一条：自建服务、走同一个 sk-dp 密钥、
+ *   **图生视频**（必须有参考图 = 分镜已生成的画面）。仅在服务端 GPU 切到 H3 模式时可用。
+ * - 其余几条没有配 key，调用会以「缺少API Key」失败，属预期；列出来是为了 key
+ *   到位后无需改代码即可切换。Seedance 那条还有额外作用：模型名命中 `seedance.*2-0`，
+ *   后端会挑 data/modelPrompt/video/seedance2Multi-parameterMode.md 当提示词模板。
  */
 export const VIDEO_MODEL_OPTIONS = [
+  { value: 'dp:minimax-h3', label: 'MiniMax-H3 · 图生视频（自建）' },
   { value: 'volcengine:doubao-seedance-2-0-260128', label: 'Seedance 2.0 · 火山引擎' },
   { value: 'volcengine:doubao-seedance-2-0-fast-260128', label: 'Seedance 2.0 Fast · 火山引擎' },
   { value: 'klingai:kling-v3-omni:pro', label: 'Kling V3 Omni · 可灵' },
@@ -85,6 +88,6 @@ export const DEFAULT_PROJECT_FORM = {
   artStyle: '2D_90s_japanese_anime',
   videoRatio: '9:16',
   imageModel: 'dp:z-image-turbo',
-  videoModel: 'volcengine:doubao-seedance-2-0-260128',
+  videoModel: 'dp:minimax-h3',
   imageQuality: '2K',
 } as const;

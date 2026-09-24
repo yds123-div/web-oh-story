@@ -451,7 +451,10 @@ export default function WorkbenchPage() {
           ) : (
             tracks.map((track) => {
               const working = rowBusy.has(track.id);
-              const failedVideo = track.videos.find((v) => v.status === 'failed');
+              // 已经有能用的成片时，历史失败版本只在 chip 上标「（失败）」，不再挂红框——
+              // 否则挑到满意的版本后，那一行还一直红着，像还没成功一样
+              const hasDone = track.videos.some((v) => v.status === 'done');
+              const failedVideo = hasDone ? undefined : track.videos.find((v) => v.status === 'failed');
               const doneCount = track.videos.filter((v) => v.status === 'done').length;
               return (
                 <div key={track.id} className="ds-wbRow" style={{ marginBottom: 12 }}>
