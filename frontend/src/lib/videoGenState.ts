@@ -50,6 +50,21 @@ export function storyboardImageStatusFromState(state: string | null): Storyboard
   return STORYBOARD_IMAGE_STATUS_BY_STATE.get(state) ?? 'none';
 }
 
+/**
+ * 前端命名状态 → 后端 o_storyboard.state 文案（FlowData 存档回写用）。
+ * 与上面那张表互为反向，刻意共用同一组文案常量。
+ */
+const STORYBOARD_IMAGE_STATE_BY_STATUS: Record<StoryboardImageStatus, string> = {
+  none: STORYBOARD_IMAGE_STATE.NONE,
+  running: STORYBOARD_IMAGE_STATE.RUNNING,
+  done: STORYBOARD_IMAGE_STATE.DONE,
+  failed: STORYBOARD_IMAGE_STATE.FAILED,
+};
+
+export function storyboardImageStateFromStatus(status: StoryboardImageStatus): string {
+  return STORYBOARD_IMAGE_STATE_BY_STATUS[status];
+}
+
 const VIDEO_PROMPT_STATUS_BY_STATE = new Map<string | null, VideoPromptStatus>([
   [VIDEO_PROMPT_STATE.RUNNING, 'running'],
   [VIDEO_PROMPT_STATE.DONE, 'done'],

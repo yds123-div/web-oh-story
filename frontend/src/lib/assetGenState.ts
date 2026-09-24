@@ -28,6 +28,12 @@ export const IMAGE_STATE = {
   FAILED: '生成失败',
 } as const;
 
+/**
+ * FlowData 存档里衍生资产的「无图」文案：后端对无 o_image 行的子资产写的是
+ * 「未生成」**字面量**（`child.state ?? "未生成"`），与 IMAGE_STATE.NONE 的 NULL 不同表不同值。
+ */
+export const FLOW_DATA_IMAGE_STATE_NONE = '未生成';
+
 const PROMPT_STATUS_BY_STATE = new Map<string | null, AssetPromptStatus>([
   [PROMPT_STATE.RUNNING, 'running'],
   [PROMPT_STATE.DONE, 'done'],
@@ -51,6 +57,22 @@ const IMAGE_STATUS_BY_STATE = new Map<string | null, AssetImageStatus>([
 /** 后端 o_image.state 文案 → 前端命名状态（未知值按未生成兜底） */
 export function imageStatusFromState(state: string | null): AssetImageStatus {
   return IMAGE_STATUS_BY_STATE.get(state) ?? 'none';
+}
+
+/**
+ * 前端命名状态 → 后端生图状态文案（FlowData 存档回写用）。
+ * 注意 NONE：`o_image.state` 的「没有图」是 NULL，但 FlowData 读侧对无图的衍生资产
+ * 写的是「未生成」**字面量**（`child.state ?? "未生成"`），所以回写也用「未生成」。
+ */
+const IMAGE_STATE_BY_STATUS: Record<AssetImageStatus, string> = {
+  none: FLOW_DATA_IMAGE_STATE_NONE,
+  running: IMAGE_STATE.RUNNING,
+  done: IMAGE_STATE.DONE,
+  failed: IMAGE_STATE.FAILED,
+};
+
+export function imageStateFromStatus(status: AssetImageStatus): string {
+  return IMAGE_STATE_BY_STATUS[status];
 }
 
 /** 润色流程进行中，驱动批量润色轮询 */

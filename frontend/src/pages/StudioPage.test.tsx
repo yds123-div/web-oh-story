@@ -348,3 +348,142 @@ describe('StudioPage 单分镜的视频提示词与视频', () => {
     expect(videoButtons[0]).toBeDisabled();
   });
 });
+
+describe('StudioPage 工作区存档（FlowData 整体存取）', () => {
+  const ARCHIVE_BTN = /工作区存档/;
+  const SAVE_ARCHIVE_BTN = /保存存档/;
+  const SCRIPT_PLAN_PLACEHOLDER = /这一集怎么拍/;
+  const STORYBOARD_TABLE_PLACEHOLDER = /分镜表（表格或清单均可）/;
+
+  const openArchive = async () => {
+    fireEvent.click(await screen.findByRole('button', { name: ARCHIVE_BTN }));
+  };
+
+  it('无存档：后端默认文档下页面照常可用（剧本原文来自后端、编辑状态为空、分镜仍是真实数据）', async () => {
+    renderPage();
+    await waitForCards(3);
+
+    await openArchive();
+
+    // 默认档的 storyboard 恒为空数组，但分镜面板走 getStoryboardData，三条分镜照常渲染
+    expect(screen.getByTestId('archive-script')).toHaveTextContent('木叶，夜晚长廊');
+    expect(screen.getByPlaceholderText(SCRIPT_PLAN_PLACEHOLDER)).toHaveValue('');
+    expect(screen.getByPlaceholderText(STORYBOARD_TABLE_PLACEHOLDER)).toHaveValue('');
+    expect(screen.getAllByRole('button', { name: /上移分镜/ })).toHaveLength(3);
+    expect(screen.getAllByRole('button', { name: /编\s*辑/ })).toHaveLength(3);
+  });
+
+  it('编辑拍摄计划与分镜表后整体保存，刷新后恢复', async () => {
+    const view = renderPage();
+    await waitForCards(3);
+    await openArchive();
+
+    fireEvent.change(screen.getByPlaceholderText(SCRIPT_PLAN_PLACEHOLDER), {
+      target: { value: '第1集：冷调长廊起手，压低情绪' },
+    });
+    fireEvent.change(screen.getByPlaceholderText(STORYBOARD_TABLE_PLACEHOLDER), {
+      target: { value: '| 1 | 长廊夜景 | 4s |' },
+    });
+    // 改动后页头出现「未保存」标记
+    expect(screen.getByRole('button', { name: /保存存档（未保存）/ })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: SAVE_ARCHIVE_BTN }));
+    expect(await screen.findByText('存档已保存，刷新后仍是现在的状态')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: SAVE_ARCHIVE_BTN })).toBeInTheDocument();
+
+    // 重新挂载 = 刷新页面：编辑状态来自后端存档而非本地 state
+    view.unmount();
+    renderPage();
+    await waitForCards(3);
+    await openArchive();
+
+    expect(await screen.findByDisplayValue('第1集：冷调长廊起手，压低情绪')).toBeInTheDocument();
+    expect(screen.getByDisplayValue('| 1 | 长廊夜景 | 4s |')).toBeInTheDocument();
+  });
+
+  it('调整分镜顺序后整体保存，刷新后顺序保持（写侧回写 o_storyboard.index）', async () => {
+    const view = renderPage();
+    await waitForCards(3);
+
+    // 第 1 条下移 → 本地顺序变成 [2, 1, 3]
+    fireEvent.click(screen.getAllByRole('button', { name: /下移分镜/ })[0]!);
+    await waitFor(() => expect(cardTextsAll()[0]).toContain('林晚回头'));
+
+    fireEvent.click(screen.getByRole('button', { name: SAVE_ARCHIVE_BTN }));
+    expect(await screen.findByText('存档已保存，刷新后仍是现在的状态')).toBeInTheDocument();
+
+    view.unmount();
+    renderPage();
+    await waitForCards(3);
+
+    expect(cardTextsAll()[0]).toContain('林晚回头');
+    expect(cardTextsAll()[1]).toContain('长廊夜景');
+    expect(cardTextsAll()[2]).toContain('两人对视');
+  });
+
+  it('分镜增删后标记存档未保存（存档里的分镜段与顺序已过期）', async () => {
+    renderPage();
+    await waitForCards(3);
+
+    fireEvent.click(screen.getAllByRole('button', { name: /删\s*除/ })[0]!);
+    clickConfirmOk();
+
+    await waitForCards(2);
+    expect(screen.getByRole('button', { name: /保存存档（未保存）/ })).toBeInTheDocument();
+  });
+
+  it('存档读取失败不阻塞分镜工作区（不白屏），并说明原因', async () => {
+    server.use(
+      http.post('/api/production/getFlowData', () =>
+        HttpResponse.json({ code: 400, data: null, message: '参数错误' }, { status: 400 }),
+      ),
+    );
+    renderPage();
+    await waitForCards(3);
+
+    await openArchive();
+
+    expect(await screen.findByText(/存档读取失败/)).toBeInTheDocument();
+    expect(screen.getAllByRole('button', { name: /编\s*辑/ })).toHaveLength(3);
+    // 存档不可用时保存按钮禁用，不假装能存
+    expect(screen.getByRole('button', { name: SAVE_ARCHIVE_BTN })).toBeDisabled();
+  });
+
+  it('保存失败时展示后端原因（不谎报成功）', async () => {
+    server.use(
+      http.post('/api/production/saveFlowData', () =>
+        HttpResponse.json({ code: 400, data: null, message: '存档写入失败' }, { status: 400 }),
+      ),
+    );
+    renderPage();
+    await waitForCards(3);
+    await openArchive();
+
+    fireEvent.change(screen.getByPlaceholderText(SCRIPT_PLAN_PLACEHOLDER), {
+      target: { value: '写不进去的计划' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: SAVE_ARCHIVE_BTN }));
+
+    expect(await screen.findByText('存档写入失败')).toBeInTheDocument();
+    // 仍处于未保存态
+    expect(screen.getByRole('button', { name: /保存存档（未保存）/ })).toBeInTheDocument();
+  });
+
+  it('切换剧本时存档随路由重载，不会串档', async () => {
+    const view = renderPage();
+    await waitForCards(3);
+    await openArchive();
+    fireEvent.change(screen.getByPlaceholderText(SCRIPT_PLAN_PLACEHOLDER), {
+      target: { value: '第1集的计划' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: SAVE_ARCHIVE_BTN }));
+    await screen.findByText('存档已保存，刷新后仍是现在的状态');
+
+    // 另一个剧本（id=2，无存档）：不该看到第 1 集的拍摄计划
+    view.unmount();
+    renderPage('2');
+    await waitFor(() => expect(screen.queryAllByRole('button', { name: /编\s*辑/ })).toHaveLength(0));
+    await openArchive();
+    expect(screen.getByPlaceholderText(SCRIPT_PLAN_PLACEHOLDER)).toHaveValue('');
+  });
+});

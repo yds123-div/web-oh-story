@@ -6,11 +6,13 @@ import { VideoPromptModal } from '../components/VideoPromptModal';
 import { VideoPromptTag, VideoVersionTag } from '../components/VideoTrackTags';
 import { DEFAULT_VIDEO_DURATION_SEC, VIDEO_RESOLUTION } from '../config/project';
 import {
+  composeFlowStoryboards,
   createStoryboard,
   deleteStoryboard,
   deleteStoryboards,
   downloadStoryboardPreview,
   fetchProject,
+  fetchStudioFlowData,
   fetchWorkbench,
   generateStoryboardImages,
   generateTrackVideo,
@@ -19,13 +21,14 @@ import {
   pollStoryboardImagesUntilSettled,
   pollVideosUntilSettled,
   previewStoryboardImages,
+  saveStudioFlowData,
   StoryboardImagePollTimeoutError,
   updateStoryboard,
   updateTrackVideoPrompt,
   VideoPollTimeoutError,
 } from '../lib/api';
 import { errorMessage } from '../lib/errors';
-import type { Project, Storyboard, Workbench, WorkbenchTrack } from '../types/api';
+import type { Project, Storyboard, StudioFlowData, Workbench, WorkbenchTrack } from '../types/api';
 
 function formatClock(sec: number): string {
   const m = Math.floor(sec / 60);
@@ -115,6 +118,16 @@ export default function StudioPage() {
   // ===== 视频 =====
   const [videoBusy, setVideoBusy] = useState<Set<string>>(new Set());
 
+  // ===== FlowData 整体存档（剧本 / 拍摄计划 / 分镜表 / 分镜顺序）=====
+  const [flowData, setFlowData] = useState<StudioFlowData | null>(null);
+  const [flowDataFailed, setFlowDataFailed] = useState(false);
+  const [archiveOpen, setArchiveOpen] = useState(false);
+  /** 存档里两个可编辑文本字段：与 flowData 分开存，便于判定「未保存」 */
+  const [scriptPlan, setScriptPlan] = useState('');
+  const [storyboardTable, setStoryboardTable] = useState('');
+  const [archiveDirty, setArchiveDirty] = useState(false);
+  const [savingArchive, setSavingArchive] = useState(false);
+
   const imagePollControllerRef = useRef<AbortController | null>(null);
   const videoPollControllerRef = useRef<AbortController | null>(null);
 
@@ -122,6 +135,22 @@ export default function StudioPage() {
     const data = await listStoryboards(id, episodeId, signal);
     setStoryboards(data);
     setSelected((prev) => new Set([...prev].filter((sid) => data.some((s) => s.id === sid))));
+  };
+
+  /**
+   * 整体存档（后端 FlowData）：剧本原文、拍摄计划、分镜表一次取回。
+   * 无存档时后端返回默认文档（两个文本字段为空串），这里就是「从空白开始」的正常态。
+   *
+   * 为什么分镜面板不拿它当数据源：后端无存档分支的 `storyboard` **恒为空数组**，
+   * 而分镜是真实表里的数据，必须走 getStoryboardData（见 api.ts 的 fetchStudioFlowData 说明）。
+   */
+  const loadFlowData = async (signal?: AbortSignal): Promise<void> => {
+    const data = await fetchStudioFlowData(id, episodeId, signal);
+    setFlowData(data);
+    setScriptPlan(data.scriptPlan);
+    setStoryboardTable(data.storyboardTable);
+    setArchiveDirty(false);
+    setFlowDataFailed(false);
   };
 
   /**
@@ -143,6 +172,11 @@ export default function StudioPage() {
       load(controller.signal),
       loadWorkbench(controller.signal).catch(() => setWorkbench(null)),
       fetchProject(id, controller.signal).then(setProject).catch(() => setProject(null)),
+      // 存档同样是次要数据：读不到不该让整个工作室白屏（分镜本身仍然可用）
+      loadFlowData(controller.signal).catch(() => {
+        setFlowData(null);
+        setFlowDataFailed(true);
+      }),
     ])
       .catch((err: unknown) => {
         if (err instanceof DOMException && err.name === 'AbortError') return;
@@ -186,6 +220,63 @@ export default function StudioPage() {
     (workbench?.tracks ?? []).flatMap((t) => (t.storyboardId ? [[t.storyboardId, t] as const] : [])),
   );
 
+  // ===== FlowData 整体存档：编辑 → 保存 → 刷新恢复 =====
+
+  /**
+   * 整体保存：拍摄计划 + 分镜表 + 分镜顺序一次提交。
+   *
+   * 分镜数组按**当前面板顺序**拼（顺序就是 o_storyboard.index 的持久化形式），
+   * 存档里已有的行按 id 保留只有存档才有的字段，工作台的最新生图状态优先于存档快照。
+   */
+  const onSaveArchive = async () => {
+    if (!flowData) {
+      message.warning('存档尚未加载完成，请稍后再试');
+      return;
+    }
+    setSavingArchive(true);
+    try {
+      await saveStudioFlowData(id, episodeId, {
+        ...flowData,
+        scriptPlan,
+        storyboardTable,
+        storyboard: composeFlowStoryboards(
+          storyboards,
+          flowData.storyboard,
+          workbench?.storyboards ?? [],
+        ),
+      });
+    } catch (err) {
+      message.error(errorMessage(err, '保存存档失败'));
+      setSavingArchive(false);
+      return;
+    }
+    setArchiveDirty(false);
+    message.success('存档已保存，刷新后仍是现在的状态');
+    // 重查：后端已按刚才的顺序回写 index，读回来的就是刷新后见到的顺序。
+    // 这一步失败不翻案成「保存失败」——存档已经落库了，只是页面没跟上。
+    await Promise.all([load(), loadFlowData()]).catch(() => undefined);
+    setSavingArchive(false);
+  };
+
+  /** 上移/下移分镜：只改本地顺序，随「保存存档」一起提交（后端按数组顺序回写 index） */
+  const moveStoryboard = (storyboardId: string, delta: -1 | 1) => {
+    setStoryboards((prev) => {
+      const from = prev.findIndex((s) => s.id === storyboardId);
+      const to = from + delta;
+      if (from < 0 || to < 0 || to >= prev.length) return prev;
+      const next = [...prev];
+      [next[from], next[to]] = [next[to]!, next[from]!];
+      return next;
+    });
+    setArchiveDirty(true);
+  };
+
+  /**
+   * 分镜增删改之后，存档里的分镜段就旧了（少了新分镜 / 留着旧描述 / 顺序还没归一），
+   * 标记「未保存」提醒再存一次。不自动提交：写档始终由用户显式触发。
+   */
+  const markArchiveStale = () => setArchiveDirty(true);
+
   // ===== 分镜 CRUD =====
 
   const openCreate = () => {
@@ -212,6 +303,7 @@ export default function StudioPage() {
       await createStoryboard({ projectId: id, scriptId: episodeId, prompt, durationSec });
       // 重查拿后端落库的真实行（id / 缩略图 / 关联资产 / 新建的轨道）
       await Promise.all([load(), loadWorkbench().catch(() => undefined)]);
+      markArchiveStale();
       setCreating(false);
       message.success('分镜已创建');
     } catch (err) {
@@ -227,6 +319,7 @@ export default function StudioPage() {
     try {
       await updateStoryboard({ id: editing.id, prompt: description });
       await load();
+      markArchiveStale();
       setEditing(null);
       message.success('分镜已保存');
     } catch (err) {
@@ -249,6 +342,7 @@ export default function StudioPage() {
         try {
           await deleteStoryboard(storyboard.id);
           await Promise.all([load(), loadWorkbench().catch(() => undefined)]);
+          markArchiveStale();
           message.success('分镜已删除');
         } catch (err) {
           message.error(errorMessage(err, '删除失败'));
@@ -274,6 +368,7 @@ export default function StudioPage() {
           await deleteStoryboards(id, ids);
           setMultiMode(false);
           await Promise.all([load(), loadWorkbench().catch(() => undefined)]);
+          markArchiveStale();
           message.success(`已删除 ${ids.length} 个分镜`);
         } catch (err) {
           message.error(errorMessage(err, '批量删除失败'));
@@ -514,6 +609,24 @@ export default function StudioPage() {
           <Button
             className="ds-ghost ds-pill"
             size="small"
+            onClick={() => setArchiveOpen((open) => !open)}
+          >
+            {archiveOpen ? '▲ 收起工作区存档' : '📄 工作区存档'}
+          </Button>
+          <Button
+            type="primary"
+            className="ds-grad ds-pill"
+            size="small"
+            loading={savingArchive}
+            disabled={!flowData}
+            title={flowData ? '把拍摄计划、分镜表与分镜顺序整体存到后端' : '存档尚未加载完成'}
+            onClick={() => void onSaveArchive()}
+          >
+            💾 保存存档{archiveDirty ? '（未保存）' : ''}
+          </Button>
+          <Button
+            className="ds-ghost ds-pill"
+            size="small"
             loading={previewLoading}
             onClick={() => void onPreviewImages(targetStoryboards)}
           >
@@ -579,6 +692,53 @@ export default function StudioPage() {
         </Typography.Text>
       </div>
 
+      {/* 整体存档：剧本原文（只读）+ 拍摄计划 + 分镜表，与分镜顺序一起由「保存存档」整体提交 */}
+      {archiveOpen ? (
+        <div className="ds-archive">
+          {flowDataFailed ? (
+            <div className="ds-sbFail">
+              存档读取失败，拍摄计划与分镜表暂不可用（分镜本身不受影响，可刷新重试）
+            </div>
+          ) : null}
+          <div className="ds-arcRow">
+            <label>剧本原文（只读，来自后端存档；改剧本请去剧本页）</label>
+            <div className="ds-arcScript" data-testid="archive-script">
+              {flowData?.script.trim() || '（本集剧本没有正文）'}
+            </div>
+          </div>
+          <div className="ds-arcRow">
+            <label>拍摄计划</label>
+            <textarea
+              className="ds-gpText"
+              rows={3}
+              value={scriptPlan}
+              placeholder="这一集怎么拍：节奏、镜头策略、风格基调……（AI 导演规划也写在这里）"
+              onChange={(event) => {
+                setScriptPlan(event.target.value);
+                markArchiveStale();
+              }}
+            />
+          </div>
+          <div className="ds-arcRow">
+            <label>分镜表</label>
+            <textarea
+              className="ds-gpText"
+              rows={3}
+              value={storyboardTable}
+              placeholder="分镜表（表格或清单均可）……"
+              onChange={(event) => {
+                setStoryboardTable(event.target.value);
+                markArchiveStale();
+              }}
+            />
+          </div>
+          <Typography.Text type="secondary" style={{ fontSize: 11.5 }}>
+            「保存存档」把拍摄计划、分镜表与分镜顺序一起存到后端，刷新或重进本页后恢复。
+            还没有存档时后端返回空文档，这里从空白开始填。
+          </Typography.Text>
+        </div>
+      ) : null}
+
       <div className="ds-sbList">
         {loading ? (
           <div className="ds-emptyBox">加载分镜…</div>
@@ -634,6 +794,25 @@ export default function StudioPage() {
                   />
                 ) : null}
                 <div className="ds-sbNo">{index + 1}</div>
+                {/* 顺序调整：改的是存档里的分镜数组顺序，点「保存存档」才落库（回写 o_storyboard.index） */}
+                <div className="ds-sbOrder">
+                  <button
+                    type="button"
+                    disabled={index === 0}
+                    aria-label={`上移分镜 ${index + 1}`}
+                    onClick={() => moveStoryboard(storyboard.id, -1)}
+                  >
+                    ▲
+                  </button>
+                  <button
+                    type="button"
+                    disabled={index === storyboards.length - 1}
+                    aria-label={`下移分镜 ${index + 1}`}
+                    onClick={() => moveStoryboard(storyboard.id, 1)}
+                  >
+                    ▼
+                  </button>
+                </div>
                 <div className="ds-sbThumb">
                   {storyboard.imageUrl ? (
                     <img src={storyboard.imageUrl} alt={`分镜 ${index + 1}`} />

@@ -29,6 +29,7 @@ import {
   findBackendStoryboards,
   getBackendAssetPage,
   getBackendAssets,
+  getBackendFlowData,
   getBackendProjects,
   getBackendScripts,
   getBackendScriptStates,
@@ -51,6 +52,7 @@ import {
   runStoryboardImageStateMachine,
   runVideoStateMachine,
   saveBackendAssetImage,
+  saveBackendFlowData,
   selectBackendTrackVideo,
   setBackendTrackDuration,
   setBackendTrackPrompt,
@@ -704,7 +706,7 @@ export const handlers = [
         prompt: s.prompt ?? undefined,
         scriptId: s.scriptId ?? undefined,
         characters: getBackendStoryboardCharacters(s.id),
-        index: null,
+        index: s.index,
       })),
     );
   }),
@@ -1090,5 +1092,31 @@ export const handlers = [
     }));
     runVideoStateMachine(created.map((c) => c.videoId));
     return envelope(created);
+  }),
+
+  // ===== FlowData 整体存档（后端 production 契约）=====
+
+  // 读存档：无存档时后端**不报错**，现造一个默认 FlowData 返回（storyboard 恒空数组）
+  http.post('/api/production/getFlowData', async ({ request }) => {
+    await netDelay(60);
+    const body = (await request.json()) as Record<string, unknown>;
+    const invalid = validateBody(body, { projectId: 'number', episodesId: 'number' });
+    if (invalid) return invalid;
+    return envelope(getBackendFlowData(Number(body.projectId), Number(body.episodesId)));
+  }),
+
+  // 写存档：后端 validateFields 对 data 是 z.any()（不做形状校验）；
+  // 副作用是按 data.storyboard 的数组顺序回写 o_storyboard.index
+  http.post('/api/production/saveFlowData', async ({ request }) => {
+    await netDelay(60);
+    const body = (await request.json()) as Record<string, unknown>;
+    const invalid = validateBody(body, { projectId: 'number', episodesId: 'number' });
+    if (invalid) return invalid;
+    saveBackendFlowData(
+      Number(body.projectId),
+      Number(body.episodesId),
+      (body.data ?? {}) as { storyboard?: { id?: number | null }[] },
+    );
+    return envelope({ message: '保存成功' });
   }),
 ];

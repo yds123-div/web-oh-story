@@ -1,7 +1,13 @@
 import { apiFetch, apiFetchBlob, HttpError } from './http';
 import { extractStatusFromState, isExtractionActive } from './extractState';
-import { imageStatusFromState, isPromptActive, promptStatusFromState } from './assetGenState';
 import {
+  imageStateFromStatus,
+  imageStatusFromState,
+  isPromptActive,
+  promptStatusFromState,
+} from './assetGenState';
+import {
+  storyboardImageStateFromStatus,
   storyboardImageStatusFromState,
   videoPromptStatusFromState,
   videoStatusFromState,
@@ -17,6 +23,10 @@ import type {
   CreditsResponse,
   Episode,
   EpisodeListResponse,
+  FlowDataAsset,
+  FlowDataDeriveAsset,
+  FlowDataStoryboard,
+  FlowDataWorkbench,
   NotificationListResponse,
   NovelTaskBody,
   Outline,
@@ -29,6 +39,7 @@ import type {
   ScriptListResponse,
   Storyboard,
   StoryboardImageState,
+  StudioFlowData,
   SubmitTaskResponse,
   TaskListParams,
   TaskListResponse,
@@ -1552,6 +1563,271 @@ export async function batchGenerateTrackVideos(body: {
     payload,
   );
   return (rows ?? []).map((row) => ({ videoId: String(row.videoId), trackId: String(row.trackId) }));
+}
+
+// ===== FlowData 整体存档（后端 production/getFlowData + saveFlowData）=====
+
+/**
+ * getFlowData 的响应行（两分支形状不同，这里都按可选处理）：
+ * - 无存档档：后端现造一个默认 FlowData —— script 来自 `o_script.content`、
+ *   assets 来自 `o_assets`、**storyboard 恒为空数组**、scriptPlan/storyboardTable 为空串、
+ *   workbench 为 `{videoList: []}`。
+ * - 有存档档：把 `o_agentWorkData.data` 的 JSON 原样取出后，**用真实表数据覆盖**
+ *   script/assets/storyboard 三段（这正是「写进去读不回来」的由来）。
+ * 派生资产生图态在无图时给「未生成」字面量，见 assetGenState 的 imageStateFromStatus。
+ */
+type FlowDataDeriveRow = {
+  id: number;
+  assetsId?: number | null;
+  name?: string | null;
+  type?: string | null;
+  prompt?: string | null;
+  desc?: string | null;
+  /** 后端静态托管小图 URL（无图为 null） */
+  src?: string | null;
+  /** o_image.state 文案（无图时后端写「未生成」） */
+  state?: string | null;
+  errorReason?: string | null;
+  flowId?: number | null;
+};
+
+type FlowDataAssetRow = {
+  id: number;
+  name?: string | null;
+  type?: string | null;
+  prompt?: string | null;
+  /** o_assets.describe（后端出参改名 desc） */
+  desc?: string | null;
+  src?: string | null;
+  flowId?: number | null;
+  derive?: FlowDataDeriveRow[] | null;
+};
+
+type FlowDataStoryboardRow = {
+  id: number;
+  index?: number | null;
+  /** o_storyboard.duration（后端换算为 number，无值时为 0） */
+  duration?: number | null;
+  prompt?: string | null;
+  videoDesc?: string | null;
+  associateAssetsIds?: number[] | null;
+  /** 后端把 filePath 换成小图 URL 后的 src（无图为 null） */
+  src?: string | null;
+  /** o_storyboard.state 文案 */
+  state?: string | null;
+  reason?: string | null;
+  shouldGenerateImage?: number | null;
+  flowId?: number | null;
+};
+
+type FlowDataRow = {
+  script?: string | null;
+  scriptPlan?: string | null;
+  storyboardTable?: string | null;
+  assets?: FlowDataAssetRow[] | null;
+  storyboard?: FlowDataStoryboardRow[] | null;
+  /** 后端目前是 todo 桩数据，原样往返 */
+  workbench?: Record<string, unknown> | null;
+};
+
+function toFlowDataDerive(row: FlowDataDeriveRow): FlowDataDeriveAsset {
+  return {
+    id: String(row.id),
+    assetsId: row.assetsId != null ? String(row.assetsId) : '',
+    name: row.name ?? '',
+    type: FRONTEND_ASSET_TYPES[row.type ?? ''] ?? 'material',
+    prompt: row.prompt ?? '',
+    description: row.desc ?? '',
+    imageUrl: row.src ? row.src : null,
+    imageState: imageStatusFromState(row.state ?? null),
+    errorReason: row.errorReason ? row.errorReason : null,
+    flowId: row.flowId != null ? String(row.flowId) : null,
+  };
+}
+
+function toFlowDataAsset(row: FlowDataAssetRow): FlowDataAsset {
+  return {
+    id: String(row.id),
+    name: row.name ?? '',
+    type: FRONTEND_ASSET_TYPES[row.type ?? ''] ?? 'material',
+    prompt: row.prompt ?? '',
+    description: row.desc ?? '',
+    imageUrl: row.src ? row.src : null,
+    derive: (row.derive ?? []).map(toFlowDataDerive),
+    flowId: row.flowId != null ? String(row.flowId) : null,
+  };
+}
+
+function toFlowDataStoryboard(row: FlowDataStoryboardRow): FlowDataStoryboard {
+  return {
+    id: String(row.id),
+    index: typeof row.index === 'number' ? row.index : null,
+    durationSec: row.duration ?? 0,
+    prompt: row.prompt ?? '',
+    videoDesc: row.videoDesc ?? '',
+    associateAssetsIds: (row.associateAssetsIds ?? []).map(String),
+    imageUrl: row.src ? row.src : null,
+    status: storyboardImageStatusFromState(row.state ?? null),
+    errorReason: row.reason ? row.reason : null,
+    shouldGenerateImage: row.shouldGenerateImage ?? 0,
+    flowId: row.flowId != null ? String(row.flowId) : null,
+  };
+}
+
+/**
+ * 拼出要写回存档的 `storyboard` 数组：**顺序 = 传入的分镜顺序**（也就是用户排好的顺序）。
+ *
+ * 三个来源各自的短板凑成一份完整行：
+ * - 面板分镜（getStoryboardData）永远完整，但只有 id/描述/时长/图片/关联资产；
+ * - 存档里的旧行按 id 保留 `videoDesc`/`associateAssetsIds`/`flowId` 等**只有存档才有的字段**
+ *   （无存档时这段是空数组，这也是后端默认档的坑）；
+ * - 工作台读模型（09 的图片链路）给最新的生图状态，比存档里的旧快照新。
+ *
+ * 存档里没有的新分镜按后端 addStoryboard 的约定补齐：`videoDesc` 与 `prompt` 同值
+ * （08 的契约：两列必须同步，否则 09 的提示词生成读不到输入）、`shouldGenerateImage`
+ * 按「有没有图」给（后端 addStoryboard 就是 `src ? 1 : 0`）、关联资产 id 只能给空数组
+ * （面板读模型给的是资产**名字**，拿不到 id —— 首次存档时这一点是已知降级，
+ * 第二次读存档自愈，因为读侧会用 o_assets2Storyboard 实时覆盖分镜段）。
+ */
+export function composeFlowStoryboards(
+  storyboards: Storyboard[],
+  archived: FlowDataStoryboard[],
+  imageStates: Workbench['storyboards'] = [],
+): FlowDataStoryboard[] {
+  const archivedById = new Map(archived.map((row) => [row.id, row]));
+  const liveById = new Map(imageStates.map((row) => [row.id, row]));
+  return storyboards.map((storyboard, index) => {
+    const previous = archivedById.get(storyboard.id);
+    const live = liveById.get(storyboard.id);
+    return {
+      id: storyboard.id,
+      // 后端按数组下标回写 o_storyboard.index，这里先按当前顺序标上
+      index,
+      durationSec: storyboard.durationSec ?? previous?.durationSec ?? 0,
+      prompt: storyboard.prompt,
+      // 存档里的 videoDesc 可能比描述长（AI 写的视频描述与提示词是两回事），描述没改过就保留；
+      // 描述改过则退回「两列同值」——08 的契约，否则 09 的提示词生成会读到旧描述
+      videoDesc:
+        previous && previous.prompt === storyboard.prompt && previous.videoDesc
+          ? previous.videoDesc
+          : storyboard.prompt,
+      associateAssetsIds: previous?.associateAssetsIds ?? [],
+      imageUrl: storyboard.imageUrl ?? previous?.imageUrl ?? null,
+      status: live?.status ?? previous?.status ?? 'none',
+      errorReason: live?.errorReason ?? previous?.errorReason ?? null,
+      shouldGenerateImage: previous?.shouldGenerateImage ?? (storyboard.imageUrl ? 1 : 0),
+      flowId: previous?.flowId ?? null,
+    };
+  });
+}
+
+/** 后端 `workbench` 段：解析出 videoList，其余键原样保留（后端结构未定，不假装懂它） */
+function toFlowDataWorkbench(row: Record<string, unknown> | null | undefined): FlowDataWorkbench {
+  const record = row ?? {};
+  return { ...record, videoList: Array.isArray(record.videoList) ? record.videoList : [] };
+}
+
+function fromFlowDataDerive(item: FlowDataDeriveAsset): FlowDataDeriveRow {
+  return {
+    id: Number(item.id),
+    assetsId: item.assetsId ? Number(item.assetsId) : null,
+    name: item.name,
+    type: BACKEND_ASSET_TYPES[item.type as Exclude<AssetType, 'material'>] ?? item.type,
+    prompt: item.prompt,
+    desc: item.description,
+    src: item.imageUrl,
+    state: imageStateFromStatus(item.imageState),
+    errorReason: item.errorReason,
+    flowId: item.flowId != null ? Number(item.flowId) : null,
+  };
+}
+
+function fromFlowDataAsset(item: FlowDataAsset): FlowDataAssetRow {
+  return {
+    id: Number(item.id),
+    name: item.name,
+    type: BACKEND_ASSET_TYPES[item.type as Exclude<AssetType, 'material'>] ?? item.type,
+    prompt: item.prompt,
+    desc: item.description,
+    src: item.imageUrl,
+    flowId: item.flowId != null ? Number(item.flowId) : null,
+    derive: item.derive.map(fromFlowDataDerive),
+  };
+}
+
+function fromFlowDataStoryboard(item: FlowDataStoryboard): FlowDataStoryboardRow {
+  return {
+    id: Number(item.id),
+    index: item.index,
+    duration: item.durationSec,
+    prompt: item.prompt,
+    videoDesc: item.videoDesc,
+    associateAssetsIds: item.associateAssetsIds.map(Number),
+    src: item.imageUrl,
+    state: storyboardImageStateFromStatus(item.status),
+    reason: item.errorReason,
+    shouldGenerateImage: item.shouldGenerateImage,
+    flowId: item.flowId != null ? Number(item.flowId) : null,
+  };
+}
+
+/**
+ * 读工作室的整体存档（剧本 + 资产 + 分镜 + 工作数据一次取回）。
+ *
+ * **后端无存档时不报错**，而是现造默认 FlowData 返回（scriptPlan/storyboardTable 为空串、
+ * storyboard 为空数组），所以调用方拿到的一定是形状完整的文档，按默认值渲染即可。
+ *
+ * 注意 storyboard 段的双重身份：无存档时恒为空数组（不代表没有分镜！），
+ * 有存档时才回真实分镜 —— 分镜面板的数据源仍应是 getStoryboardData。
+ */
+export async function fetchStudioFlowData(
+  projectId: string,
+  episodesId: string,
+  signal?: AbortSignal,
+): Promise<StudioFlowData> {
+  const row = await postJson<FlowDataRow | null>(
+    '/api/production/getFlowData',
+    { projectId: Number(projectId), episodesId: Number(episodesId) },
+    { signal },
+  );
+  return {
+    script: row?.script ?? '',
+    scriptPlan: row?.scriptPlan ?? '',
+    storyboardTable: row?.storyboardTable ?? '',
+    assets: (row?.assets ?? []).map(toFlowDataAsset),
+    storyboard: (row?.storyboard ?? []).map(toFlowDataStoryboard),
+    workbench: toFlowDataWorkbench(row?.workbench),
+  };
+}
+
+/**
+ * 写工作室的整体存档。整个文档一起提交（不是增量 patch）。
+ *
+ * 读侧会实时覆盖 script/assets/storyboard 三段，所以真正被「保存下来」的是
+ * `scriptPlan`、`storyboardTable` 与 `storyboard` 的**数组顺序**——写侧按数组下标
+ * 回写每条分镜的 `o_storyboard.index`（任一元素缺 id 时这一整步被后端跳过），
+ * 而 getStoryboardData 正是按 index 升序读，于是刷新后顺序能还原。
+ *
+ * 未参与编辑的 `assets`/`workbench` 原样回传：存档 JSON 同时是 AI 工作区的数据源，
+ * 丢掉它们等于把工作区文档掏空。
+ */
+export async function saveStudioFlowData(
+  projectId: string,
+  episodesId: string,
+  data: StudioFlowData,
+): Promise<void> {
+  await postJson('/api/production/saveFlowData', {
+    projectId: Number(projectId),
+    episodesId: Number(episodesId),
+    data: {
+      script: data.script,
+      scriptPlan: data.scriptPlan,
+      assets: data.assets.map(fromFlowDataAsset),
+      storyboardTable: data.storyboardTable,
+      storyboard: data.storyboard.map(fromFlowDataStoryboard),
+      workbench: data.workbench,
+    },
+  });
 }
 
 /**

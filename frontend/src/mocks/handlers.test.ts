@@ -17,6 +17,8 @@ import {
   downloadStoryboardPreview,
   batchPolishAssetPrompts,
   cancelAssetImageGeneration,
+  composeFlowStoryboards,
+  fetchStudioFlowData,
   fetchWorkbench,
   generateAssetImage,
   generateStoryboardImages,
@@ -24,6 +26,7 @@ import {
   generateTrackVideoPrompt,
   polishAssetPrompt,
   pollStoryboardImages,
+  saveStudioFlowData,
   pollStoryboardImagesUntilSettled,
   pollVideoPromptsUntilSettled,
   pollVideosUntilSettled,
@@ -849,5 +852,124 @@ describe('MSW 工作台契约（镜像后端 production/workbench）', () => {
     const blank = projects.projects.reduce((a, b) => (Number(b.id) > Number(a.id) ? b : a));
 
     await expect(fetchWorkbench(blank.id, scriptId)).rejects.toThrow('项目未配置视频模型');
+  });
+});
+
+describe('MSW FlowData 契约（镜像后端 production/getFlowData + saveFlowData）', () => {
+  const projectId = String(DEMO_PROJECT_ID);
+  const scriptId = '1';
+
+  it('无存档：后端不报错，现造默认 FlowData（编辑状态为空、分镜段恒为空数组）', async () => {
+    const data = await fetchStudioFlowData(projectId, scriptId);
+
+    expect(data.script).toContain('木叶，夜晚长廊');
+    expect(data.scriptPlan).toBe('');
+    expect(data.storyboardTable).toBe('');
+    expect(data.workbench).toEqual({ videoList: [] });
+    // 资产段读侧实时回填（种子剧本经 o_scriptAssets 关联了三个资产）
+    expect(data.assets.map((a) => a.name)).toEqual(['林晚', '宇智波鼬', '木叶长廊']);
+    expect(data.assets[0]?.type).toBe('character');
+    // 库里已经有 3 条分镜，但默认档的 storyboard 仍是空数组 —— 分镜面板不能以它为数据源
+    expect(data.storyboard).toEqual([]);
+    expect(await listStoryboards(projectId, scriptId)).toHaveLength(3);
+  });
+
+  it('保存后编辑状态读得回来，script/assets 仍以真实表为准（写进存档也读不回）', async () => {
+    const base = await fetchStudioFlowData(projectId, scriptId);
+    await saveStudioFlowData(projectId, scriptId, {
+      ...base,
+      script: '存档里伪造的剧本正文',
+      scriptPlan: '第1集拍摄计划：长廊夜景起手，冷调压低情绪',
+      storyboardTable: '| 1 | 长廊夜景 | 4s |',
+      assets: [],
+    });
+
+    const again = await fetchStudioFlowData(projectId, scriptId);
+    expect(again.scriptPlan).toBe('第1集拍摄计划：长廊夜景起手，冷调压低情绪');
+    expect(again.storyboardTable).toBe('| 1 | 长廊夜景 | 4s |');
+    // 读侧覆盖：伪造的 script、清空的 assets 都不生效
+    expect(again.script).toContain('木叶，夜晚长廊');
+    expect(again.assets.map((a) => a.name)).toEqual(['林晚', '宇智波鼬', '木叶长廊']);
+  });
+
+  it('分镜顺序经数组顺序回写 index：保存后 getStoryboardData 就按新顺序返回', async () => {
+    const base = await fetchStudioFlowData(projectId, scriptId);
+    const before = await listStoryboards(projectId, scriptId);
+    const reversed = [...before].reverse();
+
+    await saveStudioFlowData(projectId, scriptId, {
+      ...base,
+      storyboard: composeFlowStoryboards(reversed, base.storyboard),
+    });
+
+    expect((await listStoryboards(projectId, scriptId)).map((s) => s.id)).toEqual(
+      reversed.map((s) => s.id),
+    );
+    // 再读存档：分镜段也按新顺序返回（存档读写闭环）
+    expect((await fetchStudioFlowData(projectId, scriptId)).storyboard.map((s) => s.id)).toEqual(
+      reversed.map((s) => s.id),
+    );
+  });
+
+  it('存档里任一分镜缺 id 时后端跳过排序（分镜顺序保持不动）', async () => {
+    const base = await fetchStudioFlowData(projectId, scriptId);
+    const before = await listStoryboards(projectId, scriptId);
+
+    await saveStudioFlowData(projectId, scriptId, {
+      ...base,
+      storyboard: composeFlowStoryboards([...before].reverse(), base.storyboard).map((row, i) =>
+        i === 0 ? { ...row, id: '' } : row,
+      ),
+    });
+
+    expect((await listStoryboards(projectId, scriptId)).map((s) => s.id)).toEqual(
+      before.map((s) => s.id),
+    );
+  });
+
+  it('参数缺 episodesId 时回后端的参数错误（镜像 validateFields）', async () => {
+    const response = await fetch('/api/production/getFlowData', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ projectId: DEMO_PROJECT_ID }),
+    });
+
+    expect(response.status).toBe(400);
+    expect(await response.json()).toMatchObject({ message: '参数错误' });
+  });
+});
+
+describe('MSW FlowData 排序坑（两个读接口对新分镜的排序规则不同）', () => {
+  const projectId = String(DEMO_PROJECT_ID);
+  const scriptId = '1';
+
+  it('存档保存过 index 后新建的分镜：面板把它排最前，存档段按 (index ?? 0) 排', async () => {
+    const base = await fetchStudioFlowData(projectId, scriptId);
+    const before = await listStoryboards(projectId, scriptId);
+    await saveStudioFlowData(projectId, scriptId, {
+      ...base,
+      storyboard: composeFlowStoryboards(before, base.storyboard),
+    });
+
+    // 新建的分镜不写 index（后端 addStoryboard 不写该列）
+    const created = await createStoryboard({
+      projectId,
+      scriptId,
+      prompt: '保存存档之后新建的分镜',
+      durationSec: 3,
+    });
+
+    // getStoryboardData 是 SQL `order by index asc` → SQLite 把 NULL 排最前
+    expect((await listStoryboards(projectId, scriptId)).map((s) => s.id)[0]).toBe(created);
+
+    // getFlowData 是 JS `(a.index ?? 0) - (b.index ?? 0)` → NULL 当 0 看，排在已存的第一条之后
+    // （两个接口的排序规则不一致是后端自身的行为，mock 照抄，不做「修正」）
+    const flow = (await fetchStudioFlowData(projectId, scriptId)).storyboard;
+    expect(flow.map((s) => s.id)).toEqual([
+      before[0]!.id,
+      created,
+      ...before.slice(1).map((s) => s.id),
+    ]);
+    expect(flow.find((s) => s.id === created)?.index).toBeNull();
   });
 });

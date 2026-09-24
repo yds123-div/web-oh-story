@@ -876,6 +876,9 @@ html[data-theme='light'] .ds-modeChip.on {
   border-bottom: 1px solid var(--ant-color-border-secondary);
   background: var(--ant-color-bg-container);
   flex-shrink: 0;
+  /* 动作按钮已有十余个（含存档两个），窄屏换行而不是被 overflow:hidden 裁掉 */
+  flex-wrap: wrap;
+  row-gap: 8px;
 }
 .ds-studioHead .st {
   font-size: 11.5px;
@@ -890,6 +893,9 @@ html[data-theme='light'] .ds-modeChip.on {
   display: flex;
   gap: 8px;
   align-items: center;
+  flex-wrap: wrap;
+  row-gap: 8px;
+  justify-content: flex-end;
 }
 .ds-selBox {
   background: var(--ant-color-bg-elevated);
@@ -2337,6 +2343,65 @@ html[data-theme='light'] .ds-chip.on {
 }
 .ds-sbOps .ant-btn {
   white-space: nowrap;
+}
+
+/* 分镜顺序调整（存档里的分镜数组顺序，点「保存存档」才落库） */
+.ds-sbOrder {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+.ds-sbOrder button {
+  width: 22px;
+  height: 20px;
+  padding: 0;
+  border: 1px solid var(--ant-color-border-secondary);
+  border-radius: 6px;
+  background: var(--ant-color-bg-elevated);
+  color: var(--ant-color-text-secondary);
+  font-size: 9px;
+  line-height: 1;
+  cursor: pointer;
+}
+.ds-sbOrder button:hover:not(:disabled) {
+  border-color: var(--ant-color-primary);
+  color: var(--ant-color-primary);
+}
+.ds-sbOrder button:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+/* 工作区存档面板（剧本原文 / 拍摄计划 / 分镜表） */
+.ds-archive {
+  flex-shrink: 0;
+  padding: 12px 20px 14px;
+  border-bottom: 1px solid var(--ant-color-border-secondary);
+  background: var(--ant-color-bg-elevated);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.ds-arcRow label {
+  display: block;
+  font-size: 11.5px;
+  color: var(--ant-color-text-tertiary);
+  margin-bottom: 5px;
+}
+.ds-arcScript {
+  max-height: 96px;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-size: 12.5px;
+  line-height: 1.7;
+  color: var(--ant-color-text-secondary);
+  background: var(--ant-color-bg-container);
+  border: 1px solid var(--ant-color-border-secondary);
+  border-radius: 10px;
+  padding: 9px 12px;
 }
 
 /* 工作台（WorkbenchPage）：轨道总览 + 批量生成 */

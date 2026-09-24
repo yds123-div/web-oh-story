@@ -6,7 +6,7 @@
 
 import type { ProjectStatistics } from '../types/api';
 import { EXTRACT_STATE } from '../lib/extractState';
-import { IMAGE_STATE, PROMPT_STATE } from '../lib/assetGenState';
+import { FLOW_DATA_IMAGE_STATE_NONE, IMAGE_STATE, PROMPT_STATE } from '../lib/assetGenState';
 import { STORYBOARD_IMAGE_STATE, VIDEO_PROMPT_STATE, VIDEO_STATE } from '../lib/videoGenState';
 
 export type BackendProjectRow = {
@@ -92,6 +92,10 @@ let scripts: BackendScriptRow[] = [];
 let assets: BackendAssetRow[] = [];
 let images: BackendImageRow[] = [];
 let imageIdSeq = 1;
+/** o_scriptAssets 行（剧本 ↔ 资产关联；后端由 extractAssets / addScript 写入） */
+let scriptAssets: { scriptId: number; assetId: number }[] = [];
+/** o_agentWorkData 的 data 列（FlowData 存档 JSON），key 为 `projectId:episodesId` */
+let workDataArchive = new Map<string, string>();
 let storyboards: BackendStoryboardRow[] = [];
 let tracks: BackendTrackRow[] = [];
 let videos: BackendVideoRow[] = [];
@@ -236,6 +240,13 @@ function seed(): void {
   images = [];
   imageIdSeq = 1;
   imageVendorEnabled = false;
+  // 种子剧本（第1集·异世囚笼）已提取出三个资产 —— 与原型里那一集的状态一致
+  scriptAssets = [
+    { scriptId: 1, assetId: 101 },
+    { scriptId: 1, assetId: 102 },
+    { scriptId: 1, assetId: 103 },
+  ];
+  workDataArchive = new Map();
   // 种子分镜：覆盖「有缩略图 / 无缩略图」与「有关联资产 / 无关联资产」四种展示分支。
   // 每条同事务带一条 o_videoTrack（镜像后端 addStoryboard 的行为）。
   storyboardIdSeq = 1;
@@ -245,7 +256,7 @@ function seed(): void {
   videoPromptFailReason = null;
   tracks = [];
   videos = [];
-  const seedStoryboards: Omit<BackendStoryboardRow, 'id' | 'trackId'>[] = [
+  const seedStoryboards: Omit<BackendStoryboardRow, 'id' | 'trackId' | 'index'>[] = [
     {
       scriptId: 1,
       projectId: DEMO_PROJECT_ID,
@@ -288,7 +299,8 @@ function seed(): void {
   ];
   storyboards = seedStoryboards.map((row) => {
     const track = createTrack(DEMO_PROJECT_ID, row.scriptId, row.duration);
-    return { ...row, id: storyboardIdSeq++, trackId: track.id };
+    // index 与真实后端一致：addStoryboard 不写该列（NULL），只有存档保存才回写
+    return { ...row, id: storyboardIdSeq++, trackId: track.id, index: null };
   });
   statsByProject = new Map([
     [DEMO_PROJECT_ID, { roleCount: 2, scriptCount: 1, videoCount: 0, storyboardCount: 3 }],
@@ -373,7 +385,26 @@ export function getBackendScripts(
   return scripts
     .filter((s) => s.projectId === projectId)
     .filter((s) => (name ? s.name.includes(name) : true))
-    .map((s) => ({ ...s, relatedAssets: [] }));
+    .map((s) => ({
+      ...s,
+      relatedAssets: scriptAssets
+        .filter((link) => link.scriptId === s.id)
+        .flatMap((link) => {
+          const asset = assets.find((a) => a.id === link.assetId);
+          return asset ? [{ id: asset.id, name: asset.name }] : [];
+        }),
+    }));
+}
+
+/** 本集（剧本）关联的资产 id —— 镜像后端 o_scriptAssets（getFlowData 的资产段据此筛选） */
+export function getBackendScriptAssetIds(scriptId: number): number[] {
+  return scriptAssets.filter((link) => link.scriptId === scriptId).map((link) => link.assetId);
+}
+
+/** 批量替换某剧本的资产关联（镜像后端 extractAssets / updateScript 的先删后插） */
+export function setBackendScriptAssets(scriptId: number, assetIds: number[]): void {
+  scriptAssets = scriptAssets.filter((link) => link.scriptId !== scriptId);
+  for (const assetId of assetIds) scriptAssets.push({ scriptId, assetId });
 }
 
 export function addBackendScript(row: Pick<BackendScriptRow, 'projectId' | 'name' | 'content'>): BackendScriptRow {
@@ -439,7 +470,18 @@ export function runExtractStateMachine(
       const extracted = [{ projectId, name: '林晚', type: 'role' as const }].filter(
         (a) => !existingNames.has(a.name),
       );
-      if (extracted.length) addBackendAssets(extracted);
+      const created = extracted.length ? addBackendAssets(extracted) : [];
+      // 镜像后端 extractAssets：提取完成后按结果重建 o_scriptAssets 关联（先删后插）。
+      // 这里把「本次提取出的资产」（含早已存在的同名资产）挂到剧本上。
+      const extractedNames = new Set(['林晚', ...created.map((a) => a.name)]);
+      for (const id of ids) {
+        setBackendScriptAssets(
+          id,
+          getBackendAssets(projectId)
+            .filter((a) => extractedNames.has(a.name))
+            .map((a) => a.id),
+        );
+      }
       setBackendScriptExtractState(ids, EXTRACT_STATE.DONE);
     });
   });
@@ -708,6 +750,9 @@ export type BackendStoryboardRow = {
   filePath: string;
   /** 同事务创建的 o_videoTrack id（后端 addStoryboard 一镜一轨） */
   trackId: number | null;
+  /** 排序位（后端 o_storyboard.index）：addStoryboard 不写（NULL），
+   *  只有 saveFlowData 按存档里的数组顺序回写；读接口按 index 升序（NULL 在前） */
+  index: number | null;
   shouldGenerateImage: number;
   /** 关联资产 id（o_assets2Storyboard 的行） */
   associateAssetsIds: number[];
@@ -743,11 +788,20 @@ export type BackendVideoRow = {
   time: number;
 };
 
-/** 镜像后端 getStoryboardData：按 scriptId + projectId 查，index 全为 NULL 时按 id 升序（= 插入顺序） */
+/**
+ * 镜像后端 getStoryboardData：按 scriptId + projectId 查，**order by index asc**。
+ * SQLite 的 ASC 把 NULL 排在最前，同值时按 rowid（= id）升序，
+ * 所以「index 全为 NULL」的种子数据按插入顺序返回，而存档保存过的分镜按存的顺序返回。
+ */
 export function getBackendStoryboards(projectId: number, scriptId: number): BackendStoryboardRow[] {
   return storyboards
     .filter((s) => s.scriptId === scriptId && s.projectId === projectId)
-    .sort((a, b) => a.id - b.id)
+    .sort((a, b) => {
+      if (a.index == null && b.index == null) return a.id - b.id;
+      if (a.index == null) return -1;
+      if (b.index == null) return 1;
+      return a.index - b.index || a.id - b.id;
+    })
     .map((s) => ({ ...s, associateAssetsIds: [...s.associateAssetsIds] }));
 }
 
@@ -768,6 +822,8 @@ export function addBackendStoryboard(row: {
     reason: null,
     filePath: '',
     trackId: track.id,
+    // 后端 addStoryboard 不写 index：新建的分镜要等下一次存档保存才归位
+    index: null,
     associateAssetsIds: [],
     createTime: Date.now(),
   };
@@ -1076,4 +1132,181 @@ export function runVideoStateMachine(videoIds: number[], options: { failReason?:
       video.errorReason = null;
     }
   });
+}
+
+// ===== FlowData 整体存档（复刻后端 production/getFlowData + saveFlowData）=====
+
+/** 存档主键：真实后端按 projectId + episodesId 查 o_agentWorkData（键是 string，值是 JSON 字符串） */
+function workDataKey(projectId: number, episodesId: number): string {
+  return `${projectId}:${episodesId}`;
+}
+
+type BackendFlowAssetRow = {
+  id: number;
+  name: string;
+  type: string;
+  prompt: string;
+  desc: string;
+  src: string | null;
+  flowId?: number;
+  derive: {
+    id: number;
+    assetsId: number;
+    name: string;
+    type: string;
+    prompt: string | null;
+    desc: string;
+    src: string | null;
+    state: string;
+    errorReason: string;
+  }[];
+};
+
+type BackendFlowStoryboardRow = {
+  id: number;
+  index: number | null;
+  duration: number;
+  prompt: string;
+  videoDesc: string;
+  associateAssetsIds: number[];
+  src: string;
+  state: string;
+  reason: string;
+  shouldGenerateImage: number;
+};
+
+export type BackendFlowData = {
+  script: string;
+  scriptPlan: string;
+  assets: BackendFlowAssetRow[];
+  storyboardTable: string;
+  storyboard: BackendFlowStoryboardRow[];
+  workbench: { videoList: unknown[] };
+};
+
+/** 资产的静态托管小图 URL（复刻 u.oss.getSmallImageUrl；mock 沿用 `?size=20` 约定） */
+function flowImageSrc(row: BackendAssetRow): string | null {
+  const src = imageSrc(row);
+  return src ? `${src}?size=20` : null;
+}
+
+/**
+ * 镜像后端 getFlowData 的资产段：按 o_scriptAssets 取本集父资产，
+ * 再挂上「父资产在本集资产列表里」的衍生资产。
+ */
+function flowAssets(projectId: number, episodesId: number): BackendFlowAssetRow[] {
+  const linkedIds = getBackendScriptAssetIds(episodesId);
+  const parents = assets.filter(
+    (a) => a.projectId === projectId && a.assetsId == null && linkedIds.includes(a.id),
+  );
+  const children = assets.filter(
+    (a) => a.projectId === projectId && a.assetsId != null && linkedIds.includes(a.assetsId),
+  );
+  return parents.map((parent) => ({
+    id: parent.id,
+    name: parent.name,
+    type: parent.type,
+    prompt: parent.prompt ?? '',
+    desc: parent.describe ?? '',
+    src: flowImageSrc(parent),
+    derive: children
+      .filter((child) => child.assetsId === parent.id)
+      .map((child) => {
+        // 复刻后端：state / errorReason 都取自 join 上的 o_image 行（不是 assets 自己的润色字段）
+        const image = images.find((img) => img.id === child.imageId);
+        return {
+          id: child.id,
+          assetsId: parent.id,
+          name: child.name,
+          type: child.type,
+          prompt: child.prompt,
+          desc: child.describe ?? '',
+          src: flowImageSrc(child),
+          // 无图时后端写「未生成」字面量（与 o_image 的 NULL 不同，故单列一条常量）
+          state: image?.state ?? FLOW_DATA_IMAGE_STATE_NONE,
+          errorReason: image?.errorReason ?? '',
+        };
+      }),
+  }));
+}
+
+/**
+ * 镜像后端 getFlowData 的分镜段（读侧由 o_storyboard 实时回填）。
+ *
+ * **两处刻意不照抄 getStoryboardData**，因为后端自己就不一致：
+ * - 查询只按 scriptId（真实代码是 `where("scriptId", episodesId)`，不带 projectId）；
+ * - 排序是 **JS 的 `(a.index ?? 0) - (b.index ?? 0)`**（NULL 当 0 看），而
+ *   getStoryboardData 走 SQL 的 `order by index asc`（SQLite 把 NULL 排最前）。
+ *   于是「存档保存过 index 之后新建的分镜」（index 为 NULL）在两个接口里的位置不同：
+ *   面板把它排在最前，存档段把它当 index 0。issue 11 验收时若看到顺序不一致，根源在这。
+ */
+function flowStoryboards(episodesId: number): BackendFlowStoryboardRow[] {
+  return storyboards
+    .filter((s) => s.scriptId === episodesId)
+    .map((s) => ({
+      id: s.id,
+      index: s.index,
+      duration: s.duration ? Number(s.duration) : 0,
+      prompt: s.prompt,
+      videoDesc: s.videoDesc,
+      associateAssetsIds: [...s.associateAssetsIds],
+      src: s.filePath ? `http://localhost:10588/oss${s.filePath}?size=20` : '',
+      state: s.state,
+      reason: s.reason ?? '',
+      shouldGenerateImage: s.shouldGenerateImage,
+    }))
+    .sort((a, b) => (a.index ?? 0) - (b.index ?? 0));
+}
+
+/**
+ * 镜像后端 getFlowData 的两个分支：
+ * - **无存档**：现造默认 FlowData —— script 取 o_script.content、assets 取本集资产、
+ *   scriptPlan/storyboardTable 空串、**storyboard 恒为空数组**、workbench 只有空 videoList。
+ *   注意此时的分镜列表是空的，哪怕库里真有分镜（页面因此不能把 FlowData 当分镜数据源）。
+ * - **有存档**：取出 o_agentWorkData.data 的 JSON 后，用真实表数据覆盖 script/assets/storyboard
+ *   三段（所以写进存档的 script/assets 是读不回来的），scriptPlan/storyboardTable 原样返回。
+ */
+export function getBackendFlowData(projectId: number, episodesId: number): BackendFlowData {
+  const script = scripts.find((s) => s.id === episodesId && s.projectId === projectId);
+  const archived = workDataArchive.get(workDataKey(projectId, episodesId));
+  if (!archived) {
+    return {
+      script: script?.content ?? '',
+      scriptPlan: '',
+      assets: flowAssets(projectId, episodesId),
+      storyboardTable: '',
+      storyboard: [],
+      workbench: { videoList: [] },
+    };
+  }
+  const stored = JSON.parse(archived) as Partial<BackendFlowData>;
+  return {
+    ...stored,
+    script: script?.content ?? '',
+    assets: flowAssets(projectId, episodesId),
+    storyboard: flowStoryboards(episodesId),
+    scriptPlan: stored.scriptPlan ?? '',
+    storyboardTable: stored.storyboardTable ?? '',
+    workbench: stored.workbench ?? { videoList: [] },
+  } as BackendFlowData;
+}
+
+/**
+ * 镜像后端 saveFlowData：整个文档写进 o_agentWorkData，**并按数组顺序回写 o_storyboard.index**
+ * ——前提是存档里每条分镜都带真实 id（后端 `filterDatas.length === 0` 才做这一步），
+ * 否则整步跳过（分镜顺序原样不动）。
+ */
+export function saveBackendFlowData(
+  projectId: number,
+  episodesId: number,
+  data: { storyboard?: { id?: number | null }[] },
+): void {
+  const list = data.storyboard ?? [];
+  if (list.length > 0 && list.every((item) => item.id)) {
+    list.forEach((item, index) => {
+      const found = storyboards.find((s) => s.id === item.id);
+      if (found) found.index = index;
+    });
+  }
+  workDataArchive.set(workDataKey(projectId, episodesId), JSON.stringify(data));
 }

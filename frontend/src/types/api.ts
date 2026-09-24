@@ -459,6 +459,98 @@ export type UpdateScriptBody = {
   content: string;
 };
 
+// ---- FlowData 整体存档（后端 o_agentWorkData.data / production/getFlowData）----
+
+/**
+ * 存档里的衍生资产（父资产的多形象/变体；后端 `o_assets` 中 `assetsId` 指向父资产的行）。
+ * `state` 是它的生图状态——后端读侧在 o_image 无行时给的是「未生成」**字面量**
+ * （见 api.ts 里 imageStateFromStatus 的说明），所以 none 也算有值。
+ */
+export type FlowDataDeriveAsset = {
+  id: string;
+  /** 所属父资产 id */
+  assetsId: string;
+  name: string;
+  type: AssetType;
+  prompt: string;
+  description: string;
+  /** 后端静态托管小图 URL；无图为 null */
+  imageUrl: string | null;
+  imageState: AssetImageStatus;
+  /** 生图失败原因 */
+  errorReason: string | null;
+  /** 后端 o_assets.flowId（只有存档读侧才回填，默认档没有该键） */
+  flowId: string | null;
+};
+
+/**
+ * 存档里的一条本集资产。**读侧由 `o_assets` join `o_image` 实时回填**（写进存档也不会被读回），
+ * 页面不直接展示它——它的价值是在整体保存时原样回传，别把 AI 工作区里的资产文档抹掉。
+ */
+export type FlowDataAsset = {
+  id: string;
+  name: string;
+  type: AssetType;
+  prompt: string;
+  description: string;
+  imageUrl: string | null;
+  derive: FlowDataDeriveAsset[];
+  flowId: string | null;
+};
+
+/**
+ * 存档里的一条分镜（读侧由 `o_storyboard` 实时回填，按 index 升序）。
+ * **数组顺序就是 o_storyboard.index 的持久化形式**：写侧（saveFlowData）按数组下标
+ * 回写每条分镜的 index，所以「分镜顺序」是经 FlowData 往返的编辑状态。
+ */
+export type FlowDataStoryboard = {
+  id: string;
+  /** 后端 o_storyboard.index；null = 从未排过序 */
+  index: number | null;
+  /** 时长（秒）；后端无值时为 0 */
+  durationSec: number;
+  prompt: string;
+  /** 视频描述（09 的视频提示词核心输入，与 prompt 同源） */
+  videoDesc: string;
+  /** 关联资产 id（后端 o_assets2Storyboard 的行） */
+  associateAssetsIds: string[];
+  imageUrl: string | null;
+  /** 图片生成状态（后端 o_storyboard.state 翻译） */
+  status: StoryboardImageStatus;
+  /** 生图失败原因 */
+  errorReason: string | null;
+  /** 后端 o_storyboard.shouldGenerateImage（0/1） */
+  shouldGenerateImage: number;
+  flowId: string | null;
+};
+
+/**
+ * FlowData 的 workbench 段。后端目前是 todo 桩数据（默认档恒为 `{videoList: []}`，
+ * 存档档回原始 JSON），前端不解析它，只做原样往返，免得把工作区里未定义结构的键丢掉。
+ */
+export type FlowDataWorkbench = { videoList: unknown[]; [key: string]: unknown };
+
+/**
+ * 工作室的整体工作区文档（后端 `/api/production/getFlowData` 的翻译形态）。
+ *
+ * 契约要点（读侧会**实时覆盖** script/assets/storyboard 三段）：
+ * - `script`     ← `o_script.content`（只读回填，写进去读不回来）
+ * - `assets`     ← `o_assets` + `o_image`（同上）
+ * - `storyboard` ← `o_storyboard`（同上；**无存档时后端返回空数组**）
+ * - 真正「写进去能读回来」的只有 `scriptPlan`、`storyboardTable`（存在
+ *   `o_agentWorkData.data` 里）与 `storyboard` 的数组顺序（写回 `o_storyboard.index`）。
+ */
+export type StudioFlowData = {
+  script: string;
+  /** 拍摄计划（productionAgent 的 directorPlan 产出） */
+  scriptPlan: string;
+  /** 分镜表（productionAgent 的 storyboardTable 产出） */
+  storyboardTable: string;
+  assets: FlowDataAsset[];
+  storyboard: FlowDataStoryboard[];
+  workbench: FlowDataWorkbench;
+};
+
 export type PlazaAssetCategory = 'character' | 'scene' | 'video' | 'material';
 
 export type PlazaAsset = {
