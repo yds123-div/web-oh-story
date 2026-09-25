@@ -43,5 +43,14 @@ pnpm build
 `o_vendorConfig`；裸名（如 `Seedream-4.0`）会直接报「未找到供应商配置 id=X」。
 表单选项见 `src/config/project.ts`，两边都别写裸名。
 
-自建图像服务（Z-Image-Turbo）的适配器在 `backend/data/vendor/dp.ts`，密钥只落在
-后端运行库 `o_vendorConfig`（sqlite，不进 git）。
+两条链路各有一个后端 vendor 适配器，密钥只落在后端运行库 `o_vendorConfig`（sqlite，不进 git）：
+
+- **图像** → `backend/data/vendor/qianwen.ts`（千问 MaaS 的 `wan2.7-image-pro`）。
+  走 OpenAI 兼容的 `chat/completions` 返回图片，**尺寸只能写在 `parameters.size`**（形如
+  `1152*2048`，乘号是 `*`），写在别处会被静默忽略并回落到 2048×2048。**支持参考图**
+  （资产形象图 / 分镜关联资产图会作为多模态输入参与生成），单张参考图最小 240×240。
+- **视频** → `backend/data/vendor/dp.ts`（自建 `MiniMax-H3`，图生视频，必须有参考图）。
+  该服务**仅当家里 GPU 切到 H3 模式时可用**，`GET {baseUrl}/video/health` 可免密钥探测。
+  同一个文件里还有 Z-Image-Turbo 文生图（`/img/generate`），但该端点**当前不可用**
+  （2026-09-25 实测恒返回 502），前端选项里已不再提供；实现代码保留，服务恢复后把它加回
+  `IMAGE_MODEL_OPTIONS` 即可，无需改代码。

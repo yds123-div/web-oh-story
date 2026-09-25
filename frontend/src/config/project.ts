@@ -39,8 +39,29 @@ export const VIDEO_RATIO_OPTIONS = [
   { value: '16:9', label: '16:9 横屏' },
 ];
 
-/** 图像模型：目前只有自建 Z-Image-Turbo 一个供应商配好了 key */
-export const IMAGE_MODEL_OPTIONS = [{ value: 'dp:z-image-turbo', label: 'Z-Image-Turbo' }];
+/**
+ * 图像模型选项，value 必须是 `<供应商id>:<模型名>`。
+ *
+ * `qianwen:wan2.7-image-pro` 是**当前真能出图**的一条：千问 MaaS 的兼容模式端点，
+ * 走 chat/completions 返回图片。**支持参考图**（资产形象图 / 分镜关联资产图会作为
+ * 多模态输入参与生成），故不再有「参考图用不上」的能力缺口。
+ * 原 `dp:z-image-turbo` 的服务端已停用（/dp/img/generate 返回 502），已从选项里移除。
+ */
+export const IMAGE_MODEL_OPTIONS = [
+  { value: 'qianwen:wan2.7-image-pro', label: 'Wan 2.7 Image Pro', supportsReference: true },
+];
+
+/**
+ * 该图像模型是否会用上参考图（分镜关联资产的形象图 / 资产工坊上传的参考图）。
+ *
+ * 后端不把这个能力透出给前端（`mode` 只在设置页的模型详情里），而本文件已经是
+ * 写死的短名单，索性一并写死。**分镜工作区的能力说明横幅按它决定是否展示** ——
+ * 说明里断言的「不会沿用资产形象」只有在 false 时才是真的，写死成常显会变成假话。
+ * 认不出来的模型（如历史项目里配的旧模型）按不支持处理，宁可保守提示。
+ */
+export function imageModelSupportsReference(imageModel: string | undefined): boolean {
+  return IMAGE_MODEL_OPTIONS.some((m) => m.value === imageModel && m.supportsReference);
+}
 
 /**
  * 视频模型选项，value 必须是 `<供应商id>:<模型名>`。
@@ -87,7 +108,7 @@ export const DEFAULT_PROJECT_FORM = {
   type: '女频-轻小说',
   artStyle: '2D_90s_japanese_anime',
   videoRatio: '9:16',
-  imageModel: 'dp:z-image-turbo',
+  imageModel: 'qianwen:wan2.7-image-pro',
   videoModel: 'dp:minimax-h3',
   imageQuality: '2K',
 } as const;

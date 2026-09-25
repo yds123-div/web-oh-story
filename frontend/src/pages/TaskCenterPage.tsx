@@ -21,6 +21,32 @@ const STATE_TAG_COLOR: Record<TaskStateName, string> = {
   failed: 'error',
 };
 
+/**
+ * Table 的行键。用复合字段而不是行下标，有两个原因：
+ *
+ * 1. **拿不到任务自身 id**：`getTaskApi` 的 select 是 `o_tasks.* + o_project.*`，两张表都有 `id`，
+ *    同名列被 join 上来的 `o_project.id` 覆盖，`o_tasks.id` 在响应里根本不存在
+ *    （见 `api.ts` 里 toTaskRecord 的注释）。后端有 `taskDetails` 按真实 taskId 查，
+ *    但列表接口不透出——改列表的 select 属于后端业务代码，超出本工单范围。
+ * 2. **行下标会命中 antd v5 废弃告警**（`index` 参数已废弃），而且翻页/筛选后键会错位。
+ *
+ * 取「开始时间(ms) + 分类 + 项目 + 关联对象 + 模型」：批量生成时同一毫秒会插入多行
+ * （实测三张分镜图同 ms），靠 `relatedObjects` 里的提示词区分开。表格没有行选择，
+ * 万一仍有撞键也只是 React 的告警，不会出现功能错乱。
+ *
+ * 用 `JSON.stringify` 而不是 `join('|')` 拼：`relatedObjects` 装的是提示词原文，
+ * 本身就可能含 `|`，字面拼接会让 `["a","b|c"]` 与 `["a|b","c"]` 撞成同一个键。
+ */
+function taskRowKey(r: TaskRecord): string {
+  return JSON.stringify([
+    r.startTime ?? '',
+    r.taskClass,
+    r.projectId ?? '',
+    r.relatedObjects ?? '',
+    r.model ?? '',
+  ]);
+}
+
 export default function TaskCenterPage() {
   const { message } = App.useApp();
   const [tasks, setTasks] = useState<TaskRecord[]>([]);
@@ -176,7 +202,7 @@ export default function TaskCenterPage() {
       </Card>
 
       <Table<TaskRecord>
-        rowKey={(_, index) => String(index)}
+        rowKey={taskRowKey}
         columns={columns}
         dataSource={tasks}
         loading={loading}

@@ -4,7 +4,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { useWorkflowStep } from '../hooks/useWorkflowStep';
 import { VideoPromptModal } from '../components/VideoPromptModal';
 import { VideoPromptTag, VideoVersionTag } from '../components/VideoTrackTags';
-import { DEFAULT_VIDEO_DURATION_SEC, VIDEO_RESOLUTION } from '../config/project';
+import { DEFAULT_VIDEO_DURATION_SEC, VIDEO_RESOLUTION, imageModelSupportsReference } from '../config/project';
 import {
   composeFlowStoryboards,
   createStoryboard,
@@ -686,11 +686,13 @@ export default function StudioPage() {
         </div>
       </div>
 
-      <div className="ds-sbNotice">
-        <Typography.Text type="secondary" style={{ fontSize: 11.5 }}>
-          当前图像模型（{project?.imageModel || '—'}）不支持参考图，分镜画面按描述文生图，不会沿用资产形象。
-        </Typography.Text>
-      </div>
+      {imageModelSupportsReference(project?.imageModel) ? null : (
+        <div className="ds-sbNotice">
+          <Typography.Text type="secondary" style={{ fontSize: 11.5 }}>
+            当前图像模型（{project?.imageModel || '—'}）不支持参考图，分镜画面按描述文生图，不会沿用资产形象。
+          </Typography.Text>
+        </div>
+      )}
 
       {/* 整体存档：剧本原文（只读）+ 拍摄计划 + 分镜表，与分镜顺序一起由「保存存档」整体提交 */}
       {archiveOpen ? (

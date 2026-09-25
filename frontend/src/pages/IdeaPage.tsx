@@ -1,6 +1,5 @@
 import { useState } from 'react';
-import { Modal, Button, Input, message } from 'antd';
-import { useNavigate } from 'react-router-dom';
+import { Modal, Button, Input } from 'antd';
 
 const DECOMPOSE_DATA = {
   '逃跑男友': {
@@ -208,76 +207,60 @@ const STYLE_LIBRARY = [
     name: '赛博朋克电影',
     desc: '冷调霓虹 · 高对比光影 · 电影质感',
     gradient: 'linear-gradient(120deg,#0b1e3a,#3a2f6b 50%,#b537f2)',
-    active: true,
   },
   {
     id: 2,
     name: '国漫写实',
     desc: '厚涂质感 · 东方面部特征 · 柔光',
     gradient: 'linear-gradient(120deg,#2b2320,#7a5c3a 55%,#c9a06a)',
-    active: false,
   },
   {
     id: 3,
     name: '赛璐璐动画',
     desc: '日式动画 · 硬色块阴影 · 高饱和',
     gradient: 'linear-gradient(120deg,#f2e9dc,#f4a988 55%,#7ab8f2)',
-    active: false,
   },
   {
     id: 4,
     name: '影视质感',
     desc: '自然光影 · 浅景深 · 纪实镜头感',
     gradient: 'linear-gradient(120deg,#1a1a1e,#4a4a52 55%,#8a8a94)',
-    active: false,
   },
   {
     id: 5,
     name: '水墨国风',
     desc: '留白构图 · 墨色晕染 · 宣纸底',
     gradient: 'linear-gradient(120deg,#f4f1ea,#9aa3a8 50%,#3a4248)',
-    active: false,
   },
   {
     id: 6,
     name: '像素复古',
     desc: '8-bit 像素 · 抖动渐变 · 电子感',
     gradient: 'repeating-linear-gradient(45deg,#1a1030 0 12px,#3a2f6b 12px 24px)',
-    active: false,
   },
 ];
 
+/**
+ * 创意页 = 纯浏览画廊（官方示例 / 爆款拆解 / 模板市场 / 风格库）。
+ *
+ * **这里刻意没有任何「套用」按钮**：后端没有模板与风格接口，页面上这些条目全是
+ * 前端内置的示例数据，点了也变不成项目配置。issue 02 已移除了顶部的「新建创意对话」
+ * 入口，但卡片级按钮留了下来并弹出「已套用模板「X」」「风格已写入整体设定」这类
+ * **谎报成功**的提示（实际什么都没发生）。issue 11 把这些按钮一并移除，页面退化为
+ * 只读画廊；风格与模板的真实入口是「创作 / 项目配置」，文案也照实说明。
+ */
 export default function IdeaPage() {
-  const navigate = useNavigate();
   const [offChip, setOffChip] = useState('all');
   const [tplChip, setTplChip] = useState('all');
   const [searchText, setSearchText] = useState('');
   const [decomposeModal, setDecomposeModal] = useState(false);
   const [currentDecompose, setCurrentDecompose] = useState<string | null>(null);
 
-  const handleUseTemplate = (name: string) => {
-    message.success(`已套用模板「${name}」· 进入创作`);
-    setTimeout(() => navigate('/create'), 500);
-  };
-
-  const handleUseStyle = (name: string) => {
-    message.success(`风格「${name}」已写入整体设定，将全局注入所有镜头`);
-  };
-
+  /** 只有内置了拆解报告的卡片能打开详情；没有数据的卡片不做任何反应（不弹假的「生成中」） */
   const handleDecompose = (name: string) => {
-    const data = DECOMPOSE_DATA[name as keyof typeof DECOMPOSE_DATA];
-    if (!data) {
-      message.info('演示：拆解报告生成中…');
-      return;
-    }
+    if (!DECOMPOSE_DATA[name as keyof typeof DECOMPOSE_DATA]) return;
     setCurrentDecompose(name);
     setDecomposeModal(true);
-  };
-
-  const handleUseDecompose = () => {
-    setDecomposeModal(false);
-    message.success('已套用该爆款结构 · 进入创作（节奏卡点已注入提示词模板）');
-    setTimeout(() => navigate('/create'), 600);
   };
 
   const filteredOfficial = OFFICIAL_EXAMPLES.filter(
@@ -301,12 +284,12 @@ export default function IdeaPage() {
       <h2 className="ds-h2">
         创意 <em>· 灵感市场</em>
       </h2>
-      <div className="ds-sub2">爆款模板 · 风格库 —— 套用即开拍，跳过冷启动</div>
+      <div className="ds-sub2">爆款模板 · 风格库 —— 纯浏览找灵感，开拍请到创作页</div>
 
       <div className="ds-secHead">
         <h3>🏆 官方示例</h3>
         <span style={{ fontSize: '11px', color: 'var(--ant-color-text-tertiary)' }}>
-          官方出品 · 点击标签筛选 · 「用此示例」自动填充创作参数
+          官方出品 · 点击标签筛选 · 仅供浏览参考
         </span>
       </div>
 
@@ -342,9 +325,6 @@ export default function IdeaPage() {
             </div>
             <div className="ds-tplOps">
               <span className="cnt">官方</span>
-              <Button size="small" className="ds-ghost" onClick={() => handleUseTemplate(item.title)}>
-                用此示例
-              </Button>
             </div>
           </div>
         ))}
@@ -426,9 +406,6 @@ export default function IdeaPage() {
             </div>
             <div className="ds-tplOps">
               <span className="cnt">🔥 {item.playCount}</span>
-              <Button size="small" className="ds-ghost" onClick={() => handleUseTemplate(item.title)}>
-                用此创作
-              </Button>
             </div>
           </div>
         ))}
@@ -437,18 +414,17 @@ export default function IdeaPage() {
       <div className="ds-secHead" style={{ marginTop: '30px' }}>
         <h3>🎨 风格库</h3>
         <span style={{ fontSize: '11px', color: 'var(--ant-color-text-tertiary)' }}>
-          应用于「整体设定 · 视频风格」，全局注入所有镜头
+          视频风格请在项目配置里选择，下列仅供浏览参考
         </span>
       </div>
 
       <div className="ds-styleGrid">
         {STYLE_LIBRARY.map((item) => (
-          <div key={item.id} className="ds-styleCard" onClick={() => handleUseStyle(item.name)}>
+          <div key={item.id} className="ds-styleCard">
             <div className="sw" style={{ background: item.gradient }}></div>
             <div className="nb">
               <b>{item.name}</b>
               <div className="d">{item.desc}</div>
-              <div className="a">{item.active ? '当前项目使用中 →' : '点击应用'}</div>
             </div>
           </div>
         ))}
@@ -462,9 +438,6 @@ export default function IdeaPage() {
           <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
             <Button className="ds-ghost" onClick={() => setDecomposeModal(false)}>
               关闭
-            </Button>
-            <Button type="primary" className="ds-grad" onClick={handleUseDecompose}>
-              用此结构创作
             </Button>
           </div>
         }

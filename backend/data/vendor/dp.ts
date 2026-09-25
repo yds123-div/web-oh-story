@@ -4,7 +4,11 @@
  *
  * 同一台机器、同一把 sk-dp 密钥，两个能力：
  *
- * 【图像 / Z-Image-Turbo】POST {baseUrl}/img/generate
+ * 【图像 / Z-Image-Turbo】POST {baseUrl}/img/generate —— **该端点当前不可用**
+ * 0) 2026-09-25 实测 `/img/generate` 恒返回 502（`{"detail":"upstream error: ReadError"}`），
+ *    前端 `IMAGE_MODEL_OPTIONS` 已改用 `qianwen:wan2.7-image-pro`（见 vendor/qianwen.ts），
+ *    本供应商现在**只有视频这一条链路在用**。下面的图像实现原样保留：服务恢复后把它加回
+ *    前端选项即可，无需改代码。
  * 1) 纯文生图，请求体 {prompt,width,height,steps,seed?}，响应是 PNG 二进制（不是 JSON），
  *    故直接读 arrayBuffer 再拼成有头 base64。
  * 2) **不支持参考图**：没有图生图入口，`config.referenceList`（分镜关联资产的形象图、

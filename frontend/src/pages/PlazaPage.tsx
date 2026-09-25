@@ -236,7 +236,7 @@ export default function PlazaPage() {
         资产 <em>· 广场</em>
       </h2>
       <Text type="secondary" className="ds-sub2">
-        参考 tiaoyue /asset ｜ 分类筛选 + 资产瀑布流 · 上传资产 · 加入项目 · 文件预览 · AI 生成标识 · 豆包式编辑工具（抠图/擦除/改图/扩图/变清晰）
+        分类筛选 + 资产瀑布流 · 文件预览（后端资产广场接口二期接入，本页当前为静态展示）
       </Text>
 
       <div className="ds-chips">

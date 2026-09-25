@@ -111,8 +111,7 @@ export default function SpacePage() {
         空间 <em>· 个人</em>
       </h2>
       <div className="ds-sub2">
-        参考 tiaoyue /space/personal ｜ 个人项目卡 · 重命名 / 归档 · 项目积分余额 · 成片下载 ·
-        存储用量
+        个人项目卡 · 重命名 / 归档 · 成片下载（后端空间接口二期接入，本页当前为静态展示）
       </div>
 
       <div className="ds-docPanel" style={{ display: 'flex', alignItems: 'center', gap: '18px', marginTop: '20px' }}>

@@ -160,7 +160,8 @@ export default function CanvasPage() {
             画布 <em>· Canvas</em>
           </h2>
           <p className="sub2">
-            参考 tiaoyue /aigc/canvas/canvasList ｜ 节点式创作画布的管理中枢：新建画布、选择生成比例、打开画布进入节点编辑器
+            节点式创作画布的管理中枢：新建画布、选择生成比例、打开画布进入节点编辑器
+            （后端画布接口二期接入，本页当前为静态展示）
           </p>
         </div>
 

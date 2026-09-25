@@ -1645,90 +1645,6 @@ html[data-theme='light'] .ds-chip.on {
   margin-right: auto;
 }
 
-.ds-bellWrap {
-  position: relative;
-}
-.ds-bell {
-  width: 34px;
-  height: 34px;
-  border-radius: 10px;
-  border: none;
-  background: none;
-  font-size: 16px;
-  cursor: pointer;
-  position: relative;
-}
-.ds-bell i {
-  position: absolute;
-  top: 6px;
-  right: 7px;
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: #ef4444;
-}
-.ds-notifPanel {
-  position: absolute;
-  right: 0;
-  top: 42px;
-  z-index: 610;
-  width: 308px;
-  background: var(--ant-color-bg-container);
-  border: 1px solid var(--ant-color-border);
-  border-radius: 14px;
-  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.28);
-  overflow: hidden;
-}
-.ds-notifPanel .nh2 {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 12px 14px;
-  border-bottom: 1px solid var(--ant-color-border-secondary);
-  font-size: 13px;
-  font-weight: 700;
-}
-.ds-notifPanel .nh2 button {
-  font-size: 10.5px;
-  color: #a78bfa;
-  background: none;
-  border: none;
-  cursor: pointer;
-}
-.ds-notifPanel .list {
-  max-height: 320px;
-  overflow-y: auto;
-}
-.ds-notifPanel .ni {
-  display: flex;
-  gap: 10px;
-  padding: 11px 14px;
-  border-bottom: 1px solid var(--ant-color-border-secondary);
-  font-size: 11.5px;
-}
-.ds-notifPanel .ni:last-child {
-  border-bottom: none;
-}
-.ds-notifPanel .ni .ic {
-  width: 30px;
-  height: 30px;
-  border-radius: 9px;
-  background: var(--ant-color-bg-elevated);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 14px;
-  flex-shrink: 0;
-}
-.ds-notifPanel .ni .t {
-  line-height: 1.5;
-}
-.ds-notifPanel .ni .d {
-  color: var(--ant-color-text-tertiary);
-  font-size: 10px;
-  margin-top: 3px;
-}
-
 @keyframes ds-spin {
   to {
     transform: rotate(360deg);
@@ -1805,6 +1721,7 @@ html[data-theme='light'] .ds-chip.on {
   grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
   gap: 12px;
 }
+/* 风格卡是只读的：后端没有风格接口，点击不再"应用"任何东西，故无 cursor/hover 反馈 */
 .ds-styleCard {
   display: flex;
   gap: 12px;
@@ -1812,11 +1729,6 @@ html[data-theme='light'] .ds-chip.on {
   background: var(--ant-color-bg-container);
   border: 1px solid var(--ant-color-border-secondary);
   border-radius: 12px;
-  cursor: pointer;
-  transition: 0.15s;
-}
-.ds-styleCard:hover {
-  border-color: #8b5cf6;
 }
 .ds-styleCard .sw {
   width: 60px;
@@ -1836,10 +1748,6 @@ html[data-theme='light'] .ds-chip.on {
 .ds-styleCard .nb .d {
   font-size: 11px;
   color: var(--ant-color-text-tertiary);
-}
-.ds-styleCard .nb .a {
-  font-size: 10px;
-  color: #a78bfa;
 }
 
 .ds-tplCover .tag {

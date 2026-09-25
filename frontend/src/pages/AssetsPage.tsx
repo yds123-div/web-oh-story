@@ -683,7 +683,13 @@ export default function AssetsPage() {
         model: project.imageModel,
         resolution: project.imageQuality,
         prompt: asset.prompt || asset.description || asset.name,
-        // 参考图仅限本地上传的 data URL；后端生成图的 oss 路径不是 base64
+        // 参考图只认 data URL。但**这个分支实际永远走不到**：上传后 onFileSelected 会
+        // `await loadList()` 重拉列表，asset.imageUrl 此时已被换成后端的 /oss/... 静态路径，
+        // 而 `getAssetsApi` 回来的 src 从来不是 data URL。也就是说「上传图片 → 生成形象」
+        // 并不会把上传的图当参考送给后端（后端 generateAssets 本身是支持 base64 参考图的）。
+        // 修它要么让后端按 assetsId 自己回读 o_image（改后端业务代码，超出工单范围），
+        // 要么前端把 oss 图取回来转 base64（会改变「重新生成」的语义，属产品决定）——
+        // 两条都没做，issue 11 只把这个事实记档，没有悄悄改生成行为。
         base64: asset.imageUrl?.startsWith('data:') ? asset.imageUrl : null,
       });
       patchAsset(asset.id, { imageUrl: result.imageUrl, imageState: 'done' });

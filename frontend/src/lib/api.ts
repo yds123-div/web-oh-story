@@ -310,6 +310,13 @@ export async function getTask(taskId: string): Promise<TaskStatus> {
   };
 }
 
+/**
+ * 下面这组是**二期预留的空壳**，指向的路径在后端当前并不存在
+ * （`/api/credits`、`/api/projects/:id/{outline-tasks,novel-tasks,outline/finalize,outline/screenplay}`、
+ * `/api/creative-tasks`）。页面上没有任何地方调用它们——对应入口已在 issue 02 隐藏
+ * （模板列表 / 通知 / 积分 / 小说模式 / 创意对话），`mocks/handlers.ts` 里仍保留同名 handler,
+ * 供测试与二期使用。issue 02 明确记过「函数本身可保留供测试或二期」，**别当死代码删掉**。
+ */
 export function getCredits(): Promise<CreditsResponse> {
   return apiFetch('/api/credits');
 }
