@@ -42,7 +42,15 @@ import {
   getBackendTracks,
   getBackendVideoStates,
   getBackendVideos,
+  getAllProjectStatistics,
+  getMockAgentUseMode,
+  getMockMemoryConfig,
+  getMockPromptBinding,
   getProjectStatistics,
+  bumpMockMemoryCleared,
+  setMockAgentUseMode,
+  setMockMemoryConfig,
+  setMockPromptBinding,
   runAssetImageGeneration,
   runBatchPolishStateMachine,
   runBatchVideoPromptStateMachine,
@@ -89,7 +97,11 @@ function validateBody(
     | 'optionalString'
     | 'optionalBoolean'
     | 'numberArray'
+    /** 复刻 z.array(z.string())：键必须存在且为字符串数组 */
+    | 'stringArray'
     | 'nullableString'
+    /** 复刻 z.record(...)：必须是对象（且不是数组 / null） */
+    | 'object'
   >,
 ) {
   const errors: string[] = [];
@@ -112,6 +124,14 @@ function validateBody(
       (!Array.isArray(value) || value.some((v) => typeof v !== 'number'))
     ) {
       errors.push(`字段 ${field} 应为数字数组`);
+    }
+    // 复刻 z.record(...)：必须是对象（null 与数组都不算）
+    if (rule === 'object' && (typeof value !== 'object' || value === null || Array.isArray(value))) {
+      errors.push(`字段 ${field} 应为对象`);
+    }
+    // 复刻 z.array(z.string())
+    if (rule === 'stringArray' && (!Array.isArray(value) || value.some((v) => typeof v !== 'string'))) {
+      errors.push(`字段 ${field} 应为字符串数组`);
     }
   }
   if (errors.length === 0) return null;
@@ -153,11 +173,22 @@ function isNonEmptyArrayOf(
 
 export const handlers = [
   // 登录（按后端真实契约：POST + 信封，token 带 Bearer 前缀）
-  http.post('/api/login/login', async () => {
+  /**
+   * 登录。镜像真实后端 `login.ts`：代码不存在与密码错都回同一条文案（不泄露账号是否存在），
+   * token 带 `Bearer ` 前缀，前端负责剥掉。
+   */
+  http.post('/api/login/login', async ({ request }) => {
     await netDelay(60);
+    const body = (await request.json()) as Record<string, unknown>;
+    const invalid = validateBody(body, { username: 'string', password: 'string' });
+    if (invalid) return invalid;
+    const { username, password } = body as { username: string; password: string };
+    if (username !== 'admin' || password !== 'admin123') {
+      return HttpResponse.json({ code: 400, data: null, message: '用户名或密码错误' }, { status: 400 });
+    }
     return HttpResponse.json({
       code: 200,
-      data: { token: 'Bearer dev-placeholder-token', name: 'admin', id: 1 },
+      data: { token: 'Bearer mock-token-for-admin', name: 'admin', id: 1 },
       message: '登录成功',
     });
   }),
@@ -245,15 +276,19 @@ export const handlers = [
   }),
 
   /**
-   * 图像模型列表（含后端按厂商 `mode` 透出的能力）——与真实后端 modelSelect/getModelList 同形。
-   * 真实后端只列 `enable=1` 的供应商的模型，这里给三条代表性模型覆盖三种能力组合。
+   * 模型列表（含后端按厂商 `mode` 透出的能力）——与真实后端 modelSelect/getModelList 同形。
+   *
+   * 真实后端按 `type` 过滤（`image` / `video` / `text`；注意 `all` 的语义是"除视频之外的全部"），
+   * 且视频行的三个能力标记一律回 `null`（`mode` 描述的是帧而不是图像能力）。
+   * 这里给三条图像模型覆盖三种能力组合，一条视频模型。
    */
   http.post('/api/modelSelect/getModelList', async ({ request }) => {
     await netDelay(60);
     const body = (await request.json()) as Record<string, unknown>;
     const invalid = validateBody(body, { type: 'string' });
     if (invalid) return invalid;
-    return envelope([
+    const requested = String(body.type);
+    const IMAGE_MODELS = [
       {
         id: 'qianwen',
         label: 'Wan 2.7 Image Pro',
@@ -287,6 +322,72 @@ export const handlers = [
         supportsReference: true,
         requiresReference: true,
       },
+    ];
+    const VIDEO_MODELS = [
+      {
+        id: 'dp',
+        label: 'MiniMax-H3',
+        value: 'minimax-h3',
+        type: 'video',
+        name: 'DP 自建服务',
+        mode: [],
+        textToImage: null,
+        supportsReference: null,
+        requiresReference: null,
+      },
+    ];
+    const TEXT_MODELS = [
+      {
+        id: 'deepseek',
+        label: 'DeepSeek Chat',
+        value: 'deepseek-chat',
+        type: 'text',
+        name: 'DeepSeek',
+        mode: [],
+        textToImage: null,
+        supportsReference: null,
+        requiresReference: null,
+      },
+    ];
+    // 与真实后端一致：按 type 过滤（`all` 的语义是"除视频之外"）
+    type MockModelRow = {
+      id: string;
+      label: string;
+      value: string;
+      type: string;
+      name: string;
+      mode: string[];
+      textToImage: boolean | null;
+      supportsReference: boolean | null;
+      requiresReference: boolean | null;
+    };
+    const byType: Record<string, MockModelRow[]> = {
+      image: IMAGE_MODELS,
+      video: VIDEO_MODELS,
+      text: TEXT_MODELS,
+      all: [...IMAGE_MODELS, ...TEXT_MODELS],
+    };
+    return envelope(byType[requested] ?? IMAGE_MODELS);
+  }),
+
+  /**
+   * 可用的视频风格目录名（镜像后端 `data/skills/art_skills` 下的目录）。
+   * 真实后端列的是目录名而不是 `o_artStyle` 表里的自由文本，这里保持一致。
+   */
+  http.post('/api/artStyle/listStyleDirs', async () => {
+    await netDelay(40);
+    return envelope([
+      '2D_90s_japanese_anime',
+      '2D_chinese_guofeng',
+      '2D_flat_design',
+      '2D_mature_urban_romance',
+      '3D_anime_render',
+      '3D_chinese_traditional',
+      '3D_clay_stopmotion',
+      '3D_guofeng_cyber',
+      'realpeople_ancient_chinese',
+      'realpeople_modern_city',
+      'realpeople_urban_modern',
     ]);
   }),
 
@@ -314,6 +415,316 @@ export const handlers = [
     const invalid = validateBody(body, { projectId: 'number' });
     if (invalid) return invalid;
     return envelope(getProjectStatistics(Number(body.projectId)));
+  }),
+
+  /** 全部项目的计数（首页一次拿全，避免对每个项目各发一次） */
+  http.post('/api/general/allProjectStatistics', async () => {
+    await netDelay(60);
+    return envelope(getAllProjectStatistics());
+  }),
+
+  // ===== 设置中心（真实后端整组 /api/setting/* 在 SETTINGS_ACCESS_KEY 口令门后）=====
+  //
+  // mock 默认按「后端未配置 SETTINGS_ACCESS_KEY」处理，即门是开的（任何请求都通过），
+  // 与本地开发默认态一致。要测上锁行为时，用例里用 server.use 覆盖成 403。
+
+  /** 数据库表清单 + 行数（真实后端是 GET） */
+  http.get('/api/setting/dbConfig/dbInfo', async () => {
+    await netDelay(40);
+    return envelope([
+      { name: 'o_project', rowCount: 1 },
+      { name: 'o_script', rowCount: 1 },
+      { name: 'o_user', rowCount: 1 },
+    ]);
+  }),
+
+  /** 整库导出（真实后端直出 JSON 附件、无信封） */
+  http.get('/api/setting/dbConfig/exportData', async () => {
+    await netDelay(40);
+    return HttpResponse.json({ exportTime: 1758000000000, tables: { o_project: [] } });
+  }),
+
+  http.get('/api/setting/dev/getSwitchAiDevTool', async () => {
+    await netDelay(30);
+    return envelope('0');
+  }),
+
+  http.post('/api/setting/dev/updateSwitchAiDevTool', async ({ request }) => {
+    await netDelay(40);
+    const body = (await request.json()) as Record<string, unknown>;
+    const invalid = validateBody(body, { switchAiDevTool: 'string' });
+    if (invalid) return invalid;
+    return envelope('保存设置成功');
+  }),
+
+  /** 只回 id 与账号名：真实后端已不再返回 password（存的是哈希，界面也不需要） */
+  http.get('/api/setting/loginConfig/getUser', async () => {
+    await netDelay(30);
+    return envelope({ id: 1, name: 'admin' });
+  }),
+
+  http.post('/api/setting/loginConfig/updateUserPwd', async ({ request }) => {
+    await netDelay(40);
+    const body = (await request.json()) as Record<string, unknown>;
+    const invalid = validateBody(body, { id: 'number', name: 'string', password: 'string' });
+    if (invalid) return invalid;
+    return envelope('保存设置成功');
+  }),
+
+  http.post('/api/setting/promptManage/getPrompt', async () => {
+    await netDelay(40);
+    return envelope([
+      {
+        id: 1,
+        name: '事件提取',
+        type: 'eventExtraction',
+        data: '# 事件提取指令\n内置原文',
+        useData: null,
+      },
+      {
+        id: 2,
+        name: '剧本资产提取',
+        type: 'scriptAssetExtraction',
+        data: '# 资产提取指令',
+        useData: '# 我的自定义版本',
+      },
+    ]);
+  }),
+
+  http.post('/api/setting/promptManage/updatePrompt', async ({ request }) => {
+    await netDelay(40);
+    const body = (await request.json()) as Record<string, unknown>;
+    const invalid = validateBody(body, { id: 'number' });
+    if (invalid) return invalid;
+    return envelope(123);
+  }),
+
+  /** 供应商列表（含 inputValues 明文 key、inputs 声明、已解析的 models） */
+  http.post('/api/setting/vendorConfig/getVendorList', async () => {
+    await netDelay(60);
+    return envelope([
+      {
+        id: 'dp',
+        name: 'DP 自建服务',
+        description: '自建图像/视频推理服务',
+        author: 'DeepSFV',
+        version: '1.0',
+        enable: 1,
+        inputs: [
+          { key: 'apiKey', label: 'API密钥', type: 'password', required: true, placeholder: 'sk-dp-...' },
+          { key: 'baseUrl', label: '请求地址', type: 'url', required: true },
+        ],
+        inputValues: { apiKey: 'sk-dp-test', baseUrl: 'http://localhost/dp' },
+        models: [
+          { name: 'Z-Image-Turbo', modelName: 'z-image-turbo', type: 'image', mode: ['text'] },
+          { name: 'MiniMax-H3', modelName: 'minimax-h3', type: 'video', mode: ['singleImage'] },
+        ],
+        code: '// 供应商适配器源码，界面刻意不渲染',
+      },
+      {
+        id: 'volcengine',
+        name: '火山引擎',
+        description: '未配置',
+        enable: 0,
+        inputs: [{ key: 'apiKey', label: 'API密钥', type: 'password', required: true }],
+        inputValues: { apiKey: '' },
+        models: [],
+      },
+    ]);
+  }),
+
+  http.post('/api/setting/vendorConfig/enableVendor', async ({ request }) => {
+    await netDelay(40);
+    const body = (await request.json()) as Record<string, unknown>;
+    const invalid = validateBody(body, { id: 'string', enable: 'number' });
+    if (invalid) return invalid;
+    return envelope('更新成功');
+  }),
+
+  http.post('/api/setting/vendorConfig/updateVendorInputs', async ({ request }) => {
+    await netDelay(40);
+    const body = (await request.json()) as Record<string, unknown>;
+    const invalid = validateBody(body, { id: 'string', inputValues: 'object' });
+    if (invalid) return invalid;
+    return envelope('更新成功');
+  }),
+
+  /** 连通测试：文本回模型原文，图像/视频回结果文件 URL */
+  http.post('/api/setting/vendorConfig/modelTest', async ({ request }) => {
+    await netDelay(60);
+    const body = (await request.json()) as Record<string, unknown>;
+    const invalid = validateBody(body, { modelName: 'string', type: 'string', id: 'string' });
+    if (invalid) return invalid;
+    return envelope(
+      String(body.type) === 'text' ? '火星当前气温大约 72 度。' : '/oss/testImage.jpg',
+    );
+  }),
+
+  /** Agent 部署表：后端把 universalAi 同时放进两个列表（怪癖），这里照实复刻 */
+  http.post('/api/setting/agentDeploy/getAgentDeploy', async () => {
+    await netDelay(60);
+    return envelope({
+      qrdinaryData: [
+        { id: 1, key: 'scriptAgent', name: '编剧Agent', model: 'deepseek-chat', modelName: 'deepseek-chat', vendorId: 'deepseek', desc: '', temperature: 0.7, maxOutputTokens: 4096 },
+        { id: 2, key: 'productionAgent', name: '制片Agent', model: 'deepseek-chat', modelName: 'deepseek-chat', vendorId: 'deepseek', desc: '', temperature: null, maxOutputTokens: null },
+        { id: 3, key: 'universalAi', name: '通用AI', model: 'deepseek-chat', modelName: 'deepseek-chat', vendorId: 'deepseek', desc: '', temperature: null, maxOutputTokens: null },
+        { id: 4, key: 'ttsDubbing', name: '配音', model: null, modelName: null, vendorId: null, desc: '', temperature: null, maxOutputTokens: null },
+      ],
+      advancedData: [
+        { id: 5, key: 'scriptAgent:decisionAgent', name: '决策', model: null, modelName: null, vendorId: null, desc: '', temperature: null, maxOutputTokens: null },
+        { id: 6, key: 'productionAgent:storyboardGenAgent', name: '分镜生成', model: null, modelName: null, vendorId: null, desc: '', temperature: null, maxOutputTokens: null },
+        { id: 3, key: 'universalAi', name: '通用AI', model: 'deepseek-chat', modelName: 'deepseek-chat', vendorId: 'deepseek', desc: '', temperature: null, maxOutputTokens: null },
+      ],
+    });
+  }),
+
+  http.get('/api/setting/agentDeploy/getAgentUseMode', async () => {
+    await netDelay(30);
+    return envelope(getMockAgentUseMode());
+  }),
+
+  http.post('/api/setting/agentDeploy/updateUseMode', async ({ request }) => {
+    await netDelay(40);
+    const body = (await request.json()) as Record<string, unknown>;
+    const invalid = validateBody(body, { agentUseMode: 'string' });
+    if (invalid) return invalid;
+    // 真实后端持久化在 o_setting，读回时是新值——mock 必须一样，否则切完模式立刻被 reload 打回
+    setMockAgentUseMode(String(body.agentUseMode));
+    return envelope('保存设置成功');
+  }),
+
+  http.post('/api/setting/agentDeploy/updateAgentModel', async ({ request }) => {
+    await netDelay(40);
+    const body = (await request.json()) as Record<string, unknown>;
+    const invalid = validateBody(body, { id: 'number', model: 'string', modelName: 'string' });
+    if (invalid) return invalid;
+    return envelope('配置成功');
+  }),
+
+  /** 模型映射：后端只筛 type === 'video'（尽管接口名叫 getImageAndVideoModel） */
+  http.post('/api/setting/modelMap/getImageAndVideoModel', async () => {
+    await netDelay(50);
+    const models = [
+      { name: 'MiniMax-H3', type: 'video', model: 'minimax-h3' },
+      { name: 'Seedance 2.0', type: 'video', model: 'doubao-seedance-2-0-260128' },
+    ].map((m) => {
+      const bound = getMockPromptBinding('dp', m.model) ?? getMockPromptBinding('volcengine', m.model);
+      return { ...m, ...(bound ? { fileName: bound.fileName, path: bound.path } : {}) };
+    });
+    return envelope([
+      { id: 'dp', name: 'DP 自建服务', promptList: [models[0]] },
+      { id: 'volcengine', name: '火山引擎(豆包)', promptList: [models[1]] },
+    ]);
+  }),
+
+  http.get('/api/setting/modelMap/getPromptList', async () => {
+    await netDelay(40);
+    return envelope([
+      { path: 'video/seedance2Multi-parameterMode.md', name: 'seedance2Multi-parameterMode', type: 'video', data: '# Seedance 多参模式\n模板内容' },
+      { path: 'video/universalMulti-parameterMode.md', name: 'universalMulti-parameterMode', type: 'video', data: '# 通用多参模式' },
+    ]);
+  }),
+
+  http.post('/api/setting/modelMap/bindingPrompt', async ({ request }) => {
+    await netDelay(40);
+    const body = (await request.json()) as Record<string, unknown>;
+    const invalid = validateBody(body, { vendorId: 'string', model: 'string', path: 'string', fileName: 'string' });
+    if (invalid) return invalid;
+    setMockPromptBinding(String(body.vendorId), String(body.model), {
+      fileName: String(body.fileName),
+      path: String(body.path),
+    });
+    return envelope('绑定成功');
+  }),
+
+  http.post('/api/setting/modelMap/savePrompt', async ({ request }) => {
+    await netDelay(40);
+    const body = (await request.json()) as Record<string, unknown>;
+    const invalid = validateBody(body, { name: 'string', data: 'string', type: 'string' });
+    if (invalid) return invalid;
+    return envelope('保存成功');
+  }),
+
+  http.post('/api/setting/modelMap/updatePrompt', async ({ request }) => {
+    await netDelay(40);
+    const body = (await request.json()) as Record<string, unknown>;
+    const invalid = validateBody(body, { name: 'string', data: 'string', type: 'string' });
+    if (invalid) return invalid;
+    return envelope('更新成功');
+  }),
+
+  http.post('/api/setting/modelMap/deletePrompt', async ({ request }) => {
+    await netDelay(40);
+    const body = (await request.json()) as Record<string, unknown>;
+    const invalid = validateBody(body, { path: 'string' });
+    if (invalid) return invalid;
+    return envelope('删除成功');
+  }),
+
+  /** Skills：data/skills 下的 markdown 相对路径 */
+  http.post('/api/setting/skillManagement/getSkillList', async () => {
+    await netDelay(50);
+    return envelope([
+      'script_agent_decision.md',
+      'art_skills/2D_90s_japanese_anime/driector_skills/storyboard.md',
+      'art_skills/2D_90s_japanese_anime/driector_skills/video.md',
+    ]);
+  }),
+
+  http.post('/api/setting/skillManagement/getSkillContent', async ({ request }) => {
+    await netDelay(40);
+    const body = (await request.json()) as Record<string, unknown>;
+    const invalid = validateBody(body, { path: 'string' });
+    if (invalid) return invalid;
+    return envelope(`# ${body.path}\n\n技能内容`);
+  }),
+
+  http.post('/api/setting/skillManagement/saveSkillContent', async ({ request }) => {
+    await netDelay(40);
+    const body = (await request.json()) as Record<string, unknown>;
+    const invalid = validateBody(body, { path: 'string', content: 'string' });
+    if (invalid) return invalid;
+    return envelope('保存成功');
+  }),
+
+  /** 记忆配置：数字键回数字、modelOnnxFile 回数组、modelDtype 回字符串 */
+  http.get('/api/setting/memoryConfig/getMemory', async () => {
+    await netDelay(40);
+    return envelope(getMockMemoryConfig());
+  }),
+
+  http.post('/api/setting/memoryConfig/sureMemory', async ({ request }) => {
+    await netDelay(40);
+    const body = (await request.json()) as Record<string, unknown>;
+    const invalid = validateBody(body, {
+      messagesPerSummary: 'number',
+      shortTermLimit: 'number',
+      summaryMaxLength: 'number',
+      summaryLimit: 'number',
+      ragLimit: 'number',
+      deepRetrieveSummaryLimit: 'number',
+      // 真实后端是 z.array(z.string())，不是 z.record —— 别写成 'object'
+      modelOnnxFile: 'stringArray',
+      modelDtype: 'string',
+    });
+    if (invalid) return invalid;
+    setMockMemoryConfig({
+      messagesPerSummary: Number(body.messagesPerSummary),
+      shortTermLimit: Number(body.shortTermLimit),
+      summaryMaxLength: Number(body.summaryMaxLength),
+      summaryLimit: Number(body.summaryLimit),
+      ragLimit: Number(body.ragLimit),
+      deepRetrieveSummaryLimit: Number(body.deepRetrieveSummaryLimit),
+      modelOnnxFile: (body.modelOnnxFile as string[]) ?? [],
+      modelDtype: String(body.modelDtype),
+    });
+    return envelope('保存设置成功');
+  }),
+
+  http.post('/api/setting/memoryConfig/delAllMemory', async () => {
+    await netDelay(40);
+    bumpMockMemoryCleared();
+    return envelope(true);
   }),
 
   // ===== 任务中心（后端契约：o_tasks）=====

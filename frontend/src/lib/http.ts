@@ -30,13 +30,18 @@ export class NetworkError extends Error {
 }
 
 const TOKEN_KEY = 'deepsfv-token';
-const PLACEHOLDER_TOKEN = 'dev-placeholder-token';
 
+/**
+ * 当前 token；未登录时是空串。
+ *
+ * 以前这里会回一个 `dev-placeholder-token` 占位串——那会让「未登录」和「登录了」在请求层
+ * 看起来一样，鉴权失败被掩盖成 401。现在如实回空串，由路由守卫拦在页面层。
+ */
 export function getAuthToken(): string {
   try {
-    return localStorage.getItem(TOKEN_KEY) ?? PLACEHOLDER_TOKEN;
+    return localStorage.getItem(TOKEN_KEY) ?? '';
   } catch {
-    return PLACEHOLDER_TOKEN;
+    return '';
   }
 }
 
@@ -44,8 +49,49 @@ export function setAuthToken(token: string): void {
   try {
     localStorage.setItem(TOKEN_KEY, token);
   } catch {
-    // localStorage 不可用时静默降级为占位 token
+    // localStorage 不可用时无法持久化登录态，下次打开需重新登录
   }
+}
+
+export function clearAuthToken(): void {
+  try {
+    localStorage.removeItem(TOKEN_KEY);
+  } catch {
+    // 忽略
+  }
+}
+
+/**
+ * 设置中心口令（后端 `SETTINGS_ACCESS_KEY` 对应的请求头 `x-settings-key`）。
+ *
+ * 用 sessionStorage 而不是 localStorage：它是口令而不是登录态，不该在磁盘上长期留存，
+ * 关掉标签页即失效。后端未配置该环境变量时这道门整体关闭，此时前端不带这个头也能用。
+ */
+const SETTINGS_KEY_STORAGE = 'deepsfv-settings-key';
+
+/** 与后端 `app.ts` 里的 SETTINGS_GATED_PREFIXES 必须一致 */
+const SETTINGS_GATED_PREFIXES = ['/api/setting/', '/api/agents/'];
+
+export function getSettingsKey(): string {
+  try {
+    return sessionStorage.getItem(SETTINGS_KEY_STORAGE) ?? '';
+  } catch {
+    return '';
+  }
+}
+
+export function setSettingsKey(key: string): void {
+  try {
+    if (key) sessionStorage.setItem(SETTINGS_KEY_STORAGE, key);
+    else sessionStorage.removeItem(SETTINGS_KEY_STORAGE);
+  } catch {
+    // sessionStorage 不可用时静默忽略：后端未开门时不影响使用
+  }
+}
+
+/** 后端因缺少/错误口令拒了这次请求（403） */
+export function isSettingsLockedError(err: unknown): boolean {
+  return err instanceof HttpError && err.status === 403;
 }
 
 type UnauthorizedHandler = () => void;
@@ -102,6 +148,11 @@ async function httpErrorMessage(response: Response): Promise<string> {
 async function send(path: string, init: RequestInit): Promise<Response> {
   const headers = new Headers(init.headers);
   headers.set('Authorization', `Bearer ${getAuthToken()}`);
+  // 只在受保护路径上带口令，避免把设置口令发给无关接口
+  if (SETTINGS_GATED_PREFIXES.some((prefix) => path.startsWith(prefix))) {
+    const settingsKey = getSettingsKey();
+    if (settingsKey) headers.set('x-settings-key', settingsKey);
+  }
   if (init.body !== undefined && !headers.has('Content-Type') && !(init.body instanceof FormData)) {
     headers.set('Content-Type', 'application/json');
   }

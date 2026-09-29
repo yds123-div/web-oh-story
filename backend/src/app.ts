@@ -159,6 +159,25 @@ export default async function startServe(randomPort: Boolean = false) {
     }
   });
 
+  // ===== 设置中心口令门 =====
+  //
+  // 背景：/api/* 虽然都过了 JWT，但前端把 admin/admin123 硬编码在 bundle 里并在启动时静默登录
+  // （frontend/src/lib/auth.ts），所以「拿到 token」对任何能打开页面的人都是免费的。
+  // 设置中心会新增「改模型 key / 改登录密码 / 导出整库」这类高影响操作，故再叠一道与 JWT
+  // 无关的独立口令：请求头 `x-settings-key` 必须等于环境变量 SETTINGS_ACCESS_KEY。
+  //
+  // 整个 /api/setting/* 前缀都在门后（不区分读写）——设置接口读出来的也是配置级信息
+  // （供应商 key、o_user 的密码明文、整库导出），按前缀一刀切比维护读写白名单更不容易漏。
+  // 未配置 SETTINGS_ACCESS_KEY 时这道门整体关闭，保持本地开发可用，但会打印告警。
+  const SETTINGS_GATED_PREFIXES = ["/api/setting/", "/api/agents/"];
+  app.use((req, res, next) => {
+    const accessKey = process.env.SETTINGS_ACCESS_KEY;
+    if (!accessKey) return next();
+    if (!SETTINGS_GATED_PREFIXES.some((prefix) => req.path.startsWith(prefix))) return next();
+    if (req.header("x-settings-key") === accessKey) return next();
+    return res.status(403).send({ message: "需要设置中心访问口令（请求头 x-settings-key）" });
+  });
+
   const router = await import("@/router");
   await router.default(app);
 
@@ -181,6 +200,12 @@ export default async function startServe(randomPort: Boolean = false) {
       const address = server.address();
       const realPort = typeof address === "string" ? address : address?.port;
       console.log(`[服务启动成功]: http://localhost:${realPort}`);
+      if (!process.env.SETTINGS_ACCESS_KEY) {
+        console.warn(
+          "[安全告警] 未设置 SETTINGS_ACCESS_KEY，设置中心接口（/api/setting/*、/api/agents/*）无口令保护。" +
+            "由于前端硬编码了默认账号并启动即静默登录，这等于任何人都能读取供应商 key 并导出整库。",
+        );
+      }
       resolve(realPort);
     });
   });

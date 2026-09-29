@@ -1,9 +1,12 @@
 import { lazy, Suspense } from 'react';
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 import { AppLayout } from './layout/AppLayout';
+import { RequireAuth } from './components/RequireAuth';
 import { WorkflowGate } from './components/WorkflowGate';
 import { WorkflowStepProvider } from './hooks/useWorkflowStep';
 import { PlaceholderPage } from './pages/PlaceholderPage';
+
+const LoginPage = lazy(() => import('./pages/LoginPage'));
 
 const HomePage = lazy(() => import('./pages/HomePage'));
 const IdeaPage = lazy(() => import('./pages/IdeaPage'));
@@ -19,13 +22,22 @@ const CanvasPage = lazy(() => import('./pages/CanvasPage'));
 const PlazaPage = lazy(() => import('./pages/PlazaPage'));
 const SpacePage = lazy(() => import('./pages/SpacePage'));
 const NodeCanvasPage = lazy(() => import('./pages/NodeCanvasPage'));
+const SettingsPage = lazy(() => import('./pages/SettingsPage'));
 
 export default function App() {
   return (
     <BrowserRouter basename={import.meta.env.BASE_URL}>
       <Suspense fallback={null}>
         <Routes>
-          <Route element={<AppLayout />}>
+          {/* 登录页不进外壳：未登录时不该看到导航与页面骨架 */}
+          <Route path="/login" element={<LoginPage />} />
+          <Route
+            element={
+              <RequireAuth>
+                <AppLayout />
+              </RequireAuth>
+            }
+          >
             <Route path="/" element={<HomePage />} />
             <Route path="/idea" element={<IdeaPage />} />
             <Route
@@ -44,6 +56,7 @@ export default function App() {
             <Route path="/node" element={<NodeCanvasPage />} />
             <Route path="/plaza" element={<PlazaPage />} />
             <Route path="/space" element={<SpacePage />} />
+            <Route path="/settings" element={<SettingsPage />} />
             <Route
               path="/project/:id/scripts"
               element={

@@ -1,4 +1,19 @@
 /* 变体 B 公共 overrides：滚动条、pill、渐变按钮、图标导航、hover 卡。 */
+:root {
+  /* 导航激活态填充色：比 colorPrimary(#8b5cf6) 略深，
+     让 11px 白色标签达到 WCAG AA 对比度（≈4.9:1，直接用 #8b5cf6 只有 ≈4.0:1）。 */
+  --ds-on-fill: #7c3aed;
+  /* 「tint 背景上的强调文字」与「纯表面上的信息色文字」：
+     这两类在亮色下必须加深，浅色值落在浅底上对比度不够
+     （浅紫 #c5b3ff 落在紫 tint 上只有 ≈2:1）。以前是给每个选择器各加一条
+     html[data-theme='light'] 补丁，现在收敛成两个变量，加新组件不用再记着补。 */
+  --ds-accent-on-tint: #c5b3ff;
+  --ds-info-on-surface: #9db8ff;
+}
+html[data-theme='light'] {
+  --ds-accent-on-tint: #5b21b6;
+  --ds-info-on-surface: #3b5bdb;
+}
 html,
 body,
 #root {
@@ -7,20 +22,38 @@ body,
 body {
   margin: 0;
 }
+/* ===== 外壳：左侧浮动图标栏 + 右侧一整块内容卡 =====
+   版式借鉴 Toonflow。全部色值走 antd token，亮/暗两套主题共用同一份规则
+   （不再依赖 html[data-theme='light'] 逐个打补丁）。 */
 .ds-app {
   height: 100vh;
+  box-sizing: border-box;
+  display: flex;
+  gap: 12px;
+  padding: 12px;
   background: var(--ant-color-bg-layout);
 }
-.ds-app .ant-layout-sider {
-  border-right: 1px solid var(--ant-color-border-secondary);
-}
-.ds-app .ant-layout-header {
-  border-bottom: 1px solid var(--ant-color-border-secondary);
-  line-height: 56px;
-  padding-inline: 20px;
+/* 右侧：一整块卡片，内部再分「顶栏 / 滚动内容区」 */
+.ds-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--ant-color-bg-container);
+  border: 1px solid var(--ant-color-border-secondary);
+  border-radius: 16px;
+  box-shadow: 0 1px 2px rgba(15, 18, 40, 0.04), 0 8px 24px rgba(15, 18, 40, 0.04);
   overflow: hidden;
 }
-.ds-app .ant-layout-header .ant-flex {
+.ds-topbar {
+  flex: 0 0 56px;
+  display: flex;
+  align-items: center;
+  padding-inline: 20px;
+  border-bottom: 1px solid var(--ant-color-border-secondary);
+  overflow: hidden;
+}
+.ds-topbar .ant-flex {
   flex-wrap: nowrap;
   min-width: 0;
 }
@@ -48,17 +81,25 @@ body {
   font-size: 19px;
   color: #fff;
   margin-bottom: 12px;
-  box-shadow: 0 0 18px rgba(139, 92, 246, 0.45);
+  box-shadow: 0 4px 12px rgba(139, 92, 246, 0.32);
 }
+/* 左侧浮动图标栏：独立卡片，与右侧内容卡之间留 12px 间隙 */
 .ds-side {
+  flex: 0 0 78px;
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 6px;
-  height: 100%;
   padding: 14px 0;
+  background: var(--ant-color-bg-container);
+  border: 1px solid var(--ant-color-border-secondary);
+  border-radius: 16px;
+  box-shadow: 0 1px 2px rgba(15, 18, 40, 0.04), 0 8px 24px rgba(15, 18, 40, 0.04);
+  overflow-x: hidden;
+  overflow-y: auto;
 }
 .ds-navItem {
+  flex-shrink: 0;
   width: 60px;
   padding: 9px 0 7px;
   border-radius: 12px;
@@ -82,13 +123,12 @@ body {
   color: var(--ant-color-text-secondary);
   background: var(--ant-color-bg-elevated);
 }
-.ds-navItem.on {
+/* 激活态：实心填充（借鉴 Toonflow 的分段按钮），填充色用 --ds-on-fill 保证白字对比度 */
+.ds-navItem.on,
+.ds-navItem.on:hover {
   color: #fff;
-  background: linear-gradient(160deg, rgba(139, 92, 246, 0.3), rgba(99, 102, 241, 0.16));
-  box-shadow: inset 0 0 0 1px rgba(139, 92, 246, 0.45);
-}
-html[data-theme='light'] .ds-navItem.on {
-  color: #4c1d95;
+  background: var(--ds-on-fill);
+  box-shadow: 0 6px 16px rgba(124, 58, 237, 0.28);
 }
 
 .ds-mark {
@@ -126,25 +166,6 @@ html[data-theme='light'] .ds-navItem.on {
   font-size: 12px;
   color: var(--ant-color-text-secondary);
 }
-.ant-btn.ds-vip {
-  color: #e8c37a;
-  border-color: rgba(232, 195, 122, 0.4);
-  background: linear-gradient(90deg, rgba(232, 195, 122, 0.1), transparent);
-}
-.ds-credit {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  padding: 6px 12px;
-  border-radius: 999px;
-  background: rgba(139, 92, 246, 0.14);
-  color: #9f7dff;
-  font-weight: 700;
-  font-size: 13px;
-}
-html[data-theme='light'] .ds-credit {
-  color: #6d28d9;
-}
 .ds-avatar {
   width: 31px;
   height: 31px;
@@ -178,17 +199,10 @@ html[data-theme='light'] .ds-credit {
   .ds-brand .bt span {
     display: none;
   }
-  .ant-layout-header .ant-btn.ds-pill:not(.ds-vip) {
-    display: none;
-  }
-  .ant-btn.ds-vip {
-    padding-inline: 10px;
-    font-size: 11px;
-  }
 }
 
 @media (max-width: 1100px) {
-  .ds-app .ant-layout-header {
+  .ds-topbar {
     padding-inline: 12px;
   }
 }
@@ -247,6 +261,8 @@ html[data-theme='light'] .ds-credit {
 .ds-card:focus-within .ds-ops {
   opacity: 1;
 }
+/* 这两处压在 .ds-cv 的深色封面上，深底 + 亮字是有意的，不随主题变——
+   所以下面的写死色值不是"漏改"，别跟着一起 token 化（换 token 反而会看不清）。 */
 .ds-ops button {
   font-size: 10px;
   background: rgba(10, 10, 16, 0.72);
@@ -295,21 +311,30 @@ html[data-theme='light'] .ds-credit {
   align-items: center;
   justify-content: center;
   border: 1.5px dashed var(--ant-color-border);
-  border-radius: 16px;
-  min-height: 240px;
+  border-radius: 14px;
+  min-height: 160px;
   color: var(--ant-color-text-secondary);
   background: none;
   cursor: pointer;
   font-size: inherit;
+  transition: 0.15s;
 }
 .ds-newCard:hover {
-  color: #c9b8ff;
-  border-color: #8b5cf6;
+  color: var(--ant-color-primary);
+  border-color: var(--ant-color-primary);
+  background: var(--ant-color-primary-bg);
 }
 
 .ds-modal .ant-modal-content {
   border-radius: 18px;
   border: 1px solid var(--ant-color-border);
+}
+
+/* 弹窗遮罩：走 antd 的 colorBgMask token，两种主题各自合适
+   （原来在组件里写死 rgba(5,5,10,.62)，亮色下过重、暗色下又没层次） */
+.ds-mask {
+  background: var(--ant-color-bg-mask, rgba(0, 0, 0, 0.45));
+  backdrop-filter: blur(4px);
 }
 
 .ds-upload {
@@ -329,12 +354,10 @@ html[data-theme='light'] .ds-credit {
   color: var(--ant-color-text-secondary);
 }
 .ds-modeChip.on {
-  color: #fff;
+  /* 底色是紫色 tint，白字在亮色下读不出来，统一走「tint 背景上的强调文字」变量 */
+  color: var(--ds-accent-on-tint);
   border-color: rgba(139, 92, 246, 0.45);
   background: linear-gradient(160deg, rgba(139, 92, 246, 0.3), rgba(99, 102, 241, 0.16));
-}
-html[data-theme='light'] .ds-modeChip.on {
-  color: #4c1d95;
 }
 
 .ds-flowPage {
@@ -1003,11 +1026,8 @@ html[data-theme='light'] .ds-modeChip.on {
 .ds-segTab.on {
   background: rgba(139, 92, 246, 0.16);
   border-color: rgba(139, 92, 246, 0.5);
-  color: #c5b3ff;
+  color: var(--ds-accent-on-tint);
   font-weight: 700;
-}
-html[data-theme='light'] .ds-segTab.on {
-  color: #5b21b6;
 }
 .ds-editTip {
   font-size: 11.5px;
@@ -1189,7 +1209,7 @@ html[data-theme='light'] .ds-segTab.on {
 }
 .shotKind {
   font-size: 10px;
-  color: #9db8ff;
+  color: var(--ds-info-on-surface);
   background: rgba(99, 140, 241, 0.12);
   padding: 2px 7px;
   border-radius: 6px;
@@ -1277,6 +1297,8 @@ html[data-theme='light'] .ds-segTab.on {
   flex: 1;
   min-height: 200px;
   border-radius: 14px;
+  /* 媒体预览台刻意保持近黑：和视频播放器一样，深色台面能让画面本身的颜色判断更准。
+     里面的 #5b5b78 / #4c4a6a 空态文字同理，不随主题变。 */
   background: #07070d;
   border: 1px solid var(--ant-color-border-secondary);
   position: relative;
@@ -1462,7 +1484,7 @@ html[data-theme='light'] .ds-segTab.on {
   flex-shrink: 0;
 }
 .tlNew:hover {
-  color: #c5b3ff;
+  color: var(--ds-accent-on-tint);
   border-color: #8b5cf6;
 }
 .tlMulti {
@@ -1477,12 +1499,12 @@ html[data-theme='light'] .ds-segTab.on {
 }
 .tlMulti:hover {
   border-color: #8b5cf6;
-  color: #c5b3ff;
+  color: var(--ds-accent-on-tint);
 }
 .ds-tlBar.multi .tlMulti {
   background: rgba(139, 92, 246, 0.16);
   border-color: rgba(139, 92, 246, 0.45);
-  color: #c5b3ff;
+  color: var(--ds-accent-on-tint);
 }
 .tlClip .chk2 {
   position: absolute;
@@ -1561,11 +1583,8 @@ html[data-theme='light'] .ds-segTab.on {
 }
 .ds-chip.on {
   background: rgba(139, 92, 246, 0.16);
-  color: #c5b3ff;
+  color: var(--ds-accent-on-tint);
   border-color: rgba(139, 92, 246, 0.45);
-}
-html[data-theme='light'] .ds-chip.on {
-  color: #5b21b6;
 }
 .ds-canvasGrid {
   display: grid;
@@ -1947,7 +1966,7 @@ html[data-theme='light'] .ds-chip.on {
 .ds-audPanel .h .go {
   margin-left: auto;
   font-size: 10px;
-  color: #c5b3ff;
+  color: var(--ds-accent-on-tint);
   border: 1px solid rgba(139, 92, 246, 0.4);
   border-radius: 999px;
   padding: 3px 10px;
@@ -1996,7 +2015,7 @@ html[data-theme='light'] .ds-chip.on {
   height: 22px;
   border-radius: 50%;
   background: var(--ant-color-bg-elevated);
-  color: #c5b3ff;
+  color: var(--ds-accent-on-tint);
   font-size: 9px;
   display: flex;
   align-items: center;
@@ -2378,4 +2397,275 @@ html[data-theme='light'] .ds-chip.on {
 .ds-wbVideo.on {
   border-color: var(--ant-color-primary);
   background: var(--ant-color-primary-bg);
+}
+
+/* ===== 首页（借鉴 Toonflow：一个大标题 + 留白 + 无封面卡片）===== */
+.ds-pageHead {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+.ds-pageTitle {
+  font-size: 42px;
+  font-weight: 800;
+  letter-spacing: -0.5px;
+  line-height: 1.15;
+  margin: 0;
+}
+.ds-pageSub {
+  display: block;
+  margin-top: 8px;
+  font-size: 14px;
+  color: var(--ant-color-text-tertiary);
+}
+.ds-pgrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+  gap: 16px;
+}
+.ds-pcard {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 20px;
+  background: var(--ant-color-bg-container);
+  border: 1px solid var(--ant-color-border-secondary);
+  border-radius: 14px;
+  cursor: pointer;
+  transition: 0.15s;
+}
+.ds-pcard:hover {
+  border-color: var(--ant-color-primary-border, #8b5cf6);
+  transform: translateY(-2px);
+  box-shadow: 0 10px 28px rgba(15, 18, 40, 0.08);
+}
+.ds-pcardTop {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+.ds-pcardTop b {
+  min-width: 0;
+  font-size: 19px;
+  font-weight: 700;
+  line-height: 1.3;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* 胶囊标签：类型用文字、模型/比例/质量用等宽字面量（都是后端契约值） */
+.ds-tag {
+  flex-shrink: 0;
+  padding: 2px 10px;
+  border-radius: 999px;
+  background: var(--ant-color-bg-elevated);
+  border: 1px solid var(--ant-color-border-secondary);
+  color: var(--ant-color-text-secondary);
+  font-size: 11.5px;
+  white-space: nowrap;
+}
+.ds-pcardTags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.ds-tagMono {
+  padding: 2px 9px;
+  border-radius: 999px;
+  background: var(--ant-color-bg-elevated);
+  border: 1px solid var(--ant-color-border-secondary);
+  color: var(--ant-color-text-tertiary);
+  font-size: 11px;
+  font-family: Consolas, Monaco, monospace;
+}
+.ds-pcardIntro {
+  margin: 0;
+  min-height: 43px;
+  font-size: 13px;
+  line-height: 1.65;
+  color: var(--ant-color-text-secondary);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.ds-pcardStats {
+  font-size: 11.5px;
+  color: var(--ant-color-text-tertiary);
+}
+.ds-pcardFoot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: auto;
+  padding-top: 12px;
+  border-top: 1px solid var(--ant-color-border-secondary);
+}
+.ds-pcardFoot > span {
+  font-size: 11.5px;
+  color: var(--ant-color-text-tertiary);
+}
+/* 操作图标常显（原来只在 hover 时出现，发现性差） */
+.ds-pcardOps {
+  display: flex;
+  gap: 4px;
+}
+.ds-pcardOps button {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 9px;
+  border-radius: 8px;
+  border: 1px solid transparent;
+  background: none;
+  color: var(--ant-color-text-tertiary);
+  font-size: 11.5px;
+  cursor: pointer;
+  transition: 0.15s;
+}
+.ds-pcardOps button:hover {
+  color: var(--ant-color-primary);
+  background: var(--ant-color-primary-bg);
+}
+.ds-pcardOps button.danger:hover {
+  color: var(--ant-color-error);
+  background: var(--ant-color-error-bg);
+}
+
+/* ===== 项目表单（新建 / 编辑同一套字段，分两组）===== */
+.ds-formGroup + .ds-formGroup {
+  margin-top: 18px;
+}
+.ds-formGroupTitle {
+  margin-bottom: 10px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.6px;
+  color: var(--ant-color-text-tertiary);
+}
+.ds-fieldLabel {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 11.5px;
+  color: var(--ant-color-text-tertiary);
+}
+.ds-dangerZone {
+  margin-top: 18px;
+  padding: 14px;
+  border: 1px solid var(--ant-color-error-border);
+  border-radius: 12px;
+  background: var(--ant-color-error-bg);
+}
+
+/* ===== 设置中心（左二级菜单 + 右面板）===== */
+.ds-setWrap {
+  display: grid;
+  grid-template-columns: 210px minmax(0, 1fr);
+  gap: 22px;
+  margin-top: 26px;
+  align-items: start;
+}
+.ds-setNav {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 14px 10px;
+  background: var(--ant-color-bg-container);
+  border: 1px solid var(--ant-color-border-secondary);
+  border-radius: 14px;
+}
+.ds-setGroupTitle {
+  padding: 0 8px 6px;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.6px;
+  color: var(--ant-color-text-quaternary);
+}
+.ds-setItem {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  width: 100%;
+  padding: 7px 10px;
+  border: none;
+  border-radius: 9px;
+  background: none;
+  color: var(--ant-color-text-secondary);
+  font-size: 12.5px;
+  text-align: left;
+  cursor: pointer;
+  transition: 0.15s;
+}
+.ds-setItem:hover {
+  background: var(--ant-color-bg-elevated);
+  color: var(--ant-color-text);
+}
+.ds-setItem.on {
+  background: var(--ds-on-fill);
+  color: #fff;
+  font-weight: 600;
+}
+.ds-setBody {
+  min-width: 0;
+  padding: 20px 22px;
+  background: var(--ant-color-bg-container);
+  border: 1px solid var(--ant-color-border-secondary);
+  border-radius: 14px;
+}
+
+/* 设置面板里的列表行（提示词列表用） */
+.ds-listRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+  padding: 10px 14px;
+  background: var(--ant-color-bg-container);
+  border: 1px solid var(--ant-color-border-secondary);
+  border-radius: 11px;
+  color: var(--ant-color-text);
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+  transition: 0.15s;
+}
+.ds-listRow:hover {
+  border-color: var(--ant-color-primary-border, #8b5cf6);
+  background: var(--ant-color-bg-elevated);
+}
+
+@media (max-width: 980px) {
+  .ds-setWrap {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* ===== 登录页（独立于外壳，不进导航）===== */
+.ds-loginWrap {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: var(--ant-color-bg-layout);
+}
+.ds-loginCard {
+  width: 100%;
+  max-width: 380px;
+  padding: 34px 32px 26px;
+  background: var(--ant-color-bg-container);
+  border: 1px solid var(--ant-color-border-secondary);
+  border-radius: 16px;
+  box-shadow: 0 1px 2px rgba(15, 18, 40, 0.04), 0 16px 40px rgba(15, 18, 40, 0.08);
+}
+.ds-loginTitle {
+  margin: 0;
+  font-size: 24px;
+  font-weight: 800;
+  letter-spacing: -0.3px;
 }

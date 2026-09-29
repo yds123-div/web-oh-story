@@ -1,4 +1,10 @@
-import { apiFetch, getAuthToken, setNetworkErrorHandler, setUnauthorizedHandler } from '../lib/http';
+import {
+  apiFetch,
+  getAuthToken,
+  setNetworkErrorHandler,
+  setSettingsKey,
+  setUnauthorizedHandler,
+} from '../lib/http';
 
 function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -8,14 +14,40 @@ function jsonResponse(body: unknown, status = 200): Response {
 }
 
 describe('apiFetch', () => {
-  it('sends Authorization Bearer on every request', async () => {
-    const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ ok: true }));
+  it('未登录时不发占位 token，已登录时带真实 token', async () => {
+    localStorage.clear();
+    // 每次调用都要新的 Response：Response 的 body 只能读一次，复用同一个实例会报
+    // "Body is unusable: Body has already been read"
+    const fetchMock = vi.fn().mockImplementation(() => Promise.resolve(jsonResponse({ ok: true })));
     vi.stubGlobal('fetch', fetchMock);
 
     await apiFetch('/api/projects');
 
-    const headers = new Headers(fetchMock.mock.calls[0][1].headers);
-    expect(headers.get('Authorization')).toBe(`Bearer ${getAuthToken()}`);
+    // Headers 会裁掉尾随空格，所以空 token 读出来是 'Bearer'
+    // —— 以前这里会发 'Bearer dev-placeholder-token'，把"未登录"伪装成"已登录"
+    expect(new Headers(fetchMock.mock.calls[0][1].headers).get('Authorization')).toBe('Bearer');
+    expect(getAuthToken()).toBe('');
+
+    localStorage.setItem('deepsfv-token', 'real-token');
+    await apiFetch('/api/projects');
+    expect(new Headers(fetchMock.mock.calls[1][1].headers).get('Authorization')).toBe(
+      'Bearer real-token',
+    );
+  });
+
+  it('只在受保护的设置路径上带 x-settings-key', async () => {
+    setSettingsKey('s3cret');
+    const fetchMock = vi.fn().mockImplementation(() => Promise.resolve(jsonResponse({ ok: true })));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await apiFetch('/api/setting/dbConfig/dbInfo');
+    expect(
+      new Headers(fetchMock.mock.calls[0][1].headers).get('x-settings-key'),
+    ).toBe('s3cret');
+
+    // 无关接口不该带上这个口令，避免把它散到别处的日志里
+    await apiFetch('/api/project/getProject');
+    expect(new Headers(fetchMock.mock.calls[1][1].headers).get('x-settings-key')).toBeNull();
   });
 
   it('invokes the shared 401 handler and throws', async () => {

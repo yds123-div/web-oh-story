@@ -6,11 +6,11 @@ import { App as AntApp, ConfigProvider } from 'antd';
 import zhCN from 'antd/locale/zh_CN';
 import App from './App';
 import { NETWORK_UNREACHABLE_MESSAGE, setNetworkErrorHandler, setUnauthorizedHandler } from './lib/http';
-import { silentLogin } from './lib/auth';
 import { hogeeDarkTheme, hogeeLightTheme } from './theme';
+import { useAuthStore } from './stores/authStore';
 import { useThemeAttribute, useThemeStore } from './stores/themeStore';
 
-function Root({ loginError }: { loginError: string | null }) {
+function Root() {
   const mode = useThemeStore((s) => s.mode);
   useThemeAttribute();
   const theme = useMemo(() => (mode === 'light' ? hogeeLightTheme : hogeeDarkTheme), [mode]);
@@ -18,18 +18,26 @@ function Root({ loginError }: { loginError: string | null }) {
   return (
     <ConfigProvider locale={zhCN} theme={theme}>
       <AntApp>
-        <GlobalFeedbackBridge loginError={loginError} />
+        <GlobalFeedbackBridge />
         <App />
       </AntApp>
     </ConfigProvider>
   );
 }
 
-function GlobalFeedbackBridge({ loginError }: { loginError: string | null }) {
+function GlobalFeedbackBridge() {
   const { message } = AntApp.useApp();
+  const signOut = useAuthStore((s) => s.signOut);
+  const hydrateUsername = useAuthStore((s) => s.hydrateUsername);
+  // 刷新页面后 token 还在但用户名丢了，从 JWT 载荷里补回来（否则顶栏只能显示"?"）
+  useEffect(() => {
+    hydrateUsername();
+  }, [hydrateUsername]);
   useEffect(() => {
     setUnauthorizedHandler(() => {
-      message.error('登录已失效（401），请重新获取访问令牌');
+      // token 过期/失效：清会话 → RequireAuth 重新求值 → 自动回登录页
+      signOut();
+      message.error('登录已失效，请重新登录');
     });
     setNetworkErrorHandler(() => {
       message.error(NETWORK_UNREACHABLE_MESSAGE);
@@ -38,10 +46,7 @@ function GlobalFeedbackBridge({ loginError }: { loginError: string | null }) {
       setUnauthorizedHandler(null);
       setNetworkErrorHandler(null);
     };
-  }, [message]);
-  useEffect(() => {
-    if (loginError) message.error(`自动登录失败：${loginError}`);
-  }, [loginError, message]);
+  }, [message, signOut]);
   return null;
 }
 
@@ -55,27 +60,20 @@ async function enableMocking() {
   });
 }
 
-const LOGIN_TIMEOUT_MS = 10_000;
-
-/** 启动即静默登录（默认账号），失败不阻塞渲染、给出可见错误 */
-async function bootstrap(): Promise<string | null> {
+/**
+ * 启动只做 mock 初始化，不再自动登录。
+ *
+ * 以前这里会静默用硬编码的 admin/admin123 换 token——那让"未登录"永远不存在，
+ * 也把凭据随前端一起公开发布。现在未登录就由 RequireAuth 送去 /login，由用户显式提交。
+ */
+async function bootstrap(): Promise<void> {
   await enableMocking();
-  try {
-    // 加超时兜底：后端挂起时不让应用白屏，带着占位 token 继续渲染
-    await Promise.race([
-      silentLogin(),
-      new Promise<never>((_, reject) => setTimeout(() => reject(new Error('后端登录接口无响应')), LOGIN_TIMEOUT_MS)),
-    ]);
-  } catch (err) {
-    return err instanceof Error && err.message ? err.message : '未知错误';
-  }
-  return null;
 }
 
-void bootstrap().then((loginError) => {
+void bootstrap().then(() => {
   createRoot(document.getElementById('root')!).render(
     <StrictMode>
-      <Root loginError={loginError} />
+      <Root />
     </StrictMode>,
   );
 });

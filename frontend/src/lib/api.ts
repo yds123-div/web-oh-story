@@ -203,31 +203,34 @@ export async function createProject(body: CreateProjectBody): Promise<Project> {
   return newest;
 }
 
+/** 可编辑的项目字段——与新建表单一一对应，建完之后同样能改 */
+export type ProjectPatchBody = Partial<
+  Pick<
+    Project,
+    | 'name'
+    | 'intro'
+    | 'type'
+    | 'artStyle'
+    | 'videoRatio'
+    | 'imageQuality'
+    | 'imageModel'
+    | 'videoModel'
+    | 'storyboardImageModel'
+    | 'deriveAssetsModel'
+  >
+>;
+
 /**
  * 改项目（后端 editProject 要求全量字段，故先取当前项目再合并改动）。
  *
- * 只传需要改的字段：名称、以及三个模型字段（图像 / 分镜图 / 衍生资产）。
- * 分镜图与衍生资产留空串即"跟随图像模型"。
+ * 字段范围与新建表单完全一致：风格 / 比例 / 质量 / 视频模型建完也能调整，
+ * 不再只限于名称与模型。分镜图与衍生资产留空串即"跟随图像模型"。
  */
-export async function patchProject(
-  id: string,
-  body: {
-    name?: string;
-    imageModel?: string;
-    storyboardImageModel?: string;
-    deriveAssetsModel?: string;
-    imageQuality?: string;
-  },
-): Promise<Project> {
+export async function patchProject(id: string, body: ProjectPatchBody): Promise<Project> {
   const current = await fetchProject(id);
-  const merged: Project = {
-    ...current,
-    ...(body.name !== undefined ? { name: body.name } : {}),
-    ...(body.imageModel !== undefined ? { imageModel: body.imageModel } : {}),
-    ...(body.storyboardImageModel !== undefined ? { storyboardImageModel: body.storyboardImageModel } : {}),
-    ...(body.deriveAssetsModel !== undefined ? { deriveAssetsModel: body.deriveAssetsModel } : {}),
-    ...(body.imageQuality !== undefined ? { imageQuality: body.imageQuality } : {}),
-  };
+  // 过滤掉显式传入的 undefined，避免把当前值冲成空
+  const patch = Object.fromEntries(Object.entries(body).filter(([, v]) => v !== undefined));
+  const merged: Project = { ...current, ...patch };
   await postJson('/api/project/editProject', {
     id: Number(id),
     ...projectWriteBody(merged),
@@ -236,14 +239,19 @@ export async function patchProject(
 }
 
 /**
- * 当前启用的图像模型（`/api/modelSelect/getModelList`，含后端按厂商 `mode` 透出的能力）。
+ * 当前启用的模型（`/api/modelSelect/getModelList`，含后端按厂商 `mode` 透出的能力）。
  *
  * 界面据此给选项标注「文生图 / 图生图 / 两者皆可」，并对 `requiresReference` 的模型
  * 做前置提醒（这类模型遇到没有参考图的分镜/资产会直接失败）。
  * `value` 是 `<供应商id>:<模型名>`，可直接写进项目的模型字段。
+ *
+ * 视频模型的 `textToImage` 等三项后端一律回 `null`（`mode` 描述的是帧而非图像能力），
+ * 所以视频侧不要拿这三项做判断。
  */
-export async function fetchImageModels(): Promise<ImageModelOption[]> {
-  const rows = await postJson<ModelRow[]>('/api/modelSelect/getModelList', { type: 'image' });
+type ModelKind = 'text' | 'image' | 'video';
+
+async function fetchModelRows(kind: ModelKind): Promise<ImageModelOption[]> {
+  const rows = await postJson<ModelRow[]>('/api/modelSelect/getModelList', { type: kind });
   return (rows ?? []).map((row) => ({
     value: `${row.id}:${row.value}`,
     label: row.label,
@@ -253,6 +261,57 @@ export async function fetchImageModels(): Promise<ImageModelOption[]> {
     supportsReference: row.supportsReference ?? null,
     requiresReference: row.requiresReference ?? null,
   }));
+}
+
+/** 当前启用的图像模型 */
+export function fetchImageModels(): Promise<ImageModelOption[]> {
+  return fetchModelRows('image');
+}
+
+/** 当前启用的视频模型 */
+export function fetchVideoModels(): Promise<ImageModelOption[]> {
+  return fetchModelRows('video');
+}
+
+/** 当前启用的文本模型（Agent 绑定用） */
+export function fetchTextModels(): Promise<ImageModelOption[]> {
+  return fetchModelRows('text');
+}
+
+/**
+ * 可用的视频风格（`artStyle` 的合法取值 = `data/skills/art_skills` 下的目录名）。
+ *
+ * 走 `listStyleDirs` 而不是 `getArtStyle`：后者读的 `o_artStyle` 存的是用户自建画风的
+ * 自由文本名，不是目录名，塞进 `artStyle` 会让后端查不到视觉手册。
+ * 拉不到时返回空数组，调用方回退到内置清单。
+ */
+export async function fetchArtStyleDirs(): Promise<string[]> {
+  const names = await postJson<string[]>('/api/artStyle/listStyleDirs', {});
+  return names ?? [];
+}
+
+/**
+ * 全部项目的计数（一次拿全）。
+ *
+ * 首页原本对每个项目各发一次 `generalStatistics`，项目一多就是 N+1 次请求；
+ * 这个接口把同样的四个计数分组聚合后一次返回。
+ */
+export async function fetchAllProjectStatistics(): Promise<Record<string, ProjectStatistics>> {
+  const rows = await postJson<Array<ProjectStatistics & { projectId: number }>>(
+    '/api/general/allProjectStatistics',
+    {},
+  );
+  return Object.fromEntries(
+    (rows ?? []).map((r) => [
+      String(r.projectId),
+      {
+        roleCount: r.roleCount ?? 0,
+        scriptCount: r.scriptCount ?? 0,
+        videoCount: r.videoCount ?? 0,
+        storyboardCount: r.storyboardCount ?? 0,
+      },
+    ]),
+  );
 }
 
 /** 单项目（getSingleProject 翻译），用于打开已有项目时还原配置 */
@@ -1939,4 +1998,342 @@ async function pollUntilAllPresent<T extends { id: string }>(
     if (Date.now() - startedAt > options.timeoutMs) throw options.timeoutError();
     await waitForTick(options.intervalMs, signal);
   }
+}
+
+// ===== 设置中心（后端 /api/setting/*，整体在 SETTINGS_ACCESS_KEY 口令门后）=====
+//
+// 三处与常规接口不同的契约：
+// 1. 这一组里有 GET 接口（dbInfo / exportData / getUser / getSwitchAiDevTool），不能用 postJson；
+// 2. `exportData` 直接回 JSON 附件、没有 {code,data,message} 信封，所以走 apiFetchBlob；
+// 3. 缺少口令时后端回 403（不是 401），用 isSettingsLockedError 判定。
+
+/** 数据库表清单 + 行数（`dbConfig/dbInfo`，GET） */
+export type DbTableInfo = { name: string; rowCount: number };
+
+export async function fetchDbInfo(): Promise<DbTableInfo[]> {
+  const rows = await apiFetch<DbTableInfo[]>('/api/setting/dbConfig/dbInfo', { method: 'GET' });
+  return rows ?? [];
+}
+
+/**
+ * 整库导出（`dbConfig/exportData`，GET，直出 JSON 附件）。
+ *
+ * 这是整组设置接口里最敏感的一个：它会把 `o_user` 的密码明文与 `o_vendorConfig` 的
+ * inputValues（供应商 key）一起吐出来，所以它同样在口令门后，而不是当作"只读安全"放行。
+ */
+export async function fetchDbExport(): Promise<Blob | null> {
+  return apiFetchBlob('/api/setting/dbConfig/exportData', { method: 'GET' });
+}
+
+/** AI 调试工具开关（`dev/getSwitchAiDevTool`，GET，返回字符串 "0"/"1"） */
+export async function fetchAiDevToolSwitch(): Promise<boolean> {
+  const value = await apiFetch<string | number>('/api/setting/dev/getSwitchAiDevTool', { method: 'GET' });
+  return String(value) === '1';
+}
+
+export async function updateAiDevToolSwitch(enabled: boolean): Promise<void> {
+  await postJson('/api/setting/dev/updateSwitchAiDevTool', { switchAiDevTool: enabled ? '1' : '0' });
+}
+
+/** 登录账号（`loginConfig/getUser`，GET）。注意后端密码是明文存储，界面不回显它 */
+export type LoginUser = { id: number; name: string };
+
+export async function fetchLoginUser(): Promise<LoginUser | null> {
+  const row = await apiFetch<{ id: number; name: string } | null>(
+    '/api/setting/loginConfig/getUser',
+    { method: 'GET' },
+  );
+  return row ? { id: row.id, name: row.name } : null;
+}
+
+/** 改账号名与密码（`loginConfig/updateUserPwd`，三个字段都是必填） */
+export async function updateLoginUser(body: {
+  id: number;
+  name: string;
+  password: string;
+}): Promise<void> {
+  await postJson('/api/setting/loginConfig/updateUserPwd', { ...body });
+}
+
+/** 提示词行（`o_prompt`）：`data` 是内置原文，`useData` 是自定义覆盖 */
+export type PromptRow = {
+  id: number;
+  name: string | null;
+  type: string | null;
+  data: string;
+  useData: string | null;
+};
+
+export async function fetchPrompts(): Promise<PromptRow[]> {
+  const rows = await postJson<PromptRow[]>('/api/setting/promptManage/getPrompt', {});
+  return rows ?? [];
+}
+
+/** 保存自定义提示词到 `useData`（传空串即清掉覆盖、回退到内置原文） */
+export async function updatePromptData(id: number, data: string): Promise<void> {
+  await postJson('/api/setting/promptManage/updatePrompt', { id, data });
+}
+
+// ===== 设置中心 · 模型服务（vendorConfig）=====
+
+/** 供应商声明的输入项（`vendor.ts` 里 `inputs` 的形状） */
+export type VendorInputSpec = {
+  key: string;
+  label: string;
+  type: 'text' | 'password' | 'url';
+  required: boolean;
+  placeholder?: string;
+};
+
+export type VendorModelRow = {
+  name: string;
+  modelName: string;
+  type: string;
+  mode?: unknown[];
+  think?: boolean;
+};
+
+export type VendorRow = {
+  id: string;
+  name: string;
+  description: string;
+  author?: string;
+  version?: string;
+  enable: number;
+  inputs: VendorInputSpec[];
+  inputValues: Record<string, string>;
+  models: VendorModelRow[];
+  /** 供应商适配器的 TypeScript 源码。**界面不渲染它**——代码编辑未开放（见 Q27） */
+  code?: string;
+};
+
+export async function fetchVendors(): Promise<VendorRow[]> {
+  const rows = await postJson<VendorRow[]>('/api/setting/vendorConfig/getVendorList', {});
+  return rows ?? [];
+}
+
+/** 启用 / 停用供应商（停用后它的模型不再出现在项目的模型下拉里） */
+export async function setVendorEnabled(id: string, enabled: boolean): Promise<void> {
+  await postJson('/api/setting/vendorConfig/enableVendor', { id, enable: enabled ? 1 : 0 });
+}
+
+/** 写供应商输入项（API key / baseUrl 等）。**整份覆盖**，所以未改的字段也必须一起带上 */
+export async function saveVendorInputs(
+  id: string,
+  inputValues: Record<string, string>,
+): Promise<void> {
+  await postJson('/api/setting/vendorConfig/updateVendorInputs', { id, inputValues });
+}
+
+/**
+ * 连通测试。**这不是轻量探活**：后端会真的发一次生成请求——
+ * 文本走一次带工具调用的流式对话，图像真的生成一张 2×2 宫格图，视频真的出片，
+ * 都会消耗额度；图像/视频还会把结果写进 OSS 目录（testImage.jpg / test.mp4）。
+ * 返回值：文本模型是模型原文，图像/视频是结果文件的 URL。
+ */
+export async function testVendorModel(body: {
+  id: string;
+  modelName: string;
+  type: 'text' | 'image' | 'video';
+}): Promise<string> {
+  return postJson<string>('/api/setting/vendorConfig/modelTest', { ...body });
+}
+
+// ===== 设置中心 · Agent配置（agentDeploy）=====
+
+export type AgentDeployRow = {
+  id: number;
+  key: string;
+  name: string | null;
+  model: string | null;
+  modelName: string | null;
+  vendorId: string | null;
+  desc: string | null;
+  temperature: number | null;
+  maxOutputTokens: number | null;
+};
+
+export type AgentDeployData = {
+  /** 简易配置用的顶层 key（scriptAgent / productionAgent / universalAi / ttsDubbing） */
+  qrdinaryData: AgentDeployRow[];
+  /** 高级配置用的子 agent key（含 ":"）+ universalAi */
+  advancedData: AgentDeployRow[];
+};
+
+export async function fetchAgentDeploy(): Promise<AgentDeployData> {
+  const data = await postJson<AgentDeployData>('/api/setting/agentDeploy/getAgentDeploy', {});
+  return { qrdinaryData: data?.qrdinaryData ?? [], advancedData: data?.advancedData ?? [] };
+}
+
+/**
+ * Agent 模型解析模式（`o_setting.agentUseMode`，被 `utils/ai.ts` 真实读取）：
+ * - `'1'` 高级配置：每个子 agent（如 `scriptAgent:decisionAgent`）用**自己**那行，
+ *   该行没有 modelName 时后端直接抛错；
+ * - `'0'` 简易配置：所有子 agent 都回退到父级（`scriptAgent` / `productionAgent`）。
+ */
+export async function fetchAgentUseMode(): Promise<'0' | '1'> {
+  const value = await apiFetch<string>('/api/setting/agentDeploy/getAgentUseMode', { method: 'GET' });
+  return String(value) === '1' ? '1' : '0';
+}
+
+export async function updateAgentUseMode(mode: '0' | '1'): Promise<void> {
+  await postJson('/api/setting/agentDeploy/updateUseMode', { agentUseMode: mode });
+}
+
+/** 改一行 agent 的模型绑定（三个字段要一起给：vendorId + modelName 决定实际调用，model 是展示名） */
+export async function updateAgentModel(item: {
+  id: number;
+  name: string;
+  model: string;
+  modelName: string;
+  vendorId: string | null;
+  desc: string;
+  temperature?: number;
+  maxOutputTokens?: number;
+}): Promise<void> {
+  await postJson('/api/setting/agentDeploy/updateAgentModel', { ...item });
+}
+
+// ===== 设置中心 · 模型映射（modelMap）=====
+//
+// 这一组管两件事：把 `data/modelPrompt/**/*.md` 里的提示词模板，绑到具体（视频）模型上。
+
+/** 可绑定的提示词模板文件（`data/modelPrompt/<type>/<name>.md`） */
+export type ModelPromptFile = {
+  /** 相对路径，如 `video/seedance2Multi-parameterMode.md` */
+  path: string;
+  /** 文件名（去掉 .md），绑定时当作 fileName */
+  name: string;
+  /** 目录名：image / video */
+  type: string;
+  data: string;
+};
+
+/** 模型 ← 提示词模板 的绑定关系（来自 o_modelPrompt） */
+export type BoundPrompt = { fileName: string; path: string };
+
+export type ModelMapVendor = {
+  id: string;
+  name: string;
+  /** 只含 video 类型的模型（后端 getImageAndVideoModel 实际按 video 过滤） */
+  promptList: Array<{
+    name: string;
+    type: string;
+    model: string;
+    fileName?: string;
+    path?: string;
+  }>;
+};
+
+export async function fetchModelMap(): Promise<ModelMapVendor[]> {
+  const rows = await postJson<ModelMapVendor[]>(
+    '/api/setting/modelMap/getImageAndVideoModel',
+    {},
+  );
+  return rows ?? [];
+}
+
+export async function fetchModelPromptFiles(): Promise<ModelPromptFile[]> {
+  const rows = await apiFetch<ModelPromptFile[]>('/api/setting/modelMap/getPromptList', {
+    method: 'GET',
+  });
+  return rows ?? [];
+}
+
+/** 把提示词模板绑到某个供应商的某个模型上（后端按 vendorId+model upsert） */
+export async function bindPromptToModel(body: {
+  vendorId: string;
+  model: string;
+  path: string;
+  fileName: string;
+}): Promise<void> {
+  await postJson('/api/setting/modelMap/bindingPrompt', { ...body });
+}
+
+/** 新建一个提示词模板文件（同名会直接覆盖，后端不校验已存在） */
+export async function createModelPromptFile(body: {
+  name: string;
+  data: string;
+  type: 'image' | 'video';
+}): Promise<void> {
+  await postJson('/api/setting/modelMap/savePrompt', { ...body });
+}
+
+/** 改**已存在**的提示词模板（文件不存在时后端回 404） */
+export async function updateModelPromptFile(body: {
+  name: string;
+  data: string;
+  type: 'image' | 'video';
+}): Promise<void> {
+  await postJson('/api/setting/modelMap/updatePrompt', { ...body });
+}
+
+export async function deleteModelPromptFile(path: string): Promise<void> {
+  await postJson('/api/setting/modelMap/deletePrompt', { path });
+}
+
+// ===== 设置中心 · Skills 技能管理（skillManagement）=====
+
+/** `data/skills` 下的 markdown 相对路径列表 */
+export async function fetchSkillList(): Promise<string[]> {
+  const rows = await postJson<string[]>('/api/setting/skillManagement/getSkillList', {});
+  return rows ?? [];
+}
+
+export async function fetchSkillContent(path: string): Promise<string> {
+  return postJson<string>('/api/setting/skillManagement/getSkillContent', { path });
+}
+
+/** 保存技能内容。后端只允许改**已存在**的文件，不存在会回「文件不存在」 */
+export async function saveSkillContent(path: string, content: string): Promise<void> {
+  await postJson('/api/setting/skillManagement/saveSkillContent', { path, content });
+}
+
+// ===== 设置中心 · Agent 记忆配置（memoryConfig）=====
+//
+// 字段含义取自 `utils/agent/memory.ts` 与 `embedding.ts` 里的注释与默认值。
+
+export type MemoryConfig = {
+  /** 每累积多少条 message 触发一次 summary 生成（默认 3） */
+  messagesPerSummary: number;
+  /** get() 返回的近期未总结 message 条数（默认 5） */
+  shortTermLimit: number;
+  /** summary 最大字符长度（默认 500） */
+  summaryMaxLength: number;
+  /** get() 返回的 summary 条数（默认 10） */
+  summaryLimit: number;
+  /** get() 向量相似搜索返回的 message 条数（默认 3） */
+  ragLimit: number;
+  /** deepRetrieve() 向量召回 summary 的条数（默认 5） */
+  deepRetrieveSummaryLimit: number;
+  /** 本地 embedding 模型路径片段（拼成 onnx 文件路径） */
+  modelOnnxFile: string[];
+  /** ONNX 量化类型（fp32 / fp16） */
+  modelDtype: string;
+};
+
+export async function fetchMemoryConfig(): Promise<MemoryConfig> {
+  const data = await apiFetch<Partial<MemoryConfig>>('/api/setting/memoryConfig/getMemory', {
+    method: 'GET',
+  });
+  return {
+    messagesPerSummary: data?.messagesPerSummary ?? 3,
+    shortTermLimit: data?.shortTermLimit ?? 5,
+    summaryMaxLength: data?.summaryMaxLength ?? 500,
+    summaryLimit: data?.summaryLimit ?? 10,
+    ragLimit: data?.ragLimit ?? 3,
+    deepRetrieveSummaryLimit: data?.deepRetrieveSummaryLimit ?? 5,
+    modelOnnxFile: data?.modelOnnxFile ?? [],
+    modelDtype: data?.modelDtype ?? 'fp16',
+  };
+}
+
+/** 保存记忆配置（后端 zod 要求 8 个字段全给、且都是数字/数组/字符串） */
+export async function saveMemoryConfig(config: MemoryConfig): Promise<void> {
+  await postJson('/api/setting/memoryConfig/sureMemory', { ...config });
+}
+
+/** 清空全部 Agent 记忆（`memories` 表清空，不可恢复） */
+export async function clearAllAgentMemory(): Promise<void> {
+  await postJson('/api/setting/memoryConfig/delAllMemory', {});
 }

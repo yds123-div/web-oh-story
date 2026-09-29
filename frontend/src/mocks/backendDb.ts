@@ -333,6 +333,10 @@ seed();
 
 export function resetBackendDb(): void {
   seed();
+  agentUseMode = '0';
+  memoryConfig = { ...DEFAULT_MEMORY_CONFIG, modelOnnxFile: [...DEFAULT_MEMORY_CONFIG.modelOnnxFile] };
+  modelPromptBindings = new Map();
+  memoryClearedCount = 0;
 }
 
 export function getBackendProjects(): BackendProjectRow[] {
@@ -379,6 +383,82 @@ export function setProjectStatistics(projectId: number, counts: ProjectStatistic
 
 export function getProjectStatistics(projectId: number): ProjectStatistics {
   return statsByProject.get(projectId) ?? { roleCount: 0, scriptCount: 0, videoCount: 0, storyboardCount: 0 };
+}
+
+/**
+ * 全部项目的计数（镜像后端 allProjectStatistics 的分组聚合结果）。
+ * 只返回有计数的项目——与真实后端一致：没有剧本/资产的项目不会出现在聚合结果里。
+ */
+export function getAllProjectStatistics(): Array<ProjectStatistics & { projectId: number }> {
+  return Array.from(statsByProject.entries()).map(([projectId, counts]) => ({ projectId, ...counts }));
+}
+
+/**
+ * `o_setting.agentUseMode`（'0' 简易 / '1' 高级）。
+ *
+ * 真实后端把它持久化在数据库里，所以切换后再读必须读回新值——否则设置中心切完模式立刻
+ * reload 会把界面打回旧值。这里跟着 mock DB 一起重置。
+ */
+let agentUseMode = '0';
+
+export function getMockAgentUseMode(): string {
+  return agentUseMode;
+}
+
+export function setMockAgentUseMode(mode: string): void {
+  agentUseMode = mode;
+}
+
+/**
+ * `o_setting` 里的记忆配置（读 way 与 `memoryConfig/getMemory` 一致：
+ * 数字键回数字、modelOnnxFile 回数组、modelDtype 回字符串）。
+ * 同样要持久化——设置中心保存后会 reload，不持久化就会打回旧值。
+ */
+const DEFAULT_MEMORY_CONFIG = {
+  messagesPerSummary: 3,
+  shortTermLimit: 5,
+  summaryMaxLength: 500,
+  summaryLimit: 10,
+  ragLimit: 3,
+  deepRetrieveSummaryLimit: 5,
+  modelOnnxFile: ['all-MiniLM-L6-v2', 'onnx', 'model_fp16.onnx'],
+  modelDtype: 'fp16',
+};
+
+let memoryConfig = { ...DEFAULT_MEMORY_CONFIG, modelOnnxFile: [...DEFAULT_MEMORY_CONFIG.modelOnnxFile] };
+
+export function getMockMemoryConfig() {
+  return { ...memoryConfig, modelOnnxFile: [...memoryConfig.modelOnnxFile] };
+}
+
+export function setMockMemoryConfig(next: typeof DEFAULT_MEMORY_CONFIG): void {
+  memoryConfig = { ...next, modelOnnxFile: [...next.modelOnnxFile] };
+}
+
+/** `o_modelPrompt`：模型 ← 提示词模板 的绑定（key 为 `vendorId:model`） */
+let modelPromptBindings = new Map<string, { fileName: string; path: string }>();
+
+export function getMockPromptBinding(vendorId: string, model: string) {
+  return modelPromptBindings.get(`${vendorId}:${model}`) ?? null;
+}
+
+export function setMockPromptBinding(
+  vendorId: string,
+  model: string,
+  value: { fileName: string; path: string },
+): void {
+  modelPromptBindings.set(`${vendorId}:${model}`, value);
+}
+
+/** 清空 Agent 记忆的调用次数（用来断言清空按钮真的打到后端） */
+let memoryClearedCount = 0;
+
+export function getMockMemoryClearedCount(): number {
+  return memoryClearedCount;
+}
+
+export function bumpMockMemoryCleared(): void {
+  memoryClearedCount += 1;
 }
 
 // ===== 剧本（复刻后端 o_script 契约）=====

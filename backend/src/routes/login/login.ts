@@ -3,6 +3,7 @@ import u from "@/utils";
 import jwt from "jsonwebtoken";
 import { success, error } from "@/lib/responseFormat";
 import { validateFields } from "@/middleware/middleware";
+import { hashPassword, verifyPassword } from "@/lib/password";
 import { z } from "zod";
 const router = express.Router();
 
@@ -26,7 +27,14 @@ export default router.post(
     const data = await u.db("o_user").where("name", "=", username).first();
     if (!data) return res.status(400).send(error("登录失败"));
 
-    if (data!.password == password && data!.name == username) {
+    const stored = data!.password ?? "";
+    const verdict = verifyPassword(stored, password);
+    // 明文命中时顺手升级成哈希：老部署第一次登录就自动完成迁移，不需要手工改库
+    if (verdict.ok && verdict.needsUpgrade) {
+      await u.db("o_user").where("id", data!.id).update({ password: hashPassword(password) });
+    }
+
+    if (verdict.ok && data!.name == username) {
       const tokenData = await u.db("o_setting").where("key", "tokenKey").first();
       if (!tokenData) return res.status(400).send(error("未找到tokenKey"));
       const token = setToken(
