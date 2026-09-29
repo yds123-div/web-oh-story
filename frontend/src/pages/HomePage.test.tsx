@@ -39,7 +39,7 @@ describe('HomePage（真实后端契约）', () => {
     expect(screen.getByText('女频-轻小说 · 2K')).toBeInTheDocument();
     expect(screen.getByText(/9:16 · 赛博朋克电影/)).toBeInTheDocument();
     // 操作入口：重命名 / 删除（归档已随无后端支撑一并移除）
-    expect(screen.getByText('✎ 重命名')).toBeInTheDocument();
+    expect(screen.getByText('✎ 项目设置')).toBeInTheDocument();
     expect(screen.getByText('🗑 删除')).toBeInTheDocument();
     expect(screen.queryByText('📦 归档')).not.toBeInTheDocument();
   });

@@ -35,6 +35,8 @@ const ROW = {
   directorManual: '',
   videoRatio: '9:16',
   imageModel: 'Seedream-4.0',
+  storyboardImageModel: '',
+  deriveAssetsModel: '',
   videoModel: 'Seedance 2.0',
   imageQuality: '2K',
   mode: 'text',
@@ -52,6 +54,8 @@ const TRANSLATED: Project = {
   directorManual: '',
   videoRatio: '9:16',
   imageModel: 'Seedream-4.0',
+  storyboardImageModel: '',
+  deriveAssetsModel: '',
   videoModel: 'Seedance 2.0',
   imageQuality: '2K',
   mode: 'text',
@@ -103,7 +107,7 @@ describe('createProject（POST /api/project/addProject）', () => {
 
     const created = await createProject(BODY);
 
-    // 12 个必填字段一一对应，全部为字符串
+    // 后端必填字段一一对应；分镜图/衍生资产模型为可选，未传时以空串（= 跟随图像模型）上报
     expect(added[0]).toEqual({
       projectType: 'script',
       name: '新项目',
@@ -113,6 +117,8 @@ describe('createProject（POST /api/project/addProject）', () => {
       directorManual: '',
       videoRatio: '9:16',
       imageModel: 'Seedream-4.0',
+      storyboardImageModel: '',
+      deriveAssetsModel: '',
       videoModel: 'Seedance 2.0',
       imageQuality: '2K',
       mode: 'text',
@@ -161,6 +167,8 @@ describe('patchProject（改名 → POST /api/project/editProject）', () => {
         directorManual: ROW.directorManual,
         videoRatio: ROW.videoRatio,
         imageModel: ROW.imageModel,
+        storyboardImageModel: ROW.storyboardImageModel,
+        deriveAssetsModel: ROW.deriveAssetsModel,
         videoModel: ROW.videoModel,
         imageQuality: ROW.imageQuality,
         projectType: ROW.projectType,

@@ -4,13 +4,20 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { useWorkflowStep } from '../hooks/useWorkflowStep';
 import { VideoPromptModal } from '../components/VideoPromptModal';
 import { VideoPromptTag, VideoVersionTag } from '../components/VideoTrackTags';
-import { DEFAULT_VIDEO_DURATION_SEC, VIDEO_RESOLUTION, imageModelSupportsReference } from '../config/project';
+import {
+  DEFAULT_VIDEO_DURATION_SEC,
+  VIDEO_RESOLUTION,
+  imageModelRequiresReference,
+  imageModelSupportsReference,
+  setImageModelCapabilities,
+} from '../config/project';
 import {
   composeFlowStoryboards,
   createStoryboard,
   deleteStoryboard,
   deleteStoryboards,
   downloadStoryboardPreview,
+  fetchImageModels,
   fetchProject,
   fetchStudioFlowData,
   fetchWorkbench,
@@ -28,7 +35,7 @@ import {
   VideoPollTimeoutError,
 } from '../lib/api';
 import { errorMessage } from '../lib/errors';
-import type { Project, Storyboard, StudioFlowData, Workbench, WorkbenchTrack } from '../types/api';
+import type { ImageModelOption, Project, Storyboard, StudioFlowData, Workbench, WorkbenchTrack } from '../types/api';
 
 function formatClock(sec: number): string {
   const m = Math.floor(sec / 60);
@@ -92,6 +99,17 @@ export default function StudioPage() {
   const [storyboards, setStoryboards] = useState<Storyboard[]>([]);
   const [workbench, setWorkbench] = useState<Workbench | null>(null);
   const [project, setProject] = useState<Project | null>(null);
+  /** 分镜图模型清单（含后端透出的能力），供工具条上的模型选择器用 */
+  const [imageModelOptions, setImageModelOptions] = useState<ImageModelOption[]>([]);
+  /** 本次批量临时指定的分镜图模型；空串 = 跟随项目设置（storyboardImageModel → imageModel） */
+  const [batchImageModel, setBatchImageModel] = useState<string>('');
+
+  /** 本次批量实际使用的分镜图模型（与后端取值优先级一致） */
+  const effectiveImageModel = batchImageModel || project?.storyboardImageModel || project?.imageModel || '';
+  /** 选中"仅图生图"的模型时的前置提醒（按约定不做兜底：缺参考图的分镜会直接失败） */
+  const batchModelHint = imageModelRequiresReference(effectiveImageModel)
+    ? '该模型必须带参考图：没有关联资产图的分镜会失败，且单张约 2–5 分钟'
+    : null;
   const [loading, setLoading] = useState(true);
   const [loadFailed, setLoadFailed] = useState(false);
   const [multiMode, setMultiMode] = useState(false);
@@ -162,6 +180,21 @@ export default function StudioPage() {
     setWorkbench(data);
     return data;
   };
+
+  // 分镜图模型清单是次要数据：拉不到就不显示选择器，生成仍按项目设置走
+  useEffect(() => {
+    let alive = true;
+    void fetchImageModels()
+      .then((list) => {
+        if (!alive) return;
+        setImageModelCapabilities(list);
+        setImageModelOptions(list);
+      })
+      .catch(() => undefined);
+    return () => {
+      alive = false;
+    };
+  }, []);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -406,7 +439,13 @@ export default function StudioPage() {
     const controller = new AbortController();
     imagePollControllerRef.current = controller;
     try {
-      await generateStoryboardImages({ projectId: id, scriptId: episodeId, storyboardIds: ids });
+      await generateStoryboardImages({
+        projectId: id,
+        scriptId: episodeId,
+        storyboardIds: ids,
+        // 空串 = 不传，后端按 项目 storyboardImageModel → imageModel 取值
+        model: batchImageModel || undefined,
+      });
       message.success(`已提交 ${ids.length} 个分镜的图片生成`);
       // 后端受理后立即返回，进度靠轮询；生成中的分镜会整行从响应里消失
       await pollStoryboardImagesUntilSettled(
@@ -639,6 +678,28 @@ export default function StudioPage() {
           >
             ⬇ 下载拼图
           </Button>
+          <Select
+            size="small"
+            className="ds-ghost"
+            style={{ minWidth: 250 }}
+            value={batchImageModel}
+            onChange={setBatchImageModel}
+            title="本次批量使用的分镜图模型（空 = 跟随项目设置）"
+            options={[
+              {
+                value: '',
+                label: `跟随项目设置（${(project?.storyboardImageModel || project?.imageModel || '未配置').split(':').pop()}）`,
+              },
+              ...imageModelOptions
+                .filter((m) => m.value !== (project?.storyboardImageModel || project?.imageModel))
+                .map((m) => ({
+                  value: m.value,
+                  label: `${m.label} · ${
+                    m.requiresReference ? '仅图生图（慢，约2-5分钟/张）' : m.textToImage && m.supportsReference ? '文生图/图生图' : '仅文生图'
+                  }`,
+                })),
+            ]}
+          />
           <Button
             type="primary"
             className="ds-grad ds-pill"
@@ -661,6 +722,11 @@ export default function StudioPage() {
           >
             只补未出图的
           </Button>
+          {batchModelHint ? (
+            <Typography.Text type="warning" style={{ fontSize: 12 }}>
+              {batchModelHint}
+            </Typography.Text>
+          ) : null}
           <Button
             className="ds-ghost ds-pill"
             size="small"

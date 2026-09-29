@@ -1,8 +1,20 @@
 /**
- * Toonflow AI供应商模板 - DP 自建服务（Z-Image-Turbo 文生图 + MiniMax-H3 图生视频）
- * @version 2.1
+ * Toonflow AI供应商模板 - DP 自建服务（Z-Image-Turbo 文生图 + Qwen-Image-Edit 图片编辑 + MiniMax-H3 图生视频）
+ * @version 2.2
  *
- * 同一台机器、同一把 sk-dp 密钥，两个能力：
+ * 同一台机器、同一把 sk-dp 密钥，三个能力：
+ *
+ * 【图片编辑 / Qwen-Image-Edit-2511】POST {baseUrl}/imgedit/edit —— 2026-09-29 新增
+ * 1) 同步接口：1-3 张参考图（**裸 base64，不带 `data:` 前缀**）+ 一句编辑指令，直接回 PNG 二进制
+ *    （不是 JSON），约 2 分钟/张（40 步）。实测 512x384 → 1184x880 用时 120s，两张参考图用时 200s。
+ * 2) **第一张参考图的画幅决定输出**：服务端把第一张缩放到约 1MP 并把边长吸附到 16 的倍数，
+ *    比例**近似**随第一张、不是精确相等（实测 1.6667→1.6600、1.3333→1.3455、1.7778→1.8511，
+ *    偏差 0.4%-4.1%）。`config.aspectRatio` 不参与，所以**不要指望出图和项目画幅严格一致**——
+ *    要什么画幅，就把对应画幅的参考图放第一位。
+ * 3) 参考图最多 3 张，超出丢弃靠后的（第一张定画幅，故保留靠前）。
+ * 4) 只在宿主 GPU 切到编辑模式（`img-switch.bat edit`）时可用；GET {baseUrl}/imgedit/health
+ *    免密钥探测（`{"qwen_edit":"up","comfy":true}`）。
+ * 5) 与文生图/视频同机同密钥。**纯文生图别用这个模型**（模型声明了必须带参考图）。
  *
  * 【图像 / Z-Image-Turbo】POST {baseUrl}/img/generate —— **该端点当前不可用**
  * 0) 2026-09-25 实测 `/img/generate` 恒返回 502（`{"detail":"upstream error: ReadError"}`），
@@ -174,11 +186,11 @@ const VIDEO_RESOLUTION_LABEL = "544x960 / 960x544";
 const vendor: VendorConfig = {
   id: "dp",
   // ≥2.0 才走现代参考图分支（referenceList2imageBase642 会按 version 分流）
-  version: "2.1",
+  version: "2.2",
   author: "DeepSFV",
   name: "DP 自建服务",
   description:
-    "自建推理服务，同一把密钥提供两个能力：\n\n- **Z-Image-Turbo**（文生图）：返回 PNG 二进制。**不支持参考图**，分镜/资产的形象参考图会被忽略。\n- **MiniMax-H3**（图生视频）：三步异步任务制，**必须有参考图**（分镜已生成的画面），产出 mp4。仅在服务端 GPU 切到 H3 视频模式时可用。",
+    "自建推理服务，同一把密钥提供三个能力：\n\n- **Qwen-Image-Edit-2511**（图片编辑）：1-3 张参考图 + 一句指令，同步返回 PNG，约 2 分钟/张。**必须有参考图**；第一张参考图的画幅决定输出画幅。仅在服务端 GPU 切到编辑模式时可用。\n- **Z-Image-Turbo**（文生图）：返回 PNG 二进制。**不支持参考图**，分镜/资产的形象参考图会被忽略。\n- **MiniMax-H3**（图生视频）：三步异步任务制，**必须有参考图**（分镜已生成的画面），产出 mp4。仅在服务端 GPU 切到 H3 视频模式时可用。",
   inputs: [
     { key: "apiKey", label: "API密钥", type: "password", required: true, placeholder: "sk-dp-..." },
     { key: "baseUrl", label: "请求地址", type: "url", required: true, placeholder: "示例：http://115.190.62.87/dp" },
@@ -191,6 +203,13 @@ const vendor: VendorConfig = {
       // 接口没有图生图入口，只声明 text
       type: "image",
       mode: ["text"],
+    },
+    {
+      name: "Qwen-Image-Edit-2511",
+      modelName: "qwen-image-edit-2511",
+      // 图片编辑：1-3 张参考图 + 一句指令，必须带参考图，故不声明 text
+      type: "image",
+      mode: ["singleImage", "multiReference"],
     },
     {
       name: "MiniMax-H3",
@@ -217,6 +236,15 @@ const IMAGE_TIMEOUT_MS = 180000;
 
 /** 请求步数：Z-Image-Turbo 是 8 步蒸馏模型，接口默认值即 8 */
 const IMAGE_STEPS = 8;
+
+/** 图片编辑采样步数（服务端默认即 40） */
+const EDIT_STEPS = 40;
+/** 编辑模型最多吃 3 张参考图，超出丢弃靠后的 */
+const EDIT_MAX_REFERENCE = 3;
+/** 编辑是同步接口，实测单张 120-200s（40 步）——180s 会误杀正常请求，故给到 600s */
+const EDIT_TIMEOUT_MS = 600000;
+/** 编辑模式探测很轻，早点失败比等十分钟超时强 */
+const EDIT_HEALTH_TIMEOUT_MS = 10000;
 
 /** 视频三步各自的超时（实测 224 帧≈95s，留足余量） */
 const SUBMIT_TIMEOUT_MS = 120000;
@@ -279,6 +307,32 @@ const errorReason = (response: any): string => {
   return `HTTP ${response?.status ?? "未知"}`;
 };
 
+/** 应用侧传来的参考图是有头 data URL，编辑端点要裸 base64 */
+const stripDataUrl = (base64: string): string => String(base64 || "").replace(/^data:[^;]+;base64,/, "");
+
+/**
+ * 探测编辑模式是否就绪：GET {baseUrl}/imgedit/health（免密钥）→ {"qwen_edit":"up","comfy":true}。
+ *
+ * 只有服务端**明确**说没就绪时才返回非空理由去拦请求；探测本身失败（老版本没这条路由、
+ * 网络抖动、返回体不是预期形状）一律返回空串照常发请求——让探测本身变成新的故障点，
+ * 比不探测更糟。
+ */
+const editModeUnavailable = async (baseUrl: string): Promise<string> => {
+  try {
+    const health = await axios.get(`${baseUrl}/imgedit/health`, {
+      timeout: EDIT_HEALTH_TIMEOUT_MS,
+      validateStatus: () => true,
+    });
+    if (health.status < 200 || health.status >= 300) return "";
+    const state = health.data && typeof health.data === "object" ? health.data.qwen_edit : undefined;
+    if (!state) return "";
+    if (String(state).toLowerCase() === "up") return "";
+    return `编辑模式未就绪（/imgedit/health 返回 ${JSON.stringify(health.data)}）`;
+  } catch {
+    return "";
+  }
+};
+
 // ============================================================
 // 适配器函数
 // ============================================================
@@ -295,6 +349,10 @@ const textRequest = (model: TextModel, think: boolean, thinkLevel: 0 | 1 | 2 | 3
 const imageRequest = async (config: ImageConfig, model: ImageModel): Promise<string> => {
   if (!vendor.inputValues.apiKey) throw new Error("缺少API Key");
   const baseUrl = vendor.inputValues.baseUrl.replace(/\/+$/, "");
+
+  // 同一台机器上有两个图像能力：编辑（必须有参考图）与文生图（丢参考图），按模型名分流
+  if (model.modelName === "qwen-image-edit-2511") return await editImage(config, baseUrl);
+
   const { width, height } = resolveSize(config.size, config.aspectRatio);
 
   logger(`Z-Image-Turbo 文生图：${width}x${height}，steps=${IMAGE_STEPS}`);
@@ -325,6 +383,68 @@ const imageRequest = async (config: ImageConfig, model: ImageModel): Promise<str
   }
   const buffer = Buffer.isBuffer(response.data) ? response.data : Buffer.from(response.data ?? []);
   if (!buffer.length) throw new Error("Z-Image 生图失败：响应为空");
+  return `data:image/png;base64,${buffer.toString("base64")}`;
+};
+
+/**
+ * 图片编辑：POST {baseUrl}/imgedit/edit，请求体 JSON `{images, prompt, steps}`，
+ * `images` 是**裸 base64 数组**（应用侧给的是有头 data URL，要剥掉），响应 PNG 二进制。
+ * 返回有头 base64，由调用方落盘到 OSS。
+ *
+ * 画幅由**第一张参考图**决定（服务端缩放到约 1MP、边长吸附到 16 的倍数），
+ * 所以 `config.aspectRatio` / `config.size` 在这里没有用武之地，不参与请求。
+ */
+const editImage = async (config: ImageConfig, baseUrl: string): Promise<string> => {
+  const authHeader = { Authorization: `Bearer ${vendor.inputValues.apiKey.replace(/^Bearer\s+/i, "")}` };
+  const prompt = String(config.prompt || "").trim();
+  if (!prompt) throw new Error("Qwen-Image-Edit-2511 需要一句编辑指令（prompt）");
+
+  const references = (config.referenceList ?? []).filter((item) => item.type === "image" && item.base64);
+  if (!references.length) {
+    throw new Error("Qwen-Image-Edit-2511 是图片编辑：至少要有一张参考图（分镜关联资产 / 上传的参考图）。纯文生图请选 Z-Image-Turbo 或其他文生图模型");
+  }
+  if (references.length > EDIT_MAX_REFERENCE) {
+    logger(
+      `Qwen-Image-Edit：收到 ${references.length} 张参考图，超过上限 ${EDIT_MAX_REFERENCE}，丢弃靠后的 ${references.length - EDIT_MAX_REFERENCE} 张`,
+    );
+  }
+  // 第一张定画幅，所以截断时保留靠前的
+  const images = references.slice(0, EDIT_MAX_REFERENCE).map((item) => stripDataUrl(item.base64));
+
+  // 宿主 GPU 可能切在别的模式上，先探一下，免得白等一次 600s 超时
+  const notReady = await editModeUnavailable(baseUrl);
+  if (notReady) throw new Error(`Qwen-Image-Edit-2511 当前不可用：${notReady}。请在宿主机执行 img-switch.bat edit 切到编辑模式`);
+
+  logger(`Qwen-Image-Edit-2511：${images.length} 张参考图，steps=${EDIT_STEPS}`);
+  let response: any;
+  try {
+    response = await axios.post(
+      `${baseUrl}/imgedit/edit`,
+      { images, prompt, steps: EDIT_STEPS },
+      {
+        headers: { "Content-Type": "application/json", ...authHeader },
+        // 响应是 PNG 二进制而非 JSON
+        responseType: "arraybuffer",
+        timeout: EDIT_TIMEOUT_MS,
+        // 4xx/5xx 也正常返回，由下面自己判——见 errorReason 的注释
+        validateStatus: () => true,
+        maxBodyLength: Infinity,
+        maxContentLength: Infinity,
+      },
+    );
+  } catch (e: any) {
+    if (e?.code === "ECONNABORTED") throw new Error(`Qwen-Image-Edit 超时（${EDIT_TIMEOUT_MS / 1000}s）`);
+    throw new Error(`Qwen-Image-Edit 失败：${e?.message || "网络错误"}`);
+  }
+
+  if (response.status < 200 || response.status >= 300) {
+    throw new Error(`Qwen-Image-Edit 失败：${errorReason(response)}`);
+  }
+  // 正常是 PNG 二进制；万一回了 JSON（例如排队中/上游报错），给可读原因，别把坏数据当图片存下去
+  const contentType = String(response.headers?.["content-type"] ?? "").toLowerCase();
+  if (contentType.includes("json")) throw new Error(`Qwen-Image-Edit 失败：${errorReason(response)}`);
+  const buffer = Buffer.isBuffer(response.data) ? response.data : Buffer.from(response.data ?? []);
+  if (!buffer.length) throw new Error("Qwen-Image-Edit 失败：响应为空");
   return `data:image/png;base64,${buffer.toString("base64")}`;
 };
 

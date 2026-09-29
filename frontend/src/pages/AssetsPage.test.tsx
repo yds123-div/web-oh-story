@@ -239,6 +239,8 @@ describe('AssetsPage 资产 AI 能力（润色 / 生图 / 提取）', () => {
       directorManual: '',
       videoRatio: '9:16',
       imageModel: 'Seedream-4.0',
+      storyboardImageModel: '',
+      deriveAssetsModel: '',
       videoModel: 'Seedance 2.0',
       imageQuality: '2K',
       mode: 'text',

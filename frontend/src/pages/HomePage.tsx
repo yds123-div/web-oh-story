@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useState } from 'react';
 import { App, Button, Card, Flex, Input, Modal, Select, Typography } from 'antd';
 import { useNavigate } from 'react-router-dom';
-import { createProject, deleteProject, getProjectStatistics, listProjects, patchProject } from '../lib/api';
-import type { Project, ProjectStatistics } from '../types/api';
+import { createProject, deleteProject, fetchImageModels, getProjectStatistics, listProjects, patchProject } from '../lib/api';
+import type { ImageModelOption, Project, ProjectStatistics } from '../types/api';
 import { errorMessage } from '../lib/errors';
 import { formatDateTime } from '../lib/format';
 import {
@@ -13,6 +13,7 @@ import {
   PROJECT_TYPE_OPTIONS,
   VIDEO_MODEL_OPTIONS,
   VIDEO_RATIO_OPTIONS,
+  setImageModelCapabilities,
 } from '../config/project';
 
 export default function HomePage() {
@@ -30,6 +31,36 @@ export default function HomePage() {
   const [renameId, setRenameId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState('');
   const [renaming, setRenaming] = useState(false);
+  /** 编辑项目弹窗里的模型字段（初始值取自项目卡片上的数据） */
+  const [renameModels, setRenameModels] = useState({ imageModel: '', storyboardImageModel: '', deriveAssetsModel: '' });
+  /** 图像模型清单（含后端透出的能力）：新建与编辑项目共用 */
+  const [imageModelOptions, setImageModelOptions] = useState<ImageModelOption[]>([]);
+
+  /** 模型选项标签，带能力标注 */
+  const imageModelOptionLabel = (m: ImageModelOption): string =>
+    `${m.label}（${m.requiresReference ? '仅图生图·约2-5分钟/张' : m.textToImage && m.supportsReference ? '文生图/图生图' : '仅文生图'}）`;
+  /** 下拉里的"跟随图像模型"项（空串） */
+  const followOption = (current: string) => ({
+    value: '',
+    label: `跟随图像模型（${(current || '未配置').split(':').pop()}）`,
+  });
+  /** 某个"跟随基准"下的模型选项（排除与基准相同的那个，避免重复项） */
+  const modelOptionsFor = (current: string) => [
+    followOption(current),
+    ...(imageModelOptions.length
+      ? imageModelOptions.filter((m) => m.value !== current).map((m) => ({ value: m.value, label: imageModelOptionLabel(m) }))
+      : IMAGE_MODEL_OPTIONS.filter((m) => m.value !== current).map((m) => ({ value: m.value, label: m.label }))),
+  ];
+
+  // 模型清单是次要数据：拉不到就退回静态兜底表，页面照常可用
+  useEffect(() => {
+    void fetchImageModels()
+      .then((list) => {
+        setImageModelCapabilities(list);
+        setImageModelOptions(list);
+      })
+      .catch(() => undefined);
+  }, []);
 
   const load = useCallback(async () => {
     const data = await listProjects();
@@ -79,7 +110,7 @@ export default function HomePage() {
     }
     setRenaming(true);
     try {
-      await patchProject(renameId, { name });
+      await patchProject(renameId, { name, ...renameModels });
       setRenameId(null);
       await load();
       message.success('已保存到后端');
@@ -170,9 +201,14 @@ export default function HomePage() {
                         e.stopPropagation();
                         setRenameId(p.id);
                         setRenameValue(p.name);
+                        setRenameModels({
+                          imageModel: p.imageModel,
+                          storyboardImageModel: p.storyboardImageModel,
+                          deriveAssetsModel: p.deriveAssetsModel,
+                        });
                       }}
                     >
-                      ✎ 重命名
+                      ✎ 项目设置
                     </button>
                     <button
                       type="button"
@@ -302,7 +338,11 @@ export default function HomePage() {
                 style={{ width: '100%' }}
                 value={form.imageModel}
                 onChange={(imageModel) => setForm((f) => ({ ...f, imageModel }))}
-                options={IMAGE_MODEL_OPTIONS}
+                options={
+                  imageModelOptions.length
+                    ? imageModelOptions.map((m) => ({ value: m.value, label: imageModelOptionLabel(m) }))
+                    : IMAGE_MODEL_OPTIONS.map((m) => ({ value: m.value, label: m.label }))
+                }
               />
             </div>
             <div>
@@ -314,6 +354,30 @@ export default function HomePage() {
                 value={form.videoModel}
                 onChange={(videoModel) => setForm((f) => ({ ...f, videoModel }))}
                 options={VIDEO_MODEL_OPTIONS}
+              />
+            </div>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 11 }}>
+            <div>
+              <Typography.Text type="secondary" style={{ fontSize: 11.5, display: 'block', marginBottom: 6 }}>
+                分镜图模型（可选）
+              </Typography.Text>
+              <Select
+                style={{ width: '100%' }}
+                value={form.storyboardImageModel}
+                onChange={(storyboardImageModel) => setForm((f) => ({ ...f, storyboardImageModel }))}
+                options={modelOptionsFor(form.imageModel)}
+              />
+            </div>
+            <div>
+              <Typography.Text type="secondary" style={{ fontSize: 11.5, display: 'block', marginBottom: 6 }}>
+                衍生资产模型（可选）
+              </Typography.Text>
+              <Select
+                style={{ width: '100%' }}
+                value={form.deriveAssetsModel}
+                onChange={(deriveAssetsModel) => setForm((f) => ({ ...f, deriveAssetsModel }))}
+                options={modelOptionsFor(form.imageModel)}
               />
             </div>
           </div>
@@ -334,7 +398,7 @@ export default function HomePage() {
       <Modal
         open={renameId !== null}
         className="ds-modal"
-        title="重命名项目"
+        title="项目设置"
         onCancel={() => setRenameId(null)}
         styles={{ mask: { backdropFilter: 'blur(4px)', background: 'rgba(5,5,10,.62)' } }}
         footer={[
@@ -347,6 +411,45 @@ export default function HomePage() {
         ]}
       >
         <Input value={renameValue} onChange={(e) => setRenameValue(e.target.value)} onPressEnter={() => void onRename()} />
+        <div style={{ marginTop: 12, display: 'grid', gap: 10 }}>
+          <div>
+            <Typography.Text type="secondary" style={{ fontSize: 11.5, display: 'block', marginBottom: 6 }}>
+              图像模型
+            </Typography.Text>
+            <Select
+              style={{ width: '100%' }}
+              value={renameModels.imageModel}
+              onChange={(imageModel) => setRenameModels((m) => ({ ...m, imageModel }))}
+              options={
+                imageModelOptions.length
+                  ? imageModelOptions.map((m) => ({ value: m.value, label: imageModelOptionLabel(m) }))
+                  : IMAGE_MODEL_OPTIONS.map((m) => ({ value: m.value, label: m.label }))
+              }
+            />
+          </div>
+          <div>
+            <Typography.Text type="secondary" style={{ fontSize: 11.5, display: 'block', marginBottom: 6 }}>
+              分镜图模型（分镜工作区「生成图片」用；留空=跟随图像模型）
+            </Typography.Text>
+            <Select
+              style={{ width: '100%' }}
+              value={renameModels.storyboardImageModel}
+              onChange={(storyboardImageModel) => setRenameModels((m) => ({ ...m, storyboardImageModel }))}
+              options={modelOptionsFor(renameModels.imageModel)}
+            />
+          </div>
+          <div>
+            <Typography.Text type="secondary" style={{ fontSize: 11.5, display: 'block', marginBottom: 6 }}>
+              衍生资产模型（阶段3 衍生资产生成用；留空=跟随图像模型）
+            </Typography.Text>
+            <Select
+              style={{ width: '100%' }}
+              value={renameModels.deriveAssetsModel}
+              onChange={(deriveAssetsModel) => setRenameModels((m) => ({ ...m, deriveAssetsModel }))}
+              options={modelOptionsFor(renameModels.imageModel)}
+            />
+          </div>
+        </div>
       </Modal>
     </div>
   );

@@ -181,6 +181,8 @@ export const handlers = [
       directorManual: 'string',
       videoRatio: 'string',
       imageModel: 'string',
+      storyboardImageModel: 'optionalString',
+      deriveAssetsModel: 'optionalString',
       videoModel: 'string',
       imageQuality: 'string',
       mode: 'string',
@@ -195,6 +197,8 @@ export const handlers = [
       directorManual: String(body.directorManual),
       videoRatio: String(body.videoRatio),
       imageModel: String(body.imageModel),
+      storyboardImageModel: String(body.storyboardImageModel ?? ''),
+      deriveAssetsModel: String(body.deriveAssetsModel ?? ''),
       videoModel: String(body.videoModel),
       imageQuality: String(body.imageQuality),
       mode: String(body.mode),
@@ -214,6 +218,8 @@ export const handlers = [
       directorManual: 'string',
       videoRatio: 'string',
       imageModel: 'string',
+      storyboardImageModel: 'optionalString',
+      deriveAssetsModel: 'optionalString',
       videoModel: 'string',
       imageQuality: 'string',
       projectType: 'string',
@@ -228,12 +234,60 @@ export const handlers = [
       directorManual: String(body.directorManual),
       videoRatio: String(body.videoRatio),
       imageModel: String(body.imageModel),
+      storyboardImageModel: String(body.storyboardImageModel ?? ''),
+      deriveAssetsModel: String(body.deriveAssetsModel ?? ''),
       videoModel: String(body.videoModel),
       imageQuality: String(body.imageQuality),
       projectType: String(body.projectType),
       mode: String(body.mode),
     });
     return envelope({ message: '编辑项目成功' }, '编辑项目成功');
+  }),
+
+  /**
+   * 图像模型列表（含后端按厂商 `mode` 透出的能力）——与真实后端 modelSelect/getModelList 同形。
+   * 真实后端只列 `enable=1` 的供应商的模型，这里给三条代表性模型覆盖三种能力组合。
+   */
+  http.post('/api/modelSelect/getModelList', async ({ request }) => {
+    await netDelay(60);
+    const body = (await request.json()) as Record<string, unknown>;
+    const invalid = validateBody(body, { type: 'string' });
+    if (invalid) return invalid;
+    return envelope([
+      {
+        id: 'qianwen',
+        label: 'Wan 2.7 Image Pro',
+        value: 'wan2.7-image-pro',
+        type: 'image',
+        name: '千问 MaaS（Wan 图像）',
+        mode: ['text', 'singleImage', 'multiReference'],
+        textToImage: true,
+        supportsReference: true,
+        requiresReference: false,
+      },
+      {
+        id: 'dp',
+        label: 'Z-Image-Turbo',
+        value: 'z-image-turbo',
+        type: 'image',
+        name: 'DP 自建服务',
+        mode: ['text'],
+        textToImage: true,
+        supportsReference: false,
+        requiresReference: false,
+      },
+      {
+        id: 'dp',
+        label: 'Qwen-Image-Edit-2511',
+        value: 'qwen-image-edit-2511',
+        type: 'image',
+        name: 'DP 自建服务',
+        mode: ['singleImage', 'multiReference'],
+        textToImage: false,
+        supportsReference: true,
+        requiresReference: true,
+      },
+    ]);
   }),
 
   http.post('/api/project/delProject', async ({ request }) => {

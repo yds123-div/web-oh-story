@@ -68,6 +68,9 @@ export default async (knex: Knex): Promise<void> => {
   await addColumn("o_assets", "audioBindState", "integer");
   await addColumn("o_modelPrompt", "fileName", "string");
   await addColumn("o_modelPrompt", "path", "string");
+  // 分镜图 / 衍生资产图 可单独指定模型（留空回退 imageModel）
+  await addColumn("o_project", "storyboardImageModel", "string");
+  await addColumn("o_project", "deriveAssetsModel", "string");
   const vendorDataSelect = await u.db("o_vendorConfig").whereIn("id", ["deepseek", "atlascloud"]).select("*");
   if (!vendorDataSelect.find((i) => i.id == "deepseek")) {
     await u.db("o_vendorConfig").insert({

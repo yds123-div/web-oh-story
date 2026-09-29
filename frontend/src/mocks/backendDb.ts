@@ -19,6 +19,10 @@ export type BackendProjectRow = {
   directorManual: string;
   videoRatio: string;
   imageModel: string;
+  /** 分镜图专用模型；空串 = 跟随 imageModel */
+  storyboardImageModel: string;
+  /** 衍生资产图专用模型；空串 = 跟随 imageModel */
+  deriveAssetsModel: string;
   videoModel: string;
   imageQuality: string;
   mode: string;
@@ -140,6 +144,8 @@ function seed(): void {
       directorManual: '',
       videoRatio: '9:16',
       imageModel: 'Seedream-4.0',
+      storyboardImageModel: '',
+      deriveAssetsModel: '',
       videoModel: 'Seedance 2.0',
       imageQuality: '2K',
       mode: 'text',

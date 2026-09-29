@@ -40,27 +40,88 @@ export const VIDEO_RATIO_OPTIONS = [
 ];
 
 /**
- * 图像模型选项，value 必须是 `<供应商id>:<模型名>`。
+ * 图像模型**兜底**选项，value 必须是 `<供应商id>:<模型名>`。
  *
- * `qianwen:wan2.7-image-pro` 是**当前真能出图**的一条：千问 MaaS 的兼容模式端点，
- * 走 chat/completions 返回图片。**支持参考图**（资产形象图 / 分镜关联资产图会作为
- * 多模态输入参与生成），故不再有「参考图用不上」的能力缺口。
- * 原 `dp:z-image-turbo` 的服务端已停用（/dp/img/generate 返回 502），已从选项里移除。
+ * 正常路径不读这张表：界面用 `fetchImageModels()`（`/api/modelSelect/getModelList`）动态拉，
+ * 后端会按厂商声明的 `mode` 一并透出能力（`textToImage` / `supportsReference` / `requiresReference`）。
+ * 这张表只在"拉取失败/尚未加载"（含测试环境）时兜底，并给 `imageModelSupportsReference` 之类的
+ * 同步判断当后备数据。**新增模型不需要改这里**，改供应商模板即可。
+ *
+ * 能力口径（与后端一致）：
+ * - `qianwen:wan2.7-image-pro` 两者皆可（chat/completions 多模态，能读参考图）
+ * - `dp:z-image-turbo` 只能文生图（`/dp/img/generate` 丢弃参考图）
+ * - `dp:qwen-image-edit-2511` 只能图生图（`/imgedit/edit`，没有参考图直接失败）
  */
 export const IMAGE_MODEL_OPTIONS = [
-  { value: 'qianwen:wan2.7-image-pro', label: 'Wan 2.7 Image Pro', supportsReference: true },
+  { value: 'qianwen:wan2.7-image-pro', label: 'Wan 2.7 Image Pro', textToImage: true, supportsReference: true, requiresReference: false },
+  { value: 'dp:z-image-turbo', label: 'Z-Image-Turbo', textToImage: true, supportsReference: false, requiresReference: false },
+  { value: 'dp:qwen-image-edit-2511', label: 'Qwen-Image-Edit-2511', textToImage: false, supportsReference: true, requiresReference: true },
 ];
+
+type ImageModelCapability = {
+  textToImage: boolean;
+  supportsReference: boolean;
+  requiresReference: boolean;
+};
+
+/** 取自 `/api/modelSelect/getModelList` 的能力缓存，由 `setImageModelCapabilities` 填充 */
+const capabilityCache = new Map<string, ImageModelCapability>();
+
+/** 拿到模型列表后调一次，之后 `imageModelSupportsReference` 等判断都走真实数据 */
+export function setImageModelCapabilities(
+  list: Array<{
+    value: string;
+    textToImage?: boolean | null;
+    supportsReference?: boolean | null;
+    requiresReference?: boolean | null;
+  }>,
+): void {
+  capabilityCache.clear();
+  for (const m of list) {
+    // 视频模型这三项是 null，不参与图像能力判断
+    if (m.textToImage == null && m.supportsReference == null) continue;
+    capabilityCache.set(m.value, {
+      textToImage: m.textToImage === true,
+      supportsReference: m.supportsReference === true,
+      requiresReference: m.requiresReference === true,
+    });
+  }
+}
+
+function imageModelCapability(imageModel: string | undefined): ImageModelCapability | null {
+  if (!imageModel) return null;
+  const cached = capabilityCache.get(imageModel);
+  if (cached) return cached;
+  const fallback = IMAGE_MODEL_OPTIONS.find((m) => m.value === imageModel);
+  return fallback
+    ? { textToImage: fallback.textToImage, supportsReference: fallback.supportsReference, requiresReference: fallback.requiresReference }
+    : null;
+}
 
 /**
  * 该图像模型是否会用上参考图（分镜关联资产的形象图 / 资产工坊上传的参考图）。
  *
- * 后端不把这个能力透出给前端（`mode` 只在设置页的模型详情里），而本文件已经是
- * 写死的短名单，索性一并写死。**分镜工作区的能力说明横幅按它决定是否展示** ——
- * 说明里断言的「不会沿用资产形象」只有在 false 时才是真的，写死成常显会变成假话。
+ * **分镜工作区的能力说明横幅按它决定是否展示** —— 说明里断言的「不会沿用资产形象」
+ * 只有在 false 时才是真的，写死成常显会变成假话。
  * 认不出来的模型（如历史项目里配的旧模型）按不支持处理，宁可保守提示。
  */
 export function imageModelSupportsReference(imageModel: string | undefined): boolean {
-  return IMAGE_MODEL_OPTIONS.some((m) => m.value === imageModel && m.supportsReference);
+  return imageModelCapability(imageModel)?.supportsReference ?? false;
+}
+
+/**
+ * 该图像模型是否**必须**带参考图（如 `dp:qwen-image-edit-2511`）。
+ *
+ * 这类模型遇到没有参考图的输入会直接失败（错误信息可读），界面应在批量生成前提醒，
+ * 而不是让它跑到一半整批失败。认不出来时按"不必须"处理。
+ */
+export function imageModelRequiresReference(imageModel: string | undefined): boolean {
+  return imageModelCapability(imageModel)?.requiresReference ?? false;
+}
+
+/** 该图像模型能不能纯文生图（认不出来时按"能"处理，旧模型多是文生图） */
+export function imageModelTextToImage(imageModel: string | undefined): boolean {
+  return imageModelCapability(imageModel)?.textToImage ?? true;
 }
 
 /**
@@ -109,6 +170,9 @@ export const DEFAULT_PROJECT_FORM = {
   artStyle: '2D_90s_japanese_anime',
   videoRatio: '9:16',
   imageModel: 'qianwen:wan2.7-image-pro',
+  // 分镜图/衍生资产图默认跟随图像模型（空串即跟随）
+  storyboardImageModel: '',
+  deriveAssetsModel: '',
   videoModel: 'dp:minimax-h3',
   imageQuality: '2K',
 } as const;

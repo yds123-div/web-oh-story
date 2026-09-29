@@ -17,6 +17,8 @@ export default router.post(
     scriptId: z.number(),
     concurrentCount: z.number().min(1).optional(),
     compulsory: z.boolean().optional(),
+    // 可选：本次批量临时指定模型（界面选了就听界面的），留空则用项目配置
+    model: z.string().optional(),
   }),
   async (req, res) => {
     const {
@@ -25,12 +27,14 @@ export default router.post(
       scriptId,
       concurrentCount = 5,
       compulsory = false,
+      model,
     }: {
       storyboardIds: number[];
       projectId: number;
       scriptId: number;
       concurrentCount: number;
       compulsory: boolean;
+      model?: string;
     } = req.body;
     if (!storyboardIds || storyboardIds.length === 0) return res.status(400).send(error("storyboardIds不能为空"));
     // 当没有 storyboardIds 时，通过 AI 生成新的分镜面板数据
@@ -46,7 +50,10 @@ export default router.post(
       await u.db("o_storyboard").whereIn("id", storyIds).where("scriptId", scriptId).where("shouldGenerateImage", 1).update({ state: "生成中" });
     }
 
-    const projectSettingData = await u.db("o_project").where("id", projectId).select("imageModel", "imageQuality", "artStyle", "videoRatio").first();
+    const projectSettingData = await u.db("o_project").where("id", projectId).select("imageModel", "storyboardImageModel", "imageQuality", "artStyle", "videoRatio").first();
+
+    // 分镜图模型：入参临时指定优先，其次项目单独指定的分镜图模型，最后回退通用图像模型
+    const storyboardImageModel = (model || projectSettingData?.storyboardImageModel || projectSettingData?.imageModel) as `${string}:${string}`;
 
     // 按 rowid 顺序查出每个 storyboard 关联的 assetId 有序列表
     const assets2StoryboardRows = await u
@@ -98,7 +105,7 @@ export default router.post(
         aspectRatio: projectSettingData?.videoRatio as `${number}:${number}`,
       };
       try {
-        const imageCls = await u.Ai.Image(projectSettingData?.imageModel as `${string}:${string}`).run(
+        const imageCls = await u.Ai.Image(storyboardImageModel).run(
           {
             referenceList: await getAssetsImageBase64(assetRecord[item.id!] || []),
             ...repeloadObj,

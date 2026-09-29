@@ -1,4 +1,4 @@
-// @db-hash 1674c3fa6699c6c7fc88d5b3c83ec28e
+// @db-hash 4f224f004d205d30388a8a58d98a8bae
 //该文件由脚本自动生成，请勿手动修改
 
 export interface memories {
@@ -114,6 +114,7 @@ export interface o_novel {
 export interface o_project {
   'artStyle'?: string | null;
   'createTime'?: number | null;
+  'deriveAssetsModel'?: string | null;
   'directorManual'?: string | null;
   'id'?: number | null;
   'imageModel'?: string | null;
@@ -122,6 +123,7 @@ export interface o_project {
   'mode'?: string | null;
   'name'?: string | null;
   'projectType'?: string | null;
+  'storyboardImageModel'?: string | null;
   'type'?: string | null;
   'userId'?: number | null;
   'videoModel'?: string | null;

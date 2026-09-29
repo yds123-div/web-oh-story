@@ -15,12 +15,37 @@ export type Project = {
   /** 画面比例 */
   videoRatio: string;
   imageModel: string;
+  /** 分镜图专用模型（`<供应商id>:<模型名>`）；空串 = 跟随 imageModel */
+  storyboardImageModel: string;
+  /** 衍生资产图专用模型；空串 = 跟随 imageModel */
+  deriveAssetsModel: string;
   videoModel: string;
   imageQuality: string;
   /** 生成模式（后端默认 text） */
   mode: string;
   /** 创建时间（后端为 number 时间戳，翻译为 ISO 字符串） */
   createTime: string;
+};
+
+/**
+ * `/api/modelSelect/getModelList` 返回的一个模型（含后端透出的能力声明）。
+ *
+ * `textToImage` / `supportsReference` / `requiresReference` 由后端按厂商声明的 `mode` 推导：
+ * - 只能文生图（mode 只有 text）：`textToImage=true, supportsReference=false, requiresReference=false`
+ * - 只能图生图（mode 不含 text）：`textToImage=false, supportsReference=true, requiresReference=true`
+ * - 两者皆可：全 true / requiresReference=false
+ * 视频模型这三项为 null（不适用）。
+ */
+export type ImageModelOption = {
+  /** `<供应商id>:<模型名>`，可直接写进 o_project.*Model */
+  value: string;
+  label: string;
+  /** 供应商展示名 */
+  vendorName: string;
+  mode: string[];
+  textToImage: boolean | null;
+  supportsReference: boolean | null;
+  requiresReference: boolean | null;
 };
 
 export type ProjectListResponse = {
@@ -48,6 +73,10 @@ export type CreateProjectBody = {
   videoModel: string;
   imageQuality: string;
   intro?: string;
+  /** 分镜图专用模型；不传或空串 = 跟随 imageModel */
+  storyboardImageModel?: string;
+  /** 衍生资产图专用模型；不传或空串 = 跟随 imageModel */
+  deriveAssetsModel?: string;
 };
 
 // ---- 任务（后端 o_tasks）----

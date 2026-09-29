@@ -62,7 +62,7 @@ function buildPrompt(cfg: AssetTypeConfig, artStyle: string, name: string, promp
 
 const requestSchema = {
   projectId: z.number(),
-  model: z.string(),
+  model: z.string().optional(),
   resolution: z.string(),
   id: z.number(),
   type: z.enum(["role", "scene", "tool", "storyboard"]),
@@ -75,8 +75,12 @@ export default router.post("/", validateFields(requestSchema), async (req, res) 
   const { projectId, model, resolution, id, type, name, prompt, base64 } = req.body;
 
   // 1. 查询项目 & 获取类型配置
-  const project = await u.db("o_project").where("id", projectId).select("artStyle", "type", "intro").first();
+  const project = await u.db("o_project").where("id", projectId).select("artStyle", "type", "intro", "imageModel", "deriveAssetsModel").first();
   if (!project) return res.status(500).send(success({ message: "项目为空" }));
+
+  // 模型：入参优先（界面选了就听界面的），留空回退项目的衍生资产模型 / 通用图像模型
+  const resolvedModel = (model || project.deriveAssetsModel || project.imageModel) as string;
+  if (!resolvedModel) return res.status(500).send(error("未配置图像模型"));
 
   const cfg = assetTypeConfig[type as AssetType];
   if (!cfg) return res.status(400).send(error("不支持的类型"));
@@ -86,7 +90,7 @@ export default router.post("/", validateFields(requestSchema), async (req, res) 
     type,
     state: "生成中",
     assetsId: id,
-    model: model.split(/:(.+)/)[1],
+    model: resolvedModel.split(/:(.+)/)[1],
     resolution,
   });
   await u.db("o_assets").where("id", id).update({ imageId });
@@ -98,7 +102,7 @@ export default router.post("/", validateFields(requestSchema), async (req, res) 
   const relatedObjects = { id, projectId, type: cfg.label };
 
   try {
-    const aiImage = u.Ai.Image(model);
+    const aiImage = u.Ai.Image(resolvedModel as `${string}:${string}`);
     await aiImage.run(
       {
         prompt: userPrompt,
@@ -125,7 +129,7 @@ export default router.post("/", validateFields(requestSchema), async (req, res) 
         state: "已完成",
         filePath: imagePath,
         type,
-        model: model.split(/:(.+)/)[1],
+        model: resolvedModel.split(/:(.+)/)[1],
         resolution,
       });
 

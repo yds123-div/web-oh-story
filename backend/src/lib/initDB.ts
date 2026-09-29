@@ -31,6 +31,9 @@ export default async (knex: Knex, forceInit: boolean = false): Promise<void> => 
         table.integer("id");
         table.string("projectType");
         table.string("imageModel");
+        // 分镜图 / 衍生资产图 可以单独指定模型；留空则回退 imageModel
+        table.string("storyboardImageModel");
+        table.string("deriveAssetsModel");
         table.string("imageQuality");
         table.string("videoModel");
         table.text("name");

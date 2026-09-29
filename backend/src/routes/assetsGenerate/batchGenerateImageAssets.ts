@@ -59,7 +59,7 @@ function buildPrompt(cfg: AssetTypeConfig, artStyle: string, name: string, promp
 
 const requestSchema = {
   projectId: z.number(),
-  model: z.string(),
+  model: z.string().optional(),
   resolution: z.string(),
   concurrentCount: z.number().int().min(1).optional(),
   items: z.array(
@@ -77,8 +77,12 @@ export default router.post("/", validateFields(requestSchema), async (req, res) 
   const { projectId, model, resolution, concurrentCount, items } = req.body;
 
   // 1. 查询项目
-  const project = await u.db("o_project").where("id", projectId).select("artStyle", "type", "intro").first();
+  const project = await u.db("o_project").where("id", projectId).select("artStyle", "type", "intro", "imageModel", "deriveAssetsModel").first();
   if (!project) return res.status(500).send(error("项目为空"));
+
+  // 模型：入参优先（界面选了就听界面的），留空回退项目的衍生资产模型 / 通用图像模型
+  const resolvedModel = (model || project.deriveAssetsModel || project.imageModel) as string;
+  if (!resolvedModel) return res.status(500).send(error("未配置图像模型"));
 
   // 2. 逐条插入 o_image 占位记录，收集 imageId 列表
   const totalNovelId: number[] = [];
@@ -112,7 +116,7 @@ export default router.post("/", validateFields(requestSchema), async (req, res) 
       const describe = `生成${cfg.label}图，名称：${item.name}，提示词：${item.prompt}`;
       const relatedObjects = { id: item.id, projectId, type: cfg.label };
       try {
-        const aiImage = u.Ai.Image(model);
+        const aiImage = u.Ai.Image(resolvedModel as `${string}:${string}`);
         await aiImage.run(
           {
             prompt: userPrompt,
@@ -140,7 +144,7 @@ export default router.post("/", validateFields(requestSchema), async (req, res) 
             state: "已完成",
             filePath: imagePath,
             type: item.type,
-            model: model.split(/:(.+)/)[1],
+            model: resolvedModel.split(/:(.+)/)[1],
             resolution,
           });
 

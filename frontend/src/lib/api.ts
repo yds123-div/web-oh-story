@@ -23,6 +23,7 @@ import type {
   CreditsResponse,
   Episode,
   EpisodeListResponse,
+  ImageModelOption,
   FlowDataAsset,
   FlowDataDeriveAsset,
   FlowDataStoryboard,
@@ -85,9 +86,24 @@ type ProjectRow = {
   mode: string | null;
   videoRatio: string | null;
   imageModel: string | null;
+  storyboardImageModel: string | null;
+  deriveAssetsModel: string | null;
   videoModel: string | null;
   imageQuality: string | null;
   createTime: number | null;
+};
+
+/** `/api/modelSelect/getModelList` 的原始行（id 是供应商 id，value 是裸模型名） */
+type ModelRow = {
+  id: string;
+  label: string;
+  value: string;
+  type: string;
+  name: string;
+  mode?: string[];
+  textToImage?: boolean | null;
+  supportsReference?: boolean | null;
+  requiresReference?: boolean | null;
 };
 
 function toProject(row: ProjectRow): Project {
@@ -102,6 +118,8 @@ function toProject(row: ProjectRow): Project {
     mode: row.mode ?? DEFAULT_MODE,
     videoRatio: row.videoRatio ?? '',
     imageModel: row.imageModel ?? '',
+    storyboardImageModel: row.storyboardImageModel ?? '',
+    deriveAssetsModel: row.deriveAssetsModel ?? '',
     videoModel: row.videoModel ?? '',
     imageQuality: row.imageQuality ?? '',
     createTime: typeof row.createTime === 'number' ? new Date(row.createTime).toISOString() : '',
@@ -121,6 +139,8 @@ function projectWriteBody(v: {
   directorManual: string;
   videoRatio: string;
   imageModel: string;
+  storyboardImageModel?: string;
+  deriveAssetsModel?: string;
   videoModel: string;
   imageQuality: string;
   mode: string;
@@ -134,6 +154,9 @@ function projectWriteBody(v: {
     directorManual: v.directorManual,
     videoRatio: v.videoRatio,
     imageModel: v.imageModel,
+    // 空串 = 跟随 imageModel（后端按 `字段 || imageModel` 取值）
+    storyboardImageModel: v.storyboardImageModel ?? '',
+    deriveAssetsModel: v.deriveAssetsModel ?? '',
     videoModel: v.videoModel,
     imageQuality: v.imageQuality,
     mode: v.mode,
@@ -162,6 +185,8 @@ export async function createProject(body: CreateProjectBody): Promise<Project> {
       directorManual: DEFAULT_DIRECTOR_MANUAL,
       videoRatio: body.videoRatio,
       imageModel: body.imageModel,
+      storyboardImageModel: body.storyboardImageModel,
+      deriveAssetsModel: body.deriveAssetsModel,
       videoModel: body.videoModel,
       imageQuality: body.imageQuality,
       mode: DEFAULT_MODE,
@@ -178,15 +203,56 @@ export async function createProject(body: CreateProjectBody): Promise<Project> {
   return newest;
 }
 
-export async function patchProject(id: string, body: { name: string }): Promise<Project> {
-  // 后端 editProject 要求全量字段，先取当前项目再合并改名
+/**
+ * 改项目（后端 editProject 要求全量字段，故先取当前项目再合并改动）。
+ *
+ * 只传需要改的字段：名称、以及三个模型字段（图像 / 分镜图 / 衍生资产）。
+ * 分镜图与衍生资产留空串即"跟随图像模型"。
+ */
+export async function patchProject(
+  id: string,
+  body: {
+    name?: string;
+    imageModel?: string;
+    storyboardImageModel?: string;
+    deriveAssetsModel?: string;
+    imageQuality?: string;
+  },
+): Promise<Project> {
   const current = await fetchProject(id);
-  const merged = { ...current, name: body.name };
+  const merged: Project = {
+    ...current,
+    ...(body.name !== undefined ? { name: body.name } : {}),
+    ...(body.imageModel !== undefined ? { imageModel: body.imageModel } : {}),
+    ...(body.storyboardImageModel !== undefined ? { storyboardImageModel: body.storyboardImageModel } : {}),
+    ...(body.deriveAssetsModel !== undefined ? { deriveAssetsModel: body.deriveAssetsModel } : {}),
+    ...(body.imageQuality !== undefined ? { imageQuality: body.imageQuality } : {}),
+  };
   await postJson('/api/project/editProject', {
     id: Number(id),
     ...projectWriteBody(merged),
   });
   return merged;
+}
+
+/**
+ * 当前启用的图像模型（`/api/modelSelect/getModelList`，含后端按厂商 `mode` 透出的能力）。
+ *
+ * 界面据此给选项标注「文生图 / 图生图 / 两者皆可」，并对 `requiresReference` 的模型
+ * 做前置提醒（这类模型遇到没有参考图的分镜/资产会直接失败）。
+ * `value` 是 `<供应商id>:<模型名>`，可直接写进项目的模型字段。
+ */
+export async function fetchImageModels(): Promise<ImageModelOption[]> {
+  const rows = await postJson<ModelRow[]>('/api/modelSelect/getModelList', { type: 'image' });
+  return (rows ?? []).map((row) => ({
+    value: `${row.id}:${row.value}`,
+    label: row.label,
+    vendorName: row.name,
+    mode: row.mode ?? [],
+    textToImage: row.textToImage ?? null,
+    supportsReference: row.supportsReference ?? null,
+    requiresReference: row.requiresReference ?? null,
+  }));
 }
 
 /** 单项目（getSingleProject 翻译），用于打开已有项目时还原配置 */
@@ -997,6 +1063,11 @@ export async function generateStoryboardImages(body: {
   scriptId: string;
   storyboardIds: string[];
   concurrentCount?: number;
+  /**
+   * 本次批量临时指定模型（`<供应商id>:<模型名>`）。
+   * 不传则用项目的 `storyboardImageModel`，再回退 `imageModel`（后端按此优先级取值）。
+   */
+  model?: string;
 }): Promise<void> {
   await postJson('/api/production/storyboard/batchGenerateImage', {
     projectId: Number(body.projectId),
@@ -1004,6 +1075,7 @@ export async function generateStoryboardImages(body: {
     storyboardIds: body.storyboardIds.map(Number),
     compulsory: true,
     concurrentCount: body.concurrentCount ?? IMAGE_CONCURRENT_COUNT,
+    ...(body.model ? { model: body.model } : {}),
   });
 }
 

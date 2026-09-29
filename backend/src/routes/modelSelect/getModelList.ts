@@ -25,13 +25,24 @@ export default router.post(
           type === "all"
             ? models.filter((item: { type: string }) => item.type !== "video")
             : models.filter((item: { type: string }) => item.type === type);
-        return filtered.map((item: { name: string; modelName: string; type: string }) => ({
-          id: data.id,
-          label: item.name,
-          value: item.modelName,
-          type: item.type,
-          name: vendorData.name,
-        }));
+        return filtered.map((item: { name: string; modelName: string; type: string; mode?: string[] }) => {
+          const mode = Array.isArray(item.mode) ? item.mode : [];
+          // 把模型能力透出给前端：厂商声明里 mode 含 text = 支持纯文生图；
+          // 含 singleImage / multiReference = 支持参考图（图生图）。不含 text 的图像模型必须带参考图。
+          // 视频模型（mode 用 singleImage/startFrameOptional 等描述帧），三个标记一律回 null，避免前端误判。
+          const isImage = item.type === "image";
+          return {
+            id: data.id,
+            label: item.name,
+            value: item.modelName,
+            type: item.type,
+            name: vendorData.name,
+            mode,
+            textToImage: isImage ? mode.includes("text") : null,
+            supportsReference: isImage ? mode.includes("singleImage") || mode.includes("multiReference") : null,
+            requiresReference: isImage ? !mode.includes("text") : null,
+          };
+        });
       }),
     );
     res.status(200).send(success(result.flat()));

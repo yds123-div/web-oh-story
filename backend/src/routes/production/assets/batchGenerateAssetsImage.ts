@@ -14,11 +14,16 @@ export default router.post(
     projectId: z.number(),
     scriptId: z.number(),
     concurrentCount: z.number().min(1).optional(),
+    // 可选：本次批量临时指定模型（界面选了就听界面的），留空则用项目配置
+    model: z.string().optional(),
   }),
   async (req, res) => {
-    const { assetIds, projectId, scriptId, concurrentCount = 5 } = req.body;
+    const { assetIds, projectId, scriptId, concurrentCount = 5, model } = req.body;
 
-    const projectSettingData = await u.db("o_project").where("id", projectId).select("imageModel", "imageQuality", "artStyle").first();
+    const projectSettingData = await u.db("o_project").where("id", projectId).select("imageModel", "deriveAssetsModel", "imageQuality", "artStyle").first();
+
+    // 衍生资产模型：入参临时指定优先，其次项目单独指定的衍生资产模型，最后回退通用图像模型
+    const deriveAssetsModel = (model || projectSettingData?.deriveAssetsModel || projectSettingData?.imageModel) as `${string}:${string}`;
 
     const assetsDataArr = await u.db("o_assets").whereIn("id", assetIds).select("id", "describe", "name", "type", "assetsId");
     const parentIds = assetsDataArr.map((item) => item.assetsId).filter((id) => id !== null);
@@ -59,7 +64,7 @@ export default router.post(
         type: item.type,
         state: "生成中",
         resolution: projectSettingData?.imageQuality,
-        model: projectSettingData?.imageModel,
+        model: deriveAssetsModel,
       });
       imageIdMap[item.id!] = imageId;
       await u.db("o_assets").where("id", item.id).update({ imageId: imageId });
@@ -91,7 +96,7 @@ export default router.post(
           size: projectSettingData?.imageQuality as "1K" | "2K" | "4K",
           aspectRatio: "16:9" as `${number}:${number}`,
         };
-        const imageCls = await u.Ai.Image(projectSettingData?.imageModel as `${string}:${string}`).run(
+        const imageCls = await u.Ai.Image(deriveAssetsModel).run(
           {
             referenceList: imageBase64 ? [{ type: "image", base64: imageBase64 }] : [],
             ...repeloadObj,
